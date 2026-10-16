@@ -244,7 +244,7 @@ class UsbOperationService : Service() {
         )
 
         return Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_data_usb)
+            .setSmallIcon(R.drawable.ic_usb_notification)
             .setContentTitle(if (snapshot.imageName.isBlank()) "USB Image Writer" else snapshot.imageName)
             .setContentText(text)
             .setContentIntent(pending)
