@@ -104,37 +104,32 @@ class UsbOperationService : Service() {
 
         executor.execute {
             try {
-                UsbRawDevice.open(usbManager, device).use { raw ->
-                    raw.init()
-                    if (imageSize > raw.capacityBytes) {
-                        throw IllegalStateException("Flash Drive เล็กกว่าไฟล์ Image")
-                    }
+                val result = ImageWriter.writeAndVerify(
+                    resolver = contentResolver,
+                    imageUri = uri,
+                    imageSize = imageSize,
+                    usbManager = usbManager,
+                    usbDevice = device,
+                    onProgress = { p -> updateProgress(imageName, p) },
+                    onRecovery = { r -> updateRecovery(imageName, r) },
+                    isCancelled = { cancelFlag.get() }
+                )
 
-                    val result = ImageWriter.writeAndVerify(
-                        contentResolver,
-                        uri,
-                        imageSize,
-                        raw,
-                        onProgress = { p -> updateProgress(imageName, p) },
-                        isCancelled = { cancelFlag.get() }
-                    )
-
-                    snapshot = Snapshot(
-                        running = false,
-                        stage = "สำเร็จ • Verify ผ่าน",
-                        completedBytes = result.bytesWritten,
-                        totalBytes = result.bytesWritten,
-                        imageName = imageName,
-                        result = result
-                    )
-                    clearOperationActive()
-                    stopForegroundCompat()
-                    notificationManager.notify(
-                        NOTIFICATION_ID,
-                        buildNotification("เขียนสำเร็จ • Verify ผ่าน", 100, false)
-                    )
-                    stopSelf()
-                }
+                snapshot = Snapshot(
+                    running = false,
+                    stage = "สำเร็จ • Verify ผ่าน",
+                    completedBytes = result.bytesWritten,
+                    totalBytes = result.bytesWritten,
+                    imageName = imageName,
+                    result = result
+                )
+                clearOperationActive()
+                stopForegroundCompat()
+                notificationManager.notify(
+                    NOTIFICATION_ID,
+                    buildNotification("เขียนสำเร็จ • Verify ผ่าน", 100, false)
+                )
+                stopSelf()
             } catch (e: Exception) {
                 finishWithError(e.message ?: e.javaClass.simpleName)
             } finally {
@@ -179,13 +174,36 @@ class UsbOperationService : Service() {
         val now = System.currentTimeMillis()
         if (now - lastNotificationAt >= 750L || p.completedBytes >= p.totalBytes) {
             lastNotificationAt = now
-            val percent = if (p.totalBytes <= 0L) 0 else
-                ((p.completedBytes * 100L) / p.totalBytes).toInt().coerceIn(0, 100)
+            val percent = percentOf(p.completedBytes, p.totalBytes)
             val eta = FormatUtils.eta(p.completedBytes, p.totalBytes, p.bytesPerSecond)
             val text = "$stageText $percent% • ${FormatUtils.speed(p.bytesPerSecond)} • $eta"
             notificationManager.notify(NOTIFICATION_ID, buildNotification(text, percent, true))
         }
     }
+
+    private fun updateRecovery(imageName: String, r: ImageWriter.Recovery) {
+        val phase = when (r.stage) {
+            ImageWriter.Stage.WRITE -> "เขียน"
+            ImageWriter.Stage.VERIFY -> "Verify"
+        }
+        val stageText = "USB สะดุด • กำลังกู้การเชื่อมต่อ ${r.attempt}/${r.maxAttempts}"
+        snapshot = Snapshot(
+            running = true,
+            stage = stageText,
+            completedBytes = r.completedBytes,
+            totalBytes = r.totalBytes,
+            bytesPerSecond = 0.0,
+            imageName = imageName
+        )
+        val percent = percentOf(r.completedBytes, r.totalBytes)
+        notificationManager.notify(
+            NOTIFICATION_ID,
+            buildNotification("$phase $percent% • $stageText", percent, true)
+        )
+    }
+
+    private fun percentOf(completed: Long, total: Long): Int =
+        if (total <= 0L) 0 else ((completed * 100L) / total).toInt().coerceIn(0, 100)
 
     private fun finishWithError(message: String) {
         snapshot = snapshot.copy(
