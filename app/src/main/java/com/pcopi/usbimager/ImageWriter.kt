@@ -57,6 +57,7 @@ object ImageWriter {
             ?: throw IOException("เปิดไฟล์ Image ไม่สำเร็จ")
 
         var written = 0L
+        var writeChunks = 0L
         val writeStart = System.nanoTime()
         input.use { stream ->
             while (written < imageSize) {
@@ -70,6 +71,7 @@ object ImageWriter {
                 val lba = written / blockSize
                 raw.blockDevice.write(lba, ByteBuffer.wrap(writeBuffer, 0, count))
                 written += count
+                writeChunks++
 
                 onProgress(
                     Progress(
@@ -79,6 +81,12 @@ object ImageWriter {
                         averageSpeed(written, writeStart)
                     )
                 )
+
+                // Give low-cost flash controllers a tiny breathing window after bursts.
+                // This reduces long firmware stalls when their small write cache is exhausted.
+                if (writeChunks % 16L == 0L) {
+                    Thread.sleep(2L)
+                }
             }
         }
 
@@ -127,7 +135,7 @@ object ImageWriter {
     }
 
     private fun alignedChunkSize(blockSize: Int): Int {
-        val preferred = 1024 * 1024
+        val preferred = 256 * 1024
         val blocks = (preferred / blockSize).coerceAtLeast(1)
         return blocks * blockSize
     }
