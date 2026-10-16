@@ -16,6 +16,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.Process
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -103,6 +104,9 @@ class UsbOperationService : Service() {
         acquireWakeLock()
 
         executor.execute {
+            // USB block I/O is the core foreground task. Keep this worker at foreground
+            // scheduling priority so app switching does not unnecessarily starve transfers.
+            runCatching { Process.setThreadPriority(Process.THREAD_PRIORITY_FOREGROUND) }
             try {
                 val result = ImageWriter.writeAndVerify(
                     resolver = contentResolver,
@@ -278,7 +282,7 @@ class UsbOperationService : Service() {
             startForeground(
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
             )
         } else {
             startForeground(NOTIFICATION_ID, notification)
