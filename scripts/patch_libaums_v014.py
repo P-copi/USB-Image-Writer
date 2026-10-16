@@ -6,7 +6,7 @@ root = Path(sys.argv[1] if len(sys.argv) > 1 else "_libaums")
 usb = root / "libaums/src/main/java/me/jahnen/libaums/core/usb/UsbCommunication.kt"
 s = usb.read_text()
 old_timeout = "const val TRANSFER_TIMEOUT = 5000"
-new_timeout = "const val TRANSFER_TIMEOUT = 20000"
+new_timeout = "const val TRANSFER_TIMEOUT = 8000"
 if old_timeout not in s:
     raise SystemExit("TRANSFER_TIMEOUT marker not found")
 usb.write_text(s.replace(old_timeout, new_timeout, 1))
@@ -14,7 +14,7 @@ usb.write_text(s.replace(old_timeout, new_timeout, 1))
 scsi = root / "libaums/src/main/java/me/jahnen/libaums/core/driver/scsi/ScsiBlockDevice.kt"
 s = scsi.read_text()
 old_attempts = "private const val MAX_RECOVERY_ATTEMPTS = 5"
-new_attempts = "private const val MAX_RECOVERY_ATTEMPTS = 8"
+new_attempts = "private const val MAX_RECOVERY_ATTEMPTS = 2"
 if old_attempts not in s:
     raise SystemExit("MAX_RECOVERY_ATTEMPTS marker not found")
 s = s.replace(old_attempts, new_attempts, 1)
@@ -37,11 +37,11 @@ new_retry = '''            } catch (e: IOException) {
                 }
             }
 
-            Thread.sleep(250)
+            Thread.sleep(200)
 '''
 if old_retry not in s:
     raise SystemExit("ScsiBlockDevice retry block not found")
 s = s.replace(old_retry, new_retry, 1)
 scsi.write_text(s)
 
-print("Applied v0.1.4 libaums recovery patch")
+print("Applied v0.1.5 libaums recovery patch")
