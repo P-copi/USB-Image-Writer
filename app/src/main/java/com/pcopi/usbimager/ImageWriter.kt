@@ -55,8 +55,6 @@ object ImageWriter {
         if (imageSize <= 0L) throw IOException("ไม่ทราบขนาดไฟล์ Image")
 
         var raw: UsbRawDevice? = null
-        var expectedBlockSize = 0
-        var expectedCapacity = 0L
 
         fun closeRaw() {
             val current = raw
@@ -64,22 +62,11 @@ object ImageWriter {
             if (current != null) runCatching { current.close() }
         }
 
-        fun openFresh(): UsbRawDevice {
+        fun openInitial(): UsbRawDevice {
             checkCancelled(isCancelled)
             val opened = UsbRawDevice.open(usbManager, usbDevice)
             try {
                 opened.init()
-                if (expectedBlockSize == 0) {
-                    expectedBlockSize = opened.blockSize
-                    expectedCapacity = opened.capacityBytes
-                } else {
-                    if (opened.blockSize != expectedBlockSize) {
-                        throw IOException("USB block size เปลี่ยนหลัง reconnect")
-                    }
-                    if (opened.capacityBytes != expectedCapacity) {
-                        throw IOException("ความจุ USB เปลี่ยนหลัง reconnect")
-                    }
-                }
                 raw = opened
                 return opened
             } catch (e: Exception) {
@@ -88,41 +75,47 @@ object ImageWriter {
             }
         }
 
-        fun ensureRaw(): UsbRawDevice = raw ?: openFresh()
+        fun ensureRaw(): UsbRawDevice = raw ?: openInitial()
 
+        // Important for Samsung background behavior:
+        // once the app has claimed the USB mass-storage interface, keep that exact
+        // connection claimed until the whole Write + Verify operation is finished.
+        // Releasing/reopening after a transient error lets Android's storage stack
+        // compete for the interface and recovery may never succeed until replugged.
+        // libaums performs BOT reset/clear-halt on the SAME claimed connection;
+        // this outer loop simply retries the same block without closing the session.
         fun writeChunk(lba: Long, data: ByteArray, count: Int, completedBeforeChunk: Long) {
             var lastError: IOException? = null
-            for (tryIndex in 0..MAX_SESSION_RECOVERY_ATTEMPTS) {
+            for (tryIndex in 0..MAX_PERSISTENT_RECOVERY_ATTEMPTS) {
                 checkCancelled(isCancelled)
                 try {
                     ensureRaw().blockDevice.write(lba, ByteBuffer.wrap(data, 0, count))
                     return
                 } catch (e: IOException) {
                     lastError = e
-                    closeRaw()
-                    if (tryIndex >= MAX_SESSION_RECOVERY_ATTEMPTS) break
+                    if (tryIndex >= MAX_PERSISTENT_RECOVERY_ATTEMPTS) break
                     onRecovery(
                         Recovery(
                             stage = Stage.WRITE,
                             completedBytes = completedBeforeChunk,
                             totalBytes = imageSize,
                             attempt = tryIndex + 1,
-                            maxAttempts = MAX_SESSION_RECOVERY_ATTEMPTS,
+                            maxAttempts = MAX_PERSISTENT_RECOVERY_ATTEMPTS,
                             reason = e.message ?: e.javaClass.simpleName
                         )
                     )
-                    Thread.sleep(RECOVERY_BASE_DELAY_MS + tryIndex * RECOVERY_STEP_DELAY_MS)
+                    Thread.sleep(RECOVERY_DELAY_MS)
                 }
             }
             throw IOException(
-                "USB สะดุดระหว่างเขียนและกู้การเชื่อมต่อไม่สำเร็จ กรุณาถอดแล้วเสียบ Flash Drive ใหม่",
+                "USB สะดุดระหว่างเขียนและกู้ใน connection เดิมไม่สำเร็จ กรุณาถอดแล้วเสียบ Flash Drive ใหม่",
                 lastError
             )
         }
 
         fun readChunk(lba: Long, data: ByteArray, count: Int, completedBeforeChunk: Long) {
             var lastError: IOException? = null
-            for (tryIndex in 0..MAX_SESSION_RECOVERY_ATTEMPTS) {
+            for (tryIndex in 0..MAX_PERSISTENT_RECOVERY_ATTEMPTS) {
                 checkCancelled(isCancelled)
                 try {
                     val bb = ByteBuffer.wrap(data, 0, count)
@@ -130,23 +123,22 @@ object ImageWriter {
                     return
                 } catch (e: IOException) {
                     lastError = e
-                    closeRaw()
-                    if (tryIndex >= MAX_SESSION_RECOVERY_ATTEMPTS) break
+                    if (tryIndex >= MAX_PERSISTENT_RECOVERY_ATTEMPTS) break
                     onRecovery(
                         Recovery(
                             stage = Stage.VERIFY,
                             completedBytes = completedBeforeChunk,
                             totalBytes = imageSize,
                             attempt = tryIndex + 1,
-                            maxAttempts = MAX_SESSION_RECOVERY_ATTEMPTS,
+                            maxAttempts = MAX_PERSISTENT_RECOVERY_ATTEMPTS,
                             reason = e.message ?: e.javaClass.simpleName
                         )
                     )
-                    Thread.sleep(RECOVERY_BASE_DELAY_MS + tryIndex * RECOVERY_STEP_DELAY_MS)
+                    Thread.sleep(RECOVERY_DELAY_MS)
                 }
             }
             throw IOException(
-                "USB สะดุดระหว่าง Verify และกู้การเชื่อมต่อไม่สำเร็จ กรุณาถอดแล้วเสียบ Flash Drive ใหม่",
+                "USB สะดุดระหว่าง Verify และกู้ใน connection เดิมไม่สำเร็จ กรุณาถอดแล้วเสียบ Flash Drive ใหม่",
                 lastError
             )
         }
@@ -204,7 +196,8 @@ object ImageWriter {
             val writeDurationNanos = (System.nanoTime() - writeStart).coerceAtLeast(1L)
             val sourceHash = sourceDigest.digest().toHex()
 
-            closeRaw()
+            // Keep the same USB interface claimed across the phase boundary.
+            // Only give the flash controller a short settle window before read-back.
             Thread.sleep(VERIFY_SETTLE_DELAY_MS)
 
             val verifyDigest = MessageDigest.getInstance("SHA-256")
@@ -278,10 +271,7 @@ object ImageWriter {
 
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
-    // Keep recovery alive long enough for Samsung/Android to settle after task switches,
-    // instead of declaring failure while the connected-device foreground service is alive.
-    private const val MAX_SESSION_RECOVERY_ATTEMPTS = 12
-    private const val RECOVERY_BASE_DELAY_MS = 700L
-    private const val RECOVERY_STEP_DELAY_MS = 150L
-    private const val VERIFY_SETTLE_DELAY_MS = 1200L
+    private const val MAX_PERSISTENT_RECOVERY_ATTEMPTS = 24
+    private const val RECOVERY_DELAY_MS = 650L
+    private const val VERIFY_SETTLE_DELAY_MS = 1500L
 }
