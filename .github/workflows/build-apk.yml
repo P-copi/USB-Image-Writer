@@ -50,6 +50,7 @@ jobs:
           mkdir -p app/libs
           cp _libaums/libaums/build/outputs/aar/libaums-release.aar app/libs/libaums-patched.aar
           ls -lh app/libs/libaums-patched.aar
+          rm -rf _libaums
 
       - name: Set up JDK 17 for app
         uses: actions/setup-java@v5
