@@ -32,7 +32,9 @@ android {
 }
 
 dependencies {
-    // Upstream develop includes the SCSI Request Sense ByteBuffer overflow fix
-    // that prevents: newLimit > capacity: (36 > 18)
-    implementation("com.github.magnusja:libaums:develop-SNAPSHOT")
+    // CI builds this AAR from libaums develop, which contains the SCSI Request Sense
+    // ByteBuffer overflow fix for: newLimit > capacity: (36 > 18)
+    implementation(files("libs/libaums-patched.aar"))
+    implementation("androidx.annotation:annotation:1.6.0")
+    implementation("androidx.core:core-ktx:1.9.0")
 }
