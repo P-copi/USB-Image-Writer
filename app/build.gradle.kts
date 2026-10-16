@@ -11,8 +11,8 @@ android {
         applicationId = "com.pcopi.usbimager"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.1.5"
+        versionCode = 7
+        versionName = "0.1.6"
     }
 
     buildTypes {
@@ -36,7 +36,8 @@ dependencies {
     // - SCSI Request Sense buffer overflow fix
     // - bounded USB transfer timeout
     // - Bulk-Only recovery after transient transfer errors
-    // App-level v0.1.5 also closes/reopens the USB session and retries the same block.
+    // - ByteBuffer position/limit reset before low-level retries
+    // App-level recovery also closes/reopens the USB session and retries the same block.
     implementation(files("libs/libaums-patched.aar"))
     implementation("androidx.annotation:annotation:1.6.0")
     implementation("androidx.core:core-ktx:1.9.0")
