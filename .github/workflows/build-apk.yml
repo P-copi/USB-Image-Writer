@@ -12,20 +12,48 @@ jobs:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
-      - name: Checkout
+      - name: Checkout app
         uses: actions/checkout@v5
 
-      - name: Set up JDK 17
+      - name: Checkout patched libaums source
+        uses: actions/checkout@v5
+        with:
+          repository: magnusja/libaums
+          ref: 57fa4826b792d46073a3329a303a6c9bec430fc8
+          path: _libaums
+
+      - name: Set up JDK 21 for libaums
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Prepare Android SDK
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "platforms;android-33" \
+            "build-tools;33.0.2" \
+            "ndk;25.2.9519653" \
+            "cmake;3.22.1"
+
+      - name: Build patched libaums AAR
+        run: |
+          chmod +x _libaums/gradlew
+          _libaums/gradlew -p _libaums :libaums:assembleRelease --stacktrace
+          mkdir -p app/libs
+          cp _libaums/libaums/build/outputs/aar/libaums-release.aar app/libs/libaums-patched.aar
+          ls -lh app/libs/libaums-patched.aar
+
+      - name: Set up JDK 17 for app
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-
-      - name: Prepare Android SDK 35
-        run: |
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
