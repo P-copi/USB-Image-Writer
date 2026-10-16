@@ -195,7 +195,6 @@ object ImageWriter {
                         )
                     )
 
-                    // Give low-cost flash controllers a tiny breathing window after bursts.
                     if (writeChunks % 16L == 0L) {
                         Thread.sleep(2L)
                     }
@@ -205,9 +204,6 @@ object ImageWriter {
             val writeDurationNanos = (System.nanoTime() - writeStart).coerceAtLeast(1L)
             val sourceHash = sourceDigest.digest().toHex()
 
-            // Start Verify with a fresh USB session. This gives the flash controller time
-            // to finish internal cache work and avoids carrying a marginal BOT session
-            // from the long write phase into the long read-back phase.
             closeRaw()
             Thread.sleep(VERIFY_SETTLE_DELAY_MS)
 
@@ -282,8 +278,10 @@ object ImageWriter {
 
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
-    private const val MAX_SESSION_RECOVERY_ATTEMPTS = 4
-    private const val RECOVERY_BASE_DELAY_MS = 600L
-    private const val RECOVERY_STEP_DELAY_MS = 350L
+    // Keep recovery alive long enough for Samsung/Android to settle after task switches,
+    // instead of declaring failure while the connected-device foreground service is alive.
+    private const val MAX_SESSION_RECOVERY_ATTEMPTS = 12
+    private const val RECOVERY_BASE_DELAY_MS = 700L
+    private const val RECOVERY_STEP_DELAY_MS = 150L
     private const val VERIFY_SETTLE_DELAY_MS = 1200L
 }
