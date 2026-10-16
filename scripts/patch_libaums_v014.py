@@ -6,7 +6,7 @@ root = Path(sys.argv[1] if len(sys.argv) > 1 else "_libaums")
 usb = root / "libaums/src/main/java/me/jahnen/libaums/core/usb/UsbCommunication.kt"
 s = usb.read_text()
 old_timeout = "const val TRANSFER_TIMEOUT = 5000"
-new_timeout = "const val TRANSFER_TIMEOUT = 4000"
+new_timeout = "const val TRANSFER_TIMEOUT = 2500"
 if old_timeout not in s:
     raise SystemExit("TRANSFER_TIMEOUT marker not found")
 usb.write_text(s.replace(old_timeout, new_timeout, 1))
@@ -48,7 +48,7 @@ old_retry = '''            } catch (e: IOException) {
             Thread.sleep(100)
 '''
 new_retry = '''            } catch (e: IOException) {
-                Log.w(TAG, (e.message ?: "IOException") + ", resetting Bulk-Only transport and retrying...")
+                Log.w(TAG, (e.message ?: "IOException") + ", keeping interface claimed, BOT reset and retrying...")
                 lastException = e
                 try {
                     bulkOnlyMassStorageReset()
@@ -57,11 +57,11 @@ new_retry = '''            } catch (e: IOException) {
                 }
             }
 
-            Thread.sleep(150)
+            Thread.sleep(120)
 '''
 if old_retry not in s:
     raise SystemExit("ScsiBlockDevice retry block not found")
 s = s.replace(old_retry, new_retry, 1)
 scsi.write_text(s)
 
-print("Applied v0.1.7 short low-level retry + ByteBuffer reset patch")
+print("Applied v0.1.8 persistent-claim recovery + ByteBuffer reset patch")
