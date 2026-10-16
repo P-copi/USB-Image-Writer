@@ -19,6 +19,29 @@ if old_attempts not in s:
     raise SystemExit("MAX_RECOVERY_ATTEMPTS marker not found")
 s = s.replace(old_attempts, new_attempts, 1)
 
+# A failed bulk transfer may advance the ByteBuffer position before the retry.
+# libaums originally reuses that advanced position, so the next attempt can try
+# to set limit(position + transferLength) past capacity. Example seen on device:
+# newLimit > capacity: (524288 > 262144). Restore the original buffer window
+# before every low-level retry.
+old_loop = '''    private fun transferCommand(command: CommandBlockWrapper, inBuffer: ByteBuffer) {
+        var lastException: Exception? = null
+        for(i in 0..MAX_RECOVERY_ATTEMPTS) {
+            try {
+'''
+new_loop = '''    private fun transferCommand(command: CommandBlockWrapper, inBuffer: ByteBuffer) {
+        var lastException: Exception? = null
+        val retryBufferPosition = inBuffer.position()
+        val retryBufferLimit = inBuffer.limit()
+        for(i in 0..MAX_RECOVERY_ATTEMPTS) {
+            inBuffer.position(retryBufferPosition)
+            inBuffer.limit(retryBufferLimit)
+            try {
+'''
+if old_loop not in s:
+    raise SystemExit("ScsiBlockDevice transferCommand loop marker not found")
+s = s.replace(old_loop, new_loop, 1)
+
 old_retry = '''            } catch (e: IOException) {
                 // Retry
                 Log.w(TAG, (e.message ?: "IOException") + ", retrying...")
@@ -44,4 +67,4 @@ if old_retry not in s:
 s = s.replace(old_retry, new_retry, 1)
 scsi.write_text(s)
 
-print("Applied v0.1.5 libaums recovery patch")
+print("Applied v0.1.6 libaums recovery + ByteBuffer retry-state patch")
