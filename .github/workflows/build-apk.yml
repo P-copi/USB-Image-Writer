@@ -41,6 +41,49 @@ jobs:
             "ndk;25.2.9519653" \
             "cmake;3.22.1"
 
+      - name: Apply USB recovery patch to libaums
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          usb = Path('_libaums/libaums/src/main/java/me/jahnen/libaums/core/usb/UsbCommunication.kt')
+          s = usb.read_text()
+          s = s.replace('const val TRANSFER_TIMEOUT = 5000', 'const val TRANSFER_TIMEOUT = 20000')
+          usb.write_text(s)
+
+          scsi = Path('_libaums/libaums/src/main/java/me/jahnen/libaums/core/driver/scsi/ScsiBlockDevice.kt')
+          s = scsi.read_text()
+          s = s.replace('private const val MAX_RECOVERY_ATTEMPTS = 5', 'private const val MAX_RECOVERY_ATTEMPTS = 8')
+          old = '''            } catch (e: IOException) {
+                // Retry
+                Log.w(TAG, (e.message ?: "IOException") + ", retrying...")
+                lastException = e
+            }
+
+            Thread.sleep(100)
+'''
+          new = '''            } catch (e: IOException) {
+                Log.w(TAG, (e.message ?: "IOException") + ", resetting Bulk-Only transport and retrying...")
+                lastException = e
+                try {
+                    bulkOnlyMassStorageReset()
+                } catch (resetError: Exception) {
+                    Log.w(TAG, "Bulk-Only recovery reset failed: " + (resetError.message ?: resetError.javaClass.simpleName))
+                }
+            }
+
+            Thread.sleep(250)
+'''
+          if old not in s:
+              raise SystemExit('Expected ScsiBlockDevice retry block not found')
+          s = s.replace(old, new, 1)
+          scsi.write_text(s)
+          PY
+
+      - name: Mark v0.1.4 UI
+        run: |
+          sed -i 's/v0.1.2 • Background Safe Writer/v0.1.4 • USB Recovery Writer/' app/src/main/java/com/pcopi/usbimager/MainActivity.kt
+
       - name: Build patched libaums AAR
         run: |
           printf 'sdk.dir=%s\nlibusb.dir=/tmp/libusb\n' "$ANDROID_HOME" > _libaums/local.properties
@@ -69,6 +112,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: USB-Image-Writer-v0.1.3-debug
+          name: USB-Image-Writer-v0.1.4-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 3
