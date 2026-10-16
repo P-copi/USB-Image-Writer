@@ -11,8 +11,8 @@ android {
         applicationId = "com.pcopi.usbimager"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.1.2"
+        versionCode = 4
+        versionName = "0.1.3"
     }
 
     buildTypes {
@@ -32,5 +32,7 @@ android {
 }
 
 dependencies {
-    implementation("me.jahnen.libaums:core:0.10.0")
+    // Upstream develop includes the SCSI Request Sense ByteBuffer overflow fix
+    // that prevents: newLimit > capacity: (36 > 18)
+    implementation("com.github.magnusja:libaums:57fa4826b792d46073a3329a303a6c9bec430fc8")
 }
