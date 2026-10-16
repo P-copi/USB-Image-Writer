@@ -11,8 +11,8 @@ android {
         applicationId = "com.pcopi.usbimager"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.1.3"
+        versionCode = 5
+        versionName = "0.1.4"
     }
 
     buildTypes {
@@ -32,8 +32,10 @@ android {
 }
 
 dependencies {
-    // CI builds this AAR from libaums develop, which contains the SCSI Request Sense
-    // ByteBuffer overflow fix for: newLimit > capacity: (36 > 18)
+    // CI builds a patched libaums AAR with:
+    // - SCSI Request Sense buffer overflow fix
+    // - longer USB transfer timeout
+    // - stronger Bulk-Only recovery after transient transfer errors
     implementation(files("libs/libaums-patched.aar"))
     implementation("androidx.annotation:annotation:1.6.0")
     implementation("androidx.core:core-ktx:1.9.0")
