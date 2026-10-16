@@ -43,6 +43,8 @@ jobs:
 
       - name: Build patched libaums AAR
         run: |
+          printf 'sdk.dir=%s\nlibusb.dir=/tmp/libusb\n' "$ANDROID_HOME" > _libaums/local.properties
+          mkdir -p /tmp/libusb
           chmod +x _libaums/gradlew
           _libaums/gradlew -p _libaums :libaums:assembleRelease --stacktrace
           mkdir -p app/libs
