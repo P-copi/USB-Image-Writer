@@ -1,5 +1,6 @@
 package com.pcopi.usbimager
 
+import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.PendingIntent
@@ -7,6 +8,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.hardware.usb.UsbDevice
@@ -14,10 +16,11 @@ import android.hardware.usb.UsbManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.OpenableColumns
 import android.view.Gravity
 import android.view.View
-import android.view.WindowManager
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -27,19 +30,20 @@ import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import java.util.Locale
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : Activity() {
 
     companion object {
         private const val ACTION_USB_PERMISSION = "com.pcopi.usbimager.USB_PERMISSION"
         private const val REQ_OPEN_IMAGE = 1001
+        private const val REQ_NOTIFICATION = 1002
     }
 
     private lateinit var usbManager: UsbManager
     private val executor = Executors.newSingleThreadExecutor()
-    private val cancelFlag = AtomicBoolean(false)
+    private val uiHandler = Handler(Looper.getMainLooper())
 
     private var imageUri: Uri? = null
     private var imageName: String = ""
@@ -50,7 +54,8 @@ class MainActivity : Activity() {
     private var inspectedCapacity: Long = 0L
     private var inspectedBlockSize: Int = 0
     private var pendingAfterPermission: (() -> Unit)? = null
-    private var busy = false
+    private var localBusy = false
+    private var serviceStartRequested = false
 
     private lateinit var imageInfo: TextView
     private lateinit var usbSpinner: Spinner
@@ -63,6 +68,13 @@ class MainActivity : Activity() {
     private lateinit var refreshUsbButton: Button
     private lateinit var inspectUsbButton: Button
     private lateinit var writeButton: Button
+
+    private val progressPoller = object : Runnable {
+        override fun run() {
+            applyServiceSnapshot()
+            uiHandler.postDelayed(this, 500L)
+        }
+    }
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -79,15 +91,16 @@ class MainActivity : Activity() {
                         toast("ไม่ได้รับสิทธิ์เข้าถึง USB")
                     }
                 }
-                UsbManager.ACTION_USB_DEVICE_ATTACHED -> refreshUsbList()
+                UsbManager.ACTION_USB_DEVICE_ATTACHED -> if (!operationRunning()) refreshUsbList()
                 UsbManager.ACTION_USB_DEVICE_DETACHED -> {
                     val removed = getUsbDeviceExtra(intent)
                     if (removed != null && selectedUsb?.deviceId == removed.deviceId) {
-                        if (busy) cancelFlag.set(true)
-                        selectedUsb = null
-                        inspectedCapacity = 0L
-                        inspectedBlockSize = 0
-                        refreshUsbList()
+                        if (!operationRunning()) {
+                            selectedUsb = null
+                            inspectedCapacity = 0L
+                            inspectedBlockSize = 0
+                            refreshUsbList()
+                        }
                         toast("Flash Drive ถูกถอดออก")
                     }
                 }
@@ -100,7 +113,20 @@ class MainActivity : Activity() {
         usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
         buildUi()
         registerUsbReceiver()
+        requestNotificationPermissionIfNeeded()
         refreshUsbList()
+        showInterruptedWarningIfNeeded()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        uiHandler.removeCallbacks(progressPoller)
+        uiHandler.post(progressPoller)
+    }
+
+    override fun onPause() {
+        uiHandler.removeCallbacks(progressPoller)
+        super.onPause()
     }
 
     override fun onDestroy() {
@@ -111,11 +137,10 @@ class MainActivity : Activity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        if (busy) {
-            toast("กำลังเขียน/ตรวจสอบ Image กรุณารอให้เสร็จ")
-        } else {
-            super.onBackPressed()
+        if (operationRunning()) {
+            toast("งานเขียน/Verify จะทำต่อในเบื้องหลัง")
         }
+        super.onBackPressed()
     }
 
     private fun buildUi() {
@@ -136,7 +161,7 @@ class MainActivity : Activity() {
             setTextColor(Color.rgb(17, 24, 39))
         })
         root.addView(TextView(this).apply {
-            text = "v0.1.1 • เขียน .IMG ลง Flash Drive ผ่าน USB-C OTG"
+            text = "v0.1.2 • Background Safe Writer"
             textSize = 14f
             setTextColor(Color.DKGRAY)
             setPadding(0, dp(4), 0, dp(18))
@@ -194,8 +219,8 @@ class MainActivity : Activity() {
         root.addView(resultText)
 
         root.addView(TextView(this).apply {
-            text = "คำเตือน: การเขียน Image จะลบ Partition และข้อมูลเดิมใน Flash Drive ทั้งหมด\n" +
-                "หลัง Verify ผ่าน หาก Android/Samsung แจ้งให้ฟอร์แมต USB ให้กด ‘ยกเลิก’ ห้ามฟอร์แมต"
+            text = "ระหว่างเขียนสามารถกด Home เปิดแอปอื่น รับสาย หรือดับหน้าจอได้ งานจะทำต่อในเบื้องหลัง\n\n" +
+                "คำเตือน: ห้ามถอด Flash Drive จนกว่า Verify จะผ่าน และถ้า Android/Samsung แจ้งให้ฟอร์แมต Arc Loader ให้กด ‘ยกเลิก’"
             textSize = 13f
             setTextColor(Color.rgb(153, 27, 27))
             setPadding(0, dp(22), 0, dp(10))
@@ -206,7 +231,7 @@ class MainActivity : Activity() {
     }
 
     private fun chooseImage() {
-        if (busy) return
+        if (controlsLocked()) return
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
@@ -225,11 +250,7 @@ class MainActivity : Activity() {
 
         val meta = queryImageMeta(uri)
         if (!meta.first.lowercase().endsWith(".img")) {
-            AlertDialog.Builder(this)
-                .setTitle("ไฟล์ไม่ใช่ .img")
-                .setMessage("V1 รองรับไฟล์ .img แบบ raw image ก่อน กรุณาเลือกไฟล์ที่ลงท้ายด้วย .img")
-                .setPositiveButton("ตกลง", null)
-                .show()
+            showMessage("ไฟล์ไม่ใช่ .img", "V1 รองรับไฟล์ .img แบบ raw image ก่อน")
             return
         }
         if (meta.second <= 0L) {
@@ -255,14 +276,14 @@ class MainActivity : Activity() {
                 if (si >= 0 && !c.isNull(si)) size = c.getLong(si)
             }
         }
-        if (size <= 0) {
+        if (size <= 0L) {
             size = runCatching { contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L }.getOrDefault(-1L)
         }
         return name to size
     }
 
     private fun refreshUsbList() {
-        if (busy) return
+        if (controlsLocked()) return
         usbDevices = usbManager.deviceList.values
             .filter { UsbRawDevice.isSupportedMassStorage(it) }
             .sortedBy { it.deviceId }
@@ -287,16 +308,17 @@ class MainActivity : Activity() {
             override fun onNothingSelected(parent: AdapterView<*>?) = Unit
         }
         if (usbDevices.isEmpty()) selectedUsb = null
+        updateControls()
     }
 
     private fun inspectSelectedUsb() {
-        if (busy) return
+        if (controlsLocked()) return
         val device = selectedUsb ?: run {
             toast("ยังไม่พบ Flash Drive")
             return
         }
         withUsbPermission(device) {
-            setBusyUi(true, "กำลังตรวจสอบ USB...")
+            setLocalBusy(true, "กำลังตรวจสอบ USB...")
             executor.execute {
                 try {
                     UsbRawDevice.open(usbManager, device).use { raw ->
@@ -307,12 +329,12 @@ class MainActivity : Activity() {
                             inspectedCapacity = capacity
                             inspectedBlockSize = blockSize
                             usbInfo.text = "ความจุ ${FormatUtils.bytes(capacity)} • Block $blockSize B\n${usbIdentity(device)}"
-                            setBusyUi(false, "พร้อมใช้งาน")
+                            setLocalBusy(false, "พร้อมใช้งาน")
                         }
                     }
                 } catch (e: Exception) {
                     runOnUiThread {
-                        setBusyUi(false, "ตรวจสอบ USB ไม่สำเร็จ")
+                        setLocalBusy(false, "ตรวจสอบ USB ไม่สำเร็จ")
                         showError(e)
                     }
                 }
@@ -321,7 +343,7 @@ class MainActivity : Activity() {
     }
 
     private fun confirmWriteStep1() {
-        if (busy) return
+        if (controlsLocked()) return
         val uri = imageUri ?: run {
             toast("กรุณาเลือกไฟล์ .img ก่อน")
             return
@@ -356,90 +378,111 @@ class MainActivity : Activity() {
     private fun confirmWriteStep2(uri: Uri, device: UsbDevice) {
         AlertDialog.Builder(this)
             .setTitle("ยืนยันครั้งสุดท้าย")
-            .setMessage("หลังจากกด “เขียน Image” ห้ามถอด Flash Drive จนกว่าจะขึ้นว่า Verify ผ่าน")
+            .setMessage(
+                "หลังเริ่มเขียน ห้ามถอด Flash Drive จนกว่าจะ Verify ผ่าน\n\n" +
+                    "สามารถกด Home เปิดแอปอื่น ดับหน้าจอ หรือรับสายโทรศัพท์ได้ งานจะทำต่อในเบื้องหลัง"
+            )
             .setNegativeButton("ยกเลิก", null)
-            .setPositiveButton("เขียน Image") { _, _ -> startWrite(uri, device) }
+            .setPositiveButton("เขียน Image") { _, _ -> startWriteService(uri, device) }
             .show()
     }
 
-    private fun startWrite(uri: Uri, device: UsbDevice) {
+    private fun startWriteService(uri: Uri, device: UsbDevice) {
         withUsbPermission(device) {
-            cancelFlag.set(false)
             resultText.text = ""
-            setBusyUi(true, "กำลังเตรียมเขียน Image...")
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            serviceStartRequested = true
+            progressTitle.text = "กำลังเริ่ม Background Service..."
+            updateControls()
 
-            executor.execute {
-                try {
-                    UsbRawDevice.open(usbManager, device).use { raw ->
-                        raw.init()
+            val serviceIntent = Intent(this, UsbOperationService::class.java).apply {
+                action = UsbOperationService.ACTION_START_WRITE
+                putExtra(UsbOperationService.EXTRA_IMAGE_URI, uri.toString())
+                putExtra(UsbOperationService.EXTRA_IMAGE_NAME, imageName)
+                putExtra(UsbOperationService.EXTRA_IMAGE_SIZE, imageSize)
+                putExtra(UsbOperationService.EXTRA_USB_DEVICE, device)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
 
-                        if (imageSize > raw.capacityBytes) {
-                            throw IllegalStateException("ความจุ Flash Drive เปลี่ยนไปและเล็กกว่า Image")
-                        }
-                        if (raw.capacityBytes != inspectedCapacity || raw.blockSize != inspectedBlockSize) {
-                            inspectedCapacity = raw.capacityBytes
-                            inspectedBlockSize = raw.blockSize
-                        }
-
-                        val result = ImageWriter.writeAndVerify(
-                            contentResolver,
-                            uri,
-                            imageSize,
-                            raw,
-                            onProgress = { p -> runOnUiThread { updateProgress(p) } },
-                            isCancelled = { cancelFlag.get() }
-                        )
-
-                        runOnUiThread {
-                            progressBar.progress = progressBar.max
-                            progressTitle.text = "สำเร็จ • Verify ผ่าน"
-                            progressDetail.text = "100% • ${FormatUtils.bytes(result.bytesWritten)}"
-                            resultText.text =
-                                "ผลตรวจสอบ: ตรงกัน 100%\n\n" +
-                                "เวลาเขียน: ${formatDuration(result.writeDurationMillis)} • ${FormatUtils.speed(result.writeAverageBytesPerSecond)}\n" +
-                                "เวลา Verify: ${formatDuration(result.verifyDurationMillis)} • ${FormatUtils.speed(result.verifyAverageBytesPerSecond)}\n\n" +
-                                "SHA-256 Image\n${result.sourceSha256}\n\n" +
-                                "SHA-256 Flash Drive\n${result.deviceSha256}"
-                            setBusyUi(false, "สำเร็จ • Verify ผ่าน")
-                            showSuccessMessage()
-                        }
+            try {
+                startForegroundService(serviceIntent)
+                uiHandler.postDelayed({
+                    if (serviceStartRequested && !UsbOperationService.snapshot.running) {
+                        serviceStartRequested = false
+                        updateControls()
+                        showMessage("เริ่มงานไม่สำเร็จ", "Background Service ไม่เริ่มทำงาน กรุณาลองใหม่")
                     }
-                } catch (e: Exception) {
-                    runOnUiThread {
-                        progressTitle.text = "ไม่สำเร็จ"
-                        setBusyUi(false, "ไม่สำเร็จ")
-                        showError(e)
-                    }
-                } finally {
-                    runOnUiThread { window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
-                }
+                }, 4000L)
+            } catch (e: Exception) {
+                serviceStartRequested = false
+                updateControls()
+                showError(e)
             }
         }
     }
 
-    private fun updateProgress(p: ImageWriter.Progress) {
-        val percent = if (p.totalBytes == 0L) 0.0 else p.completedBytes * 100.0 / p.totalBytes
-        progressBar.progress = ((percent / 100.0) * progressBar.max).toInt().coerceIn(0, progressBar.max)
-        progressTitle.text = when (p.stage) {
-            ImageWriter.Stage.WRITE -> "กำลังเขียน Image..."
-            ImageWriter.Stage.VERIFY -> "กำลัง Verify หลังเขียน..."
+    private fun applyServiceSnapshot() {
+        val s = UsbOperationService.snapshot
+        if (s.running) serviceStartRequested = false
+
+        if (s.running || s.result != null || s.error != null) {
+            progressTitle.text = s.stage
+            if (s.totalBytes > 0L) {
+                val percent = (s.completedBytes * 100.0 / s.totalBytes).coerceIn(0.0, 100.0)
+                progressBar.progress = ((percent / 100.0) * progressBar.max).toInt()
+                progressDetail.text = if (s.running) {
+                    String.format(
+                        Locale.US,
+                        "%.1f%% • %s / %s • %s • %s",
+                        percent,
+                        FormatUtils.bytes(s.completedBytes),
+                        FormatUtils.bytes(s.totalBytes),
+                        FormatUtils.speed(s.bytesPerSecond),
+                        FormatUtils.eta(s.completedBytes, s.totalBytes, s.bytesPerSecond)
+                    )
+                } else {
+                    String.format(Locale.US, "%.1f%% • %s", percent, FormatUtils.bytes(s.completedBytes))
+                }
+            }
+
+            s.result?.let { r ->
+                progressBar.progress = progressBar.max
+                progressDetail.text = "100% • ${FormatUtils.bytes(r.bytesWritten)}"
+                resultText.text =
+                    "SHA-256 Image\n${r.sourceSha256}\n\n" +
+                    "SHA-256 Flash Drive\n${r.deviceSha256}\n\n" +
+                    "ผลตรวจสอบ: ตรงกัน 100%\n\n" +
+                    "เวลาเขียน ${FormatUtils.duration(r.writeDurationMillis)} • ${FormatUtils.speed(r.writeAverageBytesPerSecond)}\n" +
+                    "เวลา Verify ${FormatUtils.duration(r.verifyDurationMillis)} • ${FormatUtils.speed(r.verifyAverageBytesPerSecond)}\n\n" +
+                    "หาก Samsung ถามให้ฟอร์แมต Arc Loader ให้กด ‘ยกเลิก’"
+            }
+            if (s.error != null) {
+                resultText.text = "งานไม่สำเร็จ\n${s.error}\n\nFlash Drive มักไม่ได้เสีย แต่ Image อาจไม่สมบูรณ์ กรุณาเขียนใหม่ตั้งแต่ต้น"
+            }
         }
-        val eta = if (p.bytesPerSecond > 0.0 && p.completedBytes < p.totalBytes) {
-            val remainSeconds = ((p.totalBytes - p.completedBytes) / p.bytesPerSecond).toLong().coerceAtLeast(0L)
-            " • เหลือประมาณ ${formatDuration(remainSeconds * 1000L)}"
-        } else {
-            ""
+        updateControls()
+    }
+
+    private fun setLocalBusy(value: Boolean, title: String) {
+        localBusy = value
+        if (!operationRunning()) progressTitle.text = title
+        if (!value && title == "พร้อมใช้งาน" && UsbOperationService.snapshot.result == null) {
+            progressBar.progress = 0
+            progressDetail.text = "0%"
         }
-        progressDetail.text = String.format(
-            java.util.Locale.US,
-            "%.1f%% • %s / %s • %s%s",
-            percent,
-            FormatUtils.bytes(p.completedBytes),
-            FormatUtils.bytes(p.totalBytes),
-            FormatUtils.speed(p.bytesPerSecond),
-            eta
-        )
+        updateControls()
+    }
+
+    private fun controlsLocked(): Boolean = localBusy || operationRunning() || serviceStartRequested
+
+    private fun operationRunning(): Boolean = UsbOperationService.snapshot.running
+
+    private fun updateControls() {
+        val locked = controlsLocked()
+        chooseImageButton.isEnabled = !locked
+        refreshUsbButton.isEnabled = !locked
+        inspectUsbButton.isEnabled = !locked
+        writeButton.isEnabled = !locked
+        usbSpinner.isEnabled = !locked
     }
 
     private fun withUsbPermission(device: UsbDevice, action: () -> Unit) {
@@ -472,17 +515,26 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun setBusyUi(value: Boolean, title: String) {
-        busy = value
-        chooseImageButton.isEnabled = !value
-        refreshUsbButton.isEnabled = !value
-        inspectUsbButton.isEnabled = !value
-        writeButton.isEnabled = !value
-        usbSpinner.isEnabled = !value
-        progressTitle.text = title
-        if (!value && title == "พร้อมใช้งาน") {
-            progressBar.progress = 0
-            progressDetail.text = "0%"
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFICATION)
+        }
+    }
+
+    private fun showInterruptedWarningIfNeeded() {
+        val prefs = getSharedPreferences(UsbOperationService.PREFS, Context.MODE_PRIVATE)
+        val wasActive = prefs.getBoolean(UsbOperationService.PREF_ACTIVE, false)
+        if (wasActive && !UsbOperationService.snapshot.running) {
+            val previousName = prefs.getString(UsbOperationService.PREF_IMAGE_NAME, "Image").orEmpty()
+            prefs.edit().putBoolean(UsbOperationService.PREF_ACTIVE, false).apply()
+            AlertDialog.Builder(this)
+                .setTitle("พบงานก่อนหน้าที่หยุดกะทันหัน")
+                .setMessage(
+                    "$previousName อาจเขียนไม่ครบ\n\n" +
+                        "Flash Drive โดยทั่วไปไม่ได้เสีย แต่ข้อมูลบนไดรฟ์อาจไม่สมบูรณ์ กรุณาเขียน Image ใหม่ตั้งแต่ต้นและรอจน Verify ผ่าน"
+                )
+                .setPositiveButton("ตกลง", null)
+                .show()
         }
     }
 
@@ -534,31 +586,6 @@ class MainActivity : Activity() {
     private fun hex(v: Int): String = String.format("%04X", v)
 
     private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
-
-
-    private fun showSuccessMessage() {
-        AlertDialog.Builder(this)
-            .setTitle("เขียน Image สำเร็จ")
-            .setMessage(
-                "เขียนและ Verify ผ่านแล้ว ข้อมูลบน Flash Drive ตรงกับไฟล์ Image 100%\n\n" +
-                    "สำคัญ: Arc Loader หรือ Image แบบบูตบางชนิดอาจทำให้ Android/Samsung แจ้งว่า ‘ต้องฟอร์แมตไดรฟ์ USB’ ซึ่งเป็นอาการปกติ เพราะ Android อ่านบาง Partition ไม่ได้\n\n" +
-                    "ให้กด ‘ยกเลิก’ และห้ามฟอร์แมต จากนั้นจึงถอด Flash Drive ไปใช้บูตได้"
-            )
-            .setPositiveButton("ตกลง", null)
-            .show()
-    }
-
-    private fun formatDuration(ms: Long): String {
-        val totalSeconds = (ms / 1000L).coerceAtLeast(0L)
-        val hours = totalSeconds / 3600L
-        val minutes = (totalSeconds % 3600L) / 60L
-        val seconds = totalSeconds % 60L
-        return when {
-            hours > 0 -> String.format(java.util.Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
-            minutes > 0 -> String.format(java.util.Locale.US, "%d:%02d", minutes, seconds)
-            else -> "${seconds} วินาที"
-        }
-    }
 
     private fun showError(e: Throwable) {
         showMessage("เกิดข้อผิดพลาด", e.message ?: e.javaClass.simpleName)
