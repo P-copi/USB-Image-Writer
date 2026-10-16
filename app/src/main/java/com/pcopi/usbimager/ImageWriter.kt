@@ -23,7 +23,11 @@ object ImageWriter {
     data class Result(
         val bytesWritten: Long,
         val sourceSha256: String,
-        val deviceSha256: String
+        val deviceSha256: String,
+        val writeDurationMillis: Long,
+        val verifyDurationMillis: Long,
+        val writeAverageBytesPerSecond: Double,
+        val verifyAverageBytesPerSecond: Double
     )
 
     @Throws(Exception::class)
@@ -78,6 +82,7 @@ object ImageWriter {
             }
         }
 
+        val writeDurationNanos = (System.nanoTime() - writeStart).coerceAtLeast(1L)
         val sourceHash = sourceDigest.digest().toHex()
 
         val verifyDigest = MessageDigest.getInstance("SHA-256")
@@ -104,12 +109,21 @@ object ImageWriter {
             )
         }
 
+        val verifyDurationNanos = (System.nanoTime() - verifyStart).coerceAtLeast(1L)
         val deviceHash = verifyDigest.digest().toHex()
         if (!sourceHash.equals(deviceHash, ignoreCase = true)) {
             throw IOException("Verify ไม่ผ่าน: SHA-256 ของ Image และ Flash Drive ไม่ตรงกัน")
         }
 
-        return Result(written, sourceHash, deviceHash)
+        return Result(
+            bytesWritten = written,
+            sourceSha256 = sourceHash,
+            deviceSha256 = deviceHash,
+            writeDurationMillis = writeDurationNanos / 1_000_000L,
+            verifyDurationMillis = verifyDurationNanos / 1_000_000L,
+            writeAverageBytesPerSecond = written / (writeDurationNanos / 1_000_000_000.0),
+            verifyAverageBytesPerSecond = verified / (verifyDurationNanos / 1_000_000_000.0)
+        )
     }
 
     private fun alignedChunkSize(blockSize: Int): Int {

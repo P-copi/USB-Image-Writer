@@ -136,7 +136,7 @@ class MainActivity : Activity() {
             setTextColor(Color.rgb(17, 24, 39))
         })
         root.addView(TextView(this).apply {
-            text = "v0.1.0 • เขียน .IMG ลง Flash Drive ผ่าน USB-C OTG"
+            text = "v0.1.1 • เขียน .IMG ลง Flash Drive ผ่าน USB-C OTG"
             textSize = 14f
             setTextColor(Color.DKGRAY)
             setPadding(0, dp(4), 0, dp(18))
@@ -194,7 +194,8 @@ class MainActivity : Activity() {
         root.addView(resultText)
 
         root.addView(TextView(this).apply {
-            text = "คำเตือน: การเขียน Image จะลบ Partition และข้อมูลเดิมใน Flash Drive ทั้งหมด"
+            text = "คำเตือน: การเขียน Image จะลบ Partition และข้อมูลเดิมใน Flash Drive ทั้งหมด\n" +
+                "หลัง Verify ผ่าน หาก Android/Samsung แจ้งให้ฟอร์แมต USB ให้กด ‘ยกเลิก’ ห้ามฟอร์แมต"
             textSize = 13f
             setTextColor(Color.rgb(153, 27, 27))
             setPadding(0, dp(22), 0, dp(10))
@@ -395,11 +396,13 @@ class MainActivity : Activity() {
                             progressTitle.text = "สำเร็จ • Verify ผ่าน"
                             progressDetail.text = "100% • ${FormatUtils.bytes(result.bytesWritten)}"
                             resultText.text =
+                                "ผลตรวจสอบ: ตรงกัน 100%\n\n" +
+                                "เวลาเขียน: ${formatDuration(result.writeDurationMillis)} • ${FormatUtils.speed(result.writeAverageBytesPerSecond)}\n" +
+                                "เวลา Verify: ${formatDuration(result.verifyDurationMillis)} • ${FormatUtils.speed(result.verifyAverageBytesPerSecond)}\n\n" +
                                 "SHA-256 Image\n${result.sourceSha256}\n\n" +
-                                "SHA-256 Flash Drive\n${result.deviceSha256}\n\n" +
-                                "ผลตรวจสอบ: ตรงกัน 100%"
+                                "SHA-256 Flash Drive\n${result.deviceSha256}"
                             setBusyUi(false, "สำเร็จ • Verify ผ่าน")
-                            showMessage("เขียน Image สำเร็จ", "เขียนและ Verify ผ่านแล้ว สามารถถอด Flash Drive ได้")
+                            showSuccessMessage()
                         }
                     }
                 } catch (e: Exception) {
@@ -422,13 +425,20 @@ class MainActivity : Activity() {
             ImageWriter.Stage.WRITE -> "กำลังเขียน Image..."
             ImageWriter.Stage.VERIFY -> "กำลัง Verify หลังเขียน..."
         }
+        val eta = if (p.bytesPerSecond > 0.0 && p.completedBytes < p.totalBytes) {
+            val remainSeconds = ((p.totalBytes - p.completedBytes) / p.bytesPerSecond).toLong().coerceAtLeast(0L)
+            " • เหลือประมาณ ${formatDuration(remainSeconds * 1000L)}"
+        } else {
+            ""
+        }
         progressDetail.text = String.format(
             java.util.Locale.US,
-            "%.1f%% • %s / %s • %s",
+            "%.1f%% • %s / %s • %s%s",
             percent,
             FormatUtils.bytes(p.completedBytes),
             FormatUtils.bytes(p.totalBytes),
-            FormatUtils.speed(p.bytesPerSecond)
+            FormatUtils.speed(p.bytesPerSecond),
+            eta
         )
     }
 
@@ -524,6 +534,31 @@ class MainActivity : Activity() {
     private fun hex(v: Int): String = String.format("%04X", v)
 
     private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
+
+
+    private fun showSuccessMessage() {
+        AlertDialog.Builder(this)
+            .setTitle("เขียน Image สำเร็จ")
+            .setMessage(
+                "เขียนและ Verify ผ่านแล้ว ข้อมูลบน Flash Drive ตรงกับไฟล์ Image 100%\n\n" +
+                    "สำคัญ: Arc Loader หรือ Image แบบบูตบางชนิดอาจทำให้ Android/Samsung แจ้งว่า ‘ต้องฟอร์แมตไดรฟ์ USB’ ซึ่งเป็นอาการปกติ เพราะ Android อ่านบาง Partition ไม่ได้\n\n" +
+                    "ให้กด ‘ยกเลิก’ และห้ามฟอร์แมต จากนั้นจึงถอด Flash Drive ไปใช้บูตได้"
+            )
+            .setPositiveButton("ตกลง", null)
+            .show()
+    }
+
+    private fun formatDuration(ms: Long): String {
+        val totalSeconds = (ms / 1000L).coerceAtLeast(0L)
+        val hours = totalSeconds / 3600L
+        val minutes = (totalSeconds % 3600L) / 60L
+        val seconds = totalSeconds % 60L
+        return when {
+            hours > 0 -> String.format(java.util.Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
+            minutes > 0 -> String.format(java.util.Locale.US, "%d:%02d", minutes, seconds)
+            else -> "${seconds} วินาที"
+        }
+    }
 
     private fun showError(e: Throwable) {
         showMessage("เกิดข้อผิดพลาด", e.message ?: e.javaClass.simpleName)
