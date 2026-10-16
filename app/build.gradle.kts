@@ -34,5 +34,5 @@ android {
 dependencies {
     // Upstream develop includes the SCSI Request Sense ByteBuffer overflow fix
     // that prevents: newLimit > capacity: (36 > 18)
-    implementation("com.github.magnusja:libaums:57fa4826b792d46073a3329a303a6c9bec430fc8")
+    implementation("com.github.magnusja:libaums:develop-SNAPSHOT")
 }
