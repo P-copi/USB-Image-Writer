@@ -11,6 +11,8 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -36,7 +38,19 @@ public class RouteImagesActivity extends Activity {
 
     private int dp(float v){return (int)(v*getResources().getDisplayMetrics().density+.5f);} private GradientDrawable round(int c,float r){GradientDrawable d=new GradientDrawable();d.setColor(c);d.setCornerRadius(dp(r));return d;} private TextView tv(String s,float z,int c,boolean b){TextView v=new TextView(this);v.setText(s);v.setTextSize(z);v.setTextColor(c);v.setTypeface(Typeface.create("sans",b?Typeface.BOLD:Typeface.NORMAL));return v;}
 
-    @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);String requested=getIntent().getStringExtra("mode");if(requested!=null)mode=requested;build();}
+    @Override public void onCreate(Bundle b){
+        super.onCreate(b);
+        getWindow().setStatusBarColor(BG);
+        getWindow().setNavigationBarColor(BG);
+        String requested=getIntent().getStringExtra("mode");
+        if(requested!=null)mode=requested;
+        boolean openPicker=getIntent().getBooleanExtra("openPicker",false);
+        build();
+        if(openPicker){
+            getIntent().removeExtra("openPicker");
+            new Handler(Looper.getMainLooper()).postDelayed(this::chooseCategoryAndImport,220);
+        }
+    }
     @Override protected void onDestroy(){io.shutdownNow();super.onDestroy();}
 
     private void build(){
@@ -47,11 +61,15 @@ public class RouteImagesActivity extends Activity {
 
         if("NAS".equals(mode)){buildNas(root);setContentView(sv);return;}
 
-        LinearLayout actions=new LinearLayout(this);actions.setOrientation(LinearLayout.HORIZONTAL);Button importBtn=button("＋ นำเข้ารูป");importBtn.setOnClickListener(v->chooseCategoryAndImport());actions.addView(importBtn,new LinearLayout.LayoutParams(0,dp(54),1));Button inbox=darkButton("Inbox");LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(0,dp(54),1);ip.setMargins(dp(8),0,0,0);inbox.setOnClickListener(v->{mode="LIBRARY";showCategory(NavigationLibrary.INBOX);});actions.addView(inbox,ip);root.addView(actions);
+        LinearLayout sourceCard=new LinearLayout(this);sourceCard.setOrientation(LinearLayout.VERTICAL);sourceCard.setPadding(dp(16),dp(15),dp(16),dp(15));sourceCard.setBackground(round(Color.rgb(12,29,45),20));
+        sourceCard.addView(tv("ไฟล์ในเครื่อง / Flash Drive",16,TEXT,true));TextView sourceText=tv("ค้นหารูปจากหน่วยความจำเครื่อง, Downloads, My Files และ USB/Flash Drive ที่เสียบผ่าน OTG ได้โดยตรง",12.5f,MUTED,false);sourceText.setPadding(0,dp(5),0,dp(12));sourceCard.addView(sourceText);
+        Button importBtn=button("⌕  ค้นหารูปในเครื่อง / Flash Drive");importBtn.setOnClickListener(v->chooseCategoryAndImport());sourceCard.addView(importBtn,new LinearLayout.LayoutParams(-1,dp(54)));root.addView(sourceCard);
+
+        LinearLayout quick=new LinearLayout(this);quick.setOrientation(LinearLayout.HORIZONTAL);quick.setPadding(0,dp(10),0,0);Button inbox=darkButton("Inbox");inbox.setOnClickListener(v->{mode="LIBRARY";showCategory(NavigationLibrary.INBOX);});quick.addView(inbox,new LinearLayout.LayoutParams(0,dp(50),1));Button all=darkButton("คลังรูปทั้งหมด");LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(0,dp(50),1);ap.setMargins(dp(8),0,0,0);all.setOnClickListener(v->{mode="LIBRARY";build();});quick.addView(all,ap);root.addView(quick);
 
         List<File> files="RECENT".equals(mode)?NavigationLibrary.recent(this,12):NavigationLibrary.listAll(this);
         TextView count=tv(("RECENT".equals(mode)?"ล่าสุด":"คลังรูป")+"  •  "+files.size()+" รูป",15,MUTED,true);count.setPadding(dp(2),dp(20),0,dp(10));root.addView(count);
-        if(files.isEmpty()) root.addView(empty("ยังไม่มีรูปในคลัง","กด “นำเข้ารูป” แล้วเลือกจาก Explorer/ไฟล์ในโทรศัพท์ได้หลายรูป รูปจะถูกคัดลอกเข้าแอปและเปิดได้แบบ Offline")); else addGrid(root,files);
+        if(files.isEmpty()) root.addView(empty("ยังไม่มีรูปในคลัง","กด “ค้นหารูปในเครื่อง / Flash Drive” แล้วเลือกรูปได้หลายรูป รูปจะถูกคัดลอกเข้าแอปและเปิดได้แบบ Offline")); else addGrid(root,files);
 
         if("LIBRARY".equals(mode)){
             TextView catTitle=tv("หมวด",15,MUTED,true);catTitle.setPadding(dp(2),dp(22),0,dp(10));root.addView(catTitle);
@@ -60,9 +78,9 @@ public class RouteImagesActivity extends Activity {
         setContentView(sv);
     }
 
-    private void buildNas(LinearLayout root){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);c.setPadding(dp(18),dp(18),dp(18),dp(18));c.setBackground(round(CARD,22));c.addView(tv("▤  NAS Explorer",20,TEXT,true));TextView s=tv("แนวใหม่: NAS เป็นแหล่งนำเข้ารูป ไม่ใช่ที่เก็บที่ต้องพึ่งตลอดเวลา\n\nขั้นถัดไปจะนำ Explorer LAN/Tailscale ตัวที่เราเคยใช้ได้มาวางตรงนี้ แล้วเพิ่มปุ่ม “คัดลอกเข้า รูปภาพนำทาง”",13.5f,MUTED,false);s.setPadding(0,dp(10),0,dp(14));c.addView(s);Button open=button("เปิดการตั้งค่า NAS");open.setOnClickListener(v->startActivity(new Intent(this,NasConnectActivity.class)));c.addView(open,new LinearLayout.LayoutParams(-1,dp(54)));root.addView(c);}
+    private void buildNas(LinearLayout root){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);c.setPadding(dp(18),dp(18),dp(18),dp(18));c.setBackground(round(CARD,22));c.addView(tv("▤  NAS Explorer",20,TEXT,true));TextView s=tv("NAS ยังพักไว้ก่อนในช่วงที่เครื่องกำลังแก้ไขครับ\n\nคลังรูปในเครื่องและ Flash Drive ใช้งานได้แยกจาก NAS โดยสมบูรณ์ เมื่อ NAS กลับมาแล้วเราจะเพิ่มปุ่ม “คัดลอกเข้า รูปภาพนำทาง” ตรงนี้",13.5f,MUTED,false);s.setPadding(0,dp(10),0,dp(14));c.addView(s);Button open=button("เปิดการตั้งค่า NAS");open.setOnClickListener(v->startActivity(new Intent(this,NasConnectActivity.class)));c.addView(open,new LinearLayout.LayoutParams(-1,dp(54)));root.addView(c);}
 
-    private void chooseCategoryAndImport(){String[] th={"Inbox","เส้นทาง","จุดชาร์จ","สถานที่โปรด"};String[] ids=NavigationLibrary.categories();new AlertDialog.Builder(this).setTitle("นำเข้าไปที่").setItems(th,(d,w)->{pendingCategory=ids[w];Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("image/*");i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);startActivityForResult(i,REQ_IMAGES);}).setNegativeButton("ยกเลิก",null).show();}
+    private void chooseCategoryAndImport(){String[] th={"Inbox","เส้นทาง","จุดชาร์จ","สถานที่โปรด"};String[] ids=NavigationLibrary.categories();new AlertDialog.Builder(this).setTitle("นำเข้าไปที่").setItems(th,(d,w)->{pendingCategory=ids[w];Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("image/*");i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);try{startActivityForResult(i,REQ_IMAGES);}catch(Exception e){Toast.makeText(this,"ไม่พบตัวเลือกไฟล์ในเครื่อง",Toast.LENGTH_LONG).show();}}).setNegativeButton("ยกเลิก",null).show();}
 
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){super.onActivityResult(requestCode,resultCode,data);if(requestCode!=REQ_IMAGES||resultCode!=RESULT_OK||data==null)return;ArrayList<Uri> uris=new ArrayList<>();ClipData cd=data.getClipData();if(cd!=null){for(int i=0;i<cd.getItemCount();i++)uris.add(cd.getItemAt(i).getUri());}else if(data.getData()!=null)uris.add(data.getData());if(uris.isEmpty())return;showImporting(uris);}
 
