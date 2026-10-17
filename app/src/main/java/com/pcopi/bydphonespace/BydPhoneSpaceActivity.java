@@ -64,7 +64,7 @@ public class BydPhoneSpaceActivity extends Activity {
 
         LinearLayout top=new LinearLayout(this); top.setGravity(Gravity.CENTER_VERTICAL); LinearLayout names=new LinearLayout(this); names.setOrientation(LinearLayout.VERTICAL);
         names.addView(tv("BYD PHONE SPACE",25,TEXT,true)); TextView sub=tv("Navigation • NAS • Quick Access",13.5f,MUTED,false); sub.setPadding(0,dp(4),0,0); names.addView(sub); top.addView(names,new LinearLayout.LayoutParams(0,-2,1));
-        TextView ver=tv("V0.1.1",12,CYAN,true); ver.setPadding(dp(12),dp(8),dp(12),dp(8)); ver.setGravity(Gravity.CENTER); ver.setBackground(rounded(Color.rgb(11,43,66),18)); top.addView(ver); root.addView(top);
+        TextView ver=tv("V0.2",12,CYAN,true); ver.setPadding(dp(12),dp(8),dp(12),dp(8)); ver.setGravity(Gravity.CENTER); ver.setBackground(rounded(Color.rgb(11,43,66),18)); top.addView(ver); root.addView(top);
 
         LinearLayout status=new LinearLayout(this); status.setPadding(0,dp(16),0,dp(18)); status.addView(chip("พร้อมใช้งาน",true)); status.addView(chip("NAS",false)); status.addView(chip("Overlay",Settings.canDrawOverlays(this))); root.addView(status);
 
@@ -73,9 +73,9 @@ public class BydPhoneSpaceActivity extends Activity {
         Button ob=new Button(this); ob.setText(Settings.canDrawOverlays(this)?"เปิด Quick Overlay":"อนุญาต Quick Overlay"); ob.setAllCaps(false); ob.setTextSize(15.5f); ob.setTextColor(Color.rgb(4,22,33)); ob.setTypeface(Typeface.DEFAULT_BOLD); ob.setBackground(rounded(CYAN,18)); LinearLayout.LayoutParams op=new LinearLayout.LayoutParams(-1,dp(54)); op.setMargins(0,dp(15),0,0); hero.addView(ob,op); ob.setOnClickListener(v->ensureOverlay(false)); root.addView(hero);
 
         TextView sec=tv("เมนูหลัก",16,MUTED,true); sec.setPadding(dp(2),dp(24),0,dp(12)); root.addView(sec);
-        row(root, card("⌖","Google Maps","เปิด Maps + Quick Overlay",v->ensureOverlay(true)), card("▣","รูปภาพนำทาง","ล่าสุด • NAS • Offline",v->startActivity(new Intent(this,RouteImagesActivity.class))));
+        row(root, card("⌖","Google Maps","เปิด Maps + Quick Overlay",v->ensureOverlay(true)), card("▣","รูปภาพนำทาง","คลังรูป • ล่าสุด • Offline",v->startActivity(new Intent(this,RouteImagesActivity.class))));
         row(root, card("★","เส้นทางโปรด","จุดหมายที่ใช้บ่อย",v->toast("เส้นทางโปรดจะเปิดใช้ในขั้นถัดไป")), card("▤","NAS Explorer","LAN / Tailscale",v->startActivity(new Intent(this,NasConnectActivity.class))));
-        row(root, card("↻","ซิงก์จาก NAS","โหลดเฉพาะรายการใหม่",v->toast("V0.1.1 ตรวจ UI/Overlay ก่อน • ขั้นถัดไปต่อ SMB Sync จริง")), card("＋","แอป / APK","ติดตั้งและอัปเดต",v->pickApk()));
+        row(root, card("↻","ซิงก์จาก NAS","นำรูปใหม่เข้าคลัง",v->toast("V0.2: คลังรูป Offline พร้อมแล้ว • ขั้นถัดไปต่อ NAS Explorer จริง")), card("＋","แอป / APK","ติดตั้งและอัปเดต",v->pickApk()));
 
         TextView foot=tv("ทดสอบบน Samsung Galaxy S22 Ultra ก่อน แล้วจึงปรับสเกลสำหรับ BYD Sealion 7",12.5f,Color.rgb(112,135,158),false); foot.setGravity(Gravity.CENTER); foot.setPadding(dp(10),dp(10),dp(10),0); root.addView(foot);
         setContentView(sv);
