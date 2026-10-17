@@ -1,161 +1,347 @@
 package com.pcopi.bydphonespace;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
-import android.graphics.Color;
+import android.content.pm.PackageManager;
+import android.location.Address;
+import android.location.Geocoder;
+import android.location.Location;
 import android.os.Bundle;
+import android.view.Gravity;
+import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
-import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.view.Gravity;
-import android.widget.Button;
+import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.List;
 import java.util.Locale;
 
-public class MapPickerActivity extends Activity {
+/** Map picker copied from the proven Dorm Camera V0.2.4 flow. */
+public final class MapPickerActivity extends Activity {
     public static final String EXTRA_LAT = "lat";
     public static final String EXTRA_LNG = "lng";
     public static final String EXTRA_LABEL = "label";
+    private static final int REQ_LOCATION = 2241;
 
-    private WebView web;
-    private TextView selectedText;
-    private Button useButton;
+    private WebView webView;
+    private TextView coordinateText;
+    private TextView statusText;
+    private EditText searchInput;
     private double selectedLat = Double.NaN;
     private double selectedLng = Double.NaN;
-    private String selectedLabel = "";
+    private boolean waitingPermission;
 
-    private int dp(float v){return (int)(v*getResources().getDisplayMetrics().density+.5f);}
+    @Override protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        getWindow().setStatusBarColor(0xFF050506);
+        getWindow().setNavigationBarColor(0xFF050506);
+        buildUi();
 
-    @Override public void onCreate(Bundle b){
-        super.onCreate(b);
-        getWindow().setStatusBarColor(Color.rgb(7,16,27));
-        getWindow().setNavigationBarColor(Color.rgb(7,16,27));
-
-        double initialLat = getIntent().getDoubleExtra(EXTRA_LAT, 13.7563);
-        double initialLng = getIntent().getDoubleExtra(EXTRA_LNG, 100.5018);
-        String initialLabel = getIntent().getStringExtra(EXTRA_LABEL);
+        double lat = getIntent().getDoubleExtra(EXTRA_LAT, 15.8700);
+        double lng = getIntent().getDoubleExtra(EXTRA_LNG, 100.9925);
         boolean hasInitial = getIntent().hasExtra(EXTRA_LAT) && getIntent().hasExtra(EXTRA_LNG);
-        if(hasInitial){
-            selectedLat=initialLat;
-            selectedLng=initialLng;
-            selectedLabel=initialLabel==null?"":initialLabel;
-        }
+        loadMap(lat, lng, hasInitial ? 16 : 6, hasInitial);
+    }
 
-        LinearLayout root=new LinearLayout(this);
+    private void buildUi() {
+        LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.rgb(7,16,27));
-        root.setPadding(dp(10),dp(10),dp(10),dp(10));
+        root.setPadding(dp(10), dp(10), dp(10), dp(10));
+        root.setBackgroundColor(0xFF050506);
 
-        LinearLayout top=new LinearLayout(this);
+        LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        Button back=new Button(this);
-        back.setText("←"); back.setTextSize(20); back.setAllCaps(false);
-        back.setTextColor(Color.WHITE); back.setBackgroundColor(Color.rgb(15,28,43));
-        back.setOnClickListener(v->finish());
-        top.addView(back,new LinearLayout.LayoutParams(dp(56),dp(48)));
-
-        LinearLayout titles=new LinearLayout(this);
-        titles.setOrientation(LinearLayout.VERTICAL);
-        titles.setPadding(dp(12),0,0,0);
-        TextView title=new TextView(this); title.setText("เลือกตำแหน่งจากแผนที่"); title.setTextSize(19); title.setTextColor(Color.WHITE);
-        TextView sub=new TextView(this); sub.setText("เลื่อน/ซูมแผนที่ให้จุดหมายอยู่ตรง + สีขาว"); sub.setTextSize(12.5f); sub.setTextColor(Color.rgb(157,177,197));
-        titles.addView(title); titles.addView(sub);
-        top.addView(titles,new LinearLayout.LayoutParams(0,-2,1));
+        PressFeedbackButton back = button("←", 15f);
+        back.setOnClickListener(v -> finish());
+        top.addView(back, new LinearLayout.LayoutParams(dp(48), dp(42)));
+        TextView title = text("เลือกตำแหน่งจากแผนที่", 20f, 0xFFFFFFFF);
+        title.setPadding(dp(10), 0, 0, 0);
+        top.addView(title, new LinearLayout.LayoutParams(0, dp(42), 1f));
         root.addView(top);
 
-        web=new WebView(this);
-        WebSettings ws=web.getSettings();
-        ws.setJavaScriptEnabled(true);
-        ws.setDomStorageEnabled(true);
-        ws.setBuiltInZoomControls(false);
-        ws.setDisplayZoomControls(false);
-        ws.setUseWideViewPort(true);
-        ws.setLoadWithOverviewMode(true);
-        web.setWebViewClient(new WebViewClient());
-        web.setWebChromeClient(new WebChromeClient());
-        web.addJavascriptInterface(new Bridge(),"AndroidPicker");
-        root.addView(web,new LinearLayout.LayoutParams(-1,0,1));
+        TextView hint = text("แตะจุดบนแผนที่ หรือเลื่อนแผนที่แล้วกด “เลือกจุดกลาง”", 12f, 0xFFB9BBC2);
+        hint.setGravity(Gravity.CENTER);
+        hint.setPadding(0, dp(4), 0, dp(7));
+        root.addView(hint);
 
-        LinearLayout info=new LinearLayout(this);
-        info.setOrientation(LinearLayout.VERTICAL);
-        info.setPadding(dp(14),dp(10),dp(14),dp(10));
-        selectedText=new TextView(this);
-        selectedText.setTextSize(13.5f);
-        selectedText.setTextColor(Color.rgb(242,247,252));
-        selectedText.setText(hasInitial?formatSelection():"เลื่อนแผนที่ให้จุดหมายอยู่ตรง + สีขาว");
-        info.addView(selectedText,new LinearLayout.LayoutParams(-1,-2));
-        root.addView(info);
+        LinearLayout searchRow = new LinearLayout(this);
+        searchRow.setGravity(Gravity.CENTER_VERTICAL);
+        searchInput = new EditText(this);
+        searchInput.setSingleLine(true);
+        searchInput.setHint("ค้นหาสถานที่ เช่น ดอนเจดีย์ สุพรรณบุรี");
+        searchInput.setTextColor(0xFFFFFFFF);
+        searchInput.setHintTextColor(0xFF8F929A);
+        searchInput.setTextSize(14f);
+        searchRow.addView(searchInput, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        PressFeedbackButton search = button("ค้นหา", 13f);
+        search.setOnClickListener(v -> searchPlace());
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(dp(82), dp(44));
+        sp.setMarginStart(dp(6));
+        searchRow.addView(search, sp);
+        root.addView(searchRow);
 
-        LinearLayout actions=new LinearLayout(this);
-        actions.setPadding(0,dp(6),0,0);
-        Button cancel=new Button(this); cancel.setText("ยกเลิก"); cancel.setAllCaps(false); cancel.setTextSize(15); cancel.setTextColor(Color.WHITE); cancel.setBackgroundColor(Color.rgb(15,28,43)); cancel.setOnClickListener(v->finish());
-        actions.addView(cancel,new LinearLayout.LayoutParams(0,dp(54),1));
-        useButton=new Button(this); useButton.setText("เลือก ณ จุดนี้"); useButton.setAllCaps(false); useButton.setTextSize(16); useButton.setTextColor(Color.rgb(4,22,33)); useButton.setBackgroundColor(Color.rgb(77,196,255));
-        LinearLayout.LayoutParams up=new LinearLayout.LayoutParams(0,dp(54),1); up.setMargins(dp(8),0,0,0); actions.addView(useButton,up);
-        useButton.setEnabled(hasInitial);
-        useButton.setOnClickListener(v->finishWithSelection());
-        root.addView(actions);
+        FrameLayout mapFrame = new FrameLayout(this);
+        webView = new WebView(this);
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setBuiltInZoomControls(false);
+        settings.setDisplayZoomControls(false);
+        webView.setWebViewClient(new WebViewClient());
+        webView.addJavascriptInterface(new MapBridge(), "AndroidPicker");
+        mapFrame.addView(webView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        TextView cross = text("+", 34f, 0xFFFFFFFF);
+        cross.setGravity(Gravity.CENTER);
+        cross.setShadowLayer(5f, 0f, 1f, 0xFF000000);
+        FrameLayout.LayoutParams crossParams = new FrameLayout.LayoutParams(dp(44), dp(44), Gravity.CENTER);
+        mapFrame.addView(cross, crossParams);
+
+        LinearLayout.LayoutParams mapParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
+        mapParams.setMargins(0, dp(6), 0, dp(6));
+        root.addView(mapFrame, mapParams);
+
+        coordinateText = text("ยังไม่ได้เลือกจุด", 14f, 0xFFFFFFFF);
+        coordinateText.setGravity(Gravity.CENTER);
+        coordinateText.setPadding(dp(6), dp(4), dp(6), dp(2));
+        root.addView(coordinateText);
+
+        statusText = text("", 12f, 0xFF9FA2AA);
+        statusText.setGravity(Gravity.CENTER);
+        root.addView(statusText);
+
+        LinearLayout utility = new LinearLayout(this);
+        PressFeedbackButton mine = button("◎ ตำแหน่งฉัน", 12f);
+        mine.setOnClickListener(v -> goCurrentLocation());
+        utility.addView(mine, new LinearLayout.LayoutParams(0, dp(44), 1f));
+
+        PressFeedbackButton center = button("＋ เลือกจุดกลาง", 12f);
+        center.setOnClickListener(v -> webView.evaluateJavascript("selectCenter()", null));
+        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0, dp(44), 1f);
+        cp.setMarginStart(dp(6));
+        utility.addView(center, cp);
+
+        PressFeedbackButton layer = button("▧ แผนที่/ดาวเทียม", 12f);
+        layer.setOnClickListener(v -> webView.evaluateJavascript("toggleLayer()", null));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(44), 1f);
+        lp.setMarginStart(dp(6));
+        utility.addView(layer, lp);
+        root.addView(utility);
+
+        PressFeedbackButton use = button("📍 ใช้ตำแหน่งนี้", 16f);
+        use.setOnClickListener(v -> useSelection());
+        LinearLayout.LayoutParams up = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
+        up.setMargins(0, dp(7), 0, 0);
+        root.addView(use, up);
 
         setContentView(root);
-        web.loadDataWithBaseURL("https://www.openstreetmap.org/", html(initialLat,initialLng,hasInitial), "text/html", "UTF-8", null);
     }
 
-    private String html(double lat,double lng,boolean hasInitial){
-        String initialLabel=getIntent().getStringExtra(EXTRA_LABEL);
-        String safeLabel=initialLabel==null?"":initialLabel.replace("\\","\\\\").replace("'","\\'").replace("\n"," ").replace("\r"," ");
-        return "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'>"+
-                "<link rel='stylesheet' href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'/>"+
-                "<script src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'></script>"+
-                "<style>html,body{margin:0;height:100%;font-family:sans-serif;background:#07101b;color:#fff}#map{height:100%;width:100%}.search{position:absolute;z-index:1000;top:10px;left:10px;right:10px;background:#101d2cdd;border-radius:14px;padding:8px;box-shadow:0 4px 16px #0008}.row{display:flex;gap:7px}input{flex:1;background:#07101b;color:#fff;border:1px solid #38516a;border-radius:10px;padding:10px;font-size:15px}button{background:#4dc4ff;color:#041621;border:0;border-radius:10px;padding:0 14px;font-weight:bold}.results{max-height:170px;overflow:auto}.item{padding:9px 6px;border-top:1px solid #2c3b49;font-size:13px}.hint{font-size:11px;color:#b4c4d3;padding:5px 4px 0}#cross{position:absolute;z-index:999;left:50%;top:50%;width:44px;height:44px;transform:translate(-50%,-50%);pointer-events:none;filter:drop-shadow(0 1px 3px #000)}#cross:before{content:'';position:absolute;left:20px;top:4px;width:4px;height:36px;background:#fff;border-radius:2px}#cross:after{content:'';position:absolute;left:4px;top:20px;width:36px;height:4px;background:#fff;border-radius:2px}</style></head><body>"+
-                "<div class='search'><div class='row'><input id='q' placeholder='ค้นหาสถานที่ เช่น อนุสรณ์ดอนเจดีย์'><button onclick='searchPlace()'>ค้นหา</button></div><div class='hint'>ค้นหา หรือเลื่อนแผนที่ให้จุดหมายอยู่ตรง + สีขาว</div><div id='results' class='results'></div></div>"+
-                "<div id='map'></div><div id='cross'></div><script>"+
-                "var currentLabel='"+safeLabel+"';var map=L.map('map').setView(["+lat+","+lng+"],"+(hasInitial?16:6)+");"+
-                "L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);"+
-                "function reportCenter(){var p=map.getCenter();AndroidPicker.pointSelected(p.lat,p.lng,currentLabel);currentLabel='';}"+
-                "map.on('moveend',reportCenter);"+
-                "map.on('click',function(e){map.panTo(e.latlng);});"+
-                "function searchPlace(){var q=document.getElementById('q').value.trim();if(!q)return;var box=document.getElementById('results');box.innerHTML='<div class=\"item\">กำลังค้นหา…</div>';fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&q='+encodeURIComponent(q)).then(r=>r.json()).then(list=>{box.innerHTML='';list.forEach(x=>{var d=document.createElement('div');d.className='item';d.textContent=x.display_name;d.onclick=function(){var a=parseFloat(x.lat),b=parseFloat(x.lon);currentLabel=x.display_name||'';map.setView([a,b],17);box.innerHTML='';};box.appendChild(d);});if(!list.length)box.innerHTML='<div class=\"item\">ไม่พบสถานที่</div>';}).catch(()=>{box.innerHTML='<div class=\"item\">ค้นหาไม่สำเร็จ</div>';});}"+
-                "document.getElementById('q').addEventListener('keyup',function(e){if(e.key==='Enter')searchPlace();});"+
-                "setTimeout(reportCenter,300);"+
-                "</script></body></html>";
+    private void loadMap(double lat, double lng, int zoom, boolean placeMarker) {
+        String html = "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'>"
+                + "<link rel='stylesheet' href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'/>"
+                + "<style>html,body,#map{height:100%;margin:0;background:#111;} .leaflet-control-attribution{font-size:9px}</style>"
+                + "</head><body><div id='map'></div><script src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'></script><script>"
+                + "var map=L.map('map',{zoomControl:true}).setView([__LAT__,__LON__],__ZOOM__);"
+                + "var street=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'});"
+                + "var satellite=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'});"
+                + "street.addTo(map); var sat=false; var marker=null;"
+                + "function choose(lat,lng){if(marker){marker.setLatLng([lat,lng]);}else{marker=L.marker([lat,lng]).addTo(map);} AndroidPicker.onPick(String(lat),String(lng));}"
+                + "map.on('click',function(e){choose(e.latlng.lat,e.latlng.lng);});"
+                + "function selectCenter(){var c=map.getCenter();choose(c.lat,c.lng);}"
+                + "function moveTo(lat,lng,z,mark){map.setView([lat,lng],z||16);if(mark){choose(lat,lng);}}"
+                + "function toggleLayer(){if(sat){map.removeLayer(satellite);street.addTo(map);sat=false;}else{map.removeLayer(street);satellite.addTo(map);sat=true;}}"
+                + (placeMarker ? "choose(__LAT__,__LON__);" : "")
+                + "</script></body></html>";
+        html = html.replace("__LAT__", String.format(Locale.US, "%.7f", lat))
+                .replace("__LON__", String.format(Locale.US, "%.7f", lng))
+                .replace("__ZOOM__", Integer.toString(zoom));
+        // Keep the same local base URL used by the proven Dorm Camera map picker.
+        webView.loadDataWithBaseURL("https://localhost/", html, "text/html", "UTF-8", null);
     }
 
-    public class Bridge {
-        @JavascriptInterface public void pointSelected(double lat,double lng,String label){
-            runOnUiThread(()->{
-                selectedLat=lat; selectedLng=lng; selectedLabel=label==null?"":label;
-                selectedText.setText(formatSelection());
-                useButton.setEnabled(true);
-            });
-        }
-    }
-
-    private String formatSelection(){
-        String coords=String.format(Locale.US,"%.6f, %.6f",selectedLat,selectedLng);
-        if(selectedLabel==null||selectedLabel.trim().isEmpty()) return "＋ "+coords;
-        return "＋ "+selectedLabel+"\n"+coords;
-    }
-
-    private void finishWithSelection(){
-        if(Double.isNaN(selectedLat)||Double.isNaN(selectedLng)){
-            Toast.makeText(this,"กรุณาเลื่อนแผนที่เลือกจุดก่อน",Toast.LENGTH_SHORT).show();
+    private void searchPlace() {
+        String q = searchInput.getText().toString().trim();
+        if (q.isEmpty()) {
+            searchInput.setError("กรุณาพิมพ์ชื่อสถานที่");
             return;
         }
-        Intent data=new Intent();
-        data.putExtra(EXTRA_LAT,selectedLat);
-        data.putExtra(EXTRA_LNG,selectedLng);
-        data.putExtra(EXTRA_LABEL,selectedLabel==null?"":selectedLabel);
-        setResult(RESULT_OK,data);
-        finish();
+        statusText.setText("กำลังค้นหา “" + q + "”...");
+        new Thread(() -> {
+            Address best = null;
+            String err = null;
+            try {
+                Geocoder geocoder = new Geocoder(this, Locale.getDefault());
+                List<Address> list = geocoder.getFromLocationName(q, 1);
+                if (list != null && !list.isEmpty()) best = list.get(0);
+            } catch (Exception e) {
+                err = e.getMessage();
+            }
+            Address result = best;
+            String error = err;
+            runOnUiThread(() -> {
+                if (result == null) {
+                    statusText.setText("ค้นหาไม่พบ");
+                    Toast.makeText(this, error == null ? "ไม่พบสถานที่" : error, Toast.LENGTH_LONG).show();
+                    return;
+                }
+                double la = result.getLatitude();
+                double lo = result.getLongitude();
+                selectedLat = la;
+                selectedLng = lo;
+                updateCoordinate();
+                webView.evaluateJavascript(String.format(Locale.US,
+                        "moveTo(%.7f,%.7f,17,true)", la, lo), null);
+                statusText.setText(addressText(result));
+            });
+        }, "map-picker-search").start();
     }
 
-    @Override protected void onDestroy(){
-        if(web!=null){web.removeJavascriptInterface("AndroidPicker");web.destroy();}
+    private void goCurrentLocation() {
+        boolean granted = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        if (!granted) {
+            waitingPermission = true;
+            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);
+            return;
+        }
+        statusText.setText("กำลังอ่านตำแหน่งปัจจุบัน...");
+        LocationHelper helper = new LocationHelper(this);
+        Location best = helper.getBestLocation();
+        if (best != null) {
+            moveToLocation(best);
+            return;
+        }
+        helper.refresh(new LocationHelper.Callback() {
+            private boolean done;
+            @Override public void onLocation(Location location) {
+                if (done) return;
+                done = true;
+                runOnUiThread(() -> moveToLocation(location));
+            }
+            @Override public void onUnavailable(String reason) {
+                if (done) return;
+                done = true;
+                runOnUiThread(() -> statusText.setText("ตำแหน่งไม่พร้อม: " + reason));
+            }
+        });
+    }
+
+    private void moveToLocation(Location location) {
+        selectedLat = location.getLatitude();
+        selectedLng = location.getLongitude();
+        updateCoordinate();
+        webView.evaluateJavascript(String.format(Locale.US,
+                "moveTo(%.7f,%.7f,17,true)", selectedLat, selectedLng), null);
+        statusText.setText("ตำแหน่งจากเครื่อง");
+    }
+
+    private void useSelection() {
+        if (Double.isNaN(selectedLat) || Double.isNaN(selectedLng)) {
+            Toast.makeText(this, "กรุณาแตะเลือกจุดบนแผนที่ก่อน", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        statusText.setText("กำลังอ่านชื่อสถานที่...");
+        new Thread(() -> {
+            String label = "ตำแหน่งที่เลือกจากแผนที่";
+            try {
+                Geocoder geocoder = new Geocoder(this, Locale.getDefault());
+                List<Address> list = geocoder.getFromLocation(selectedLat, selectedLng, 1);
+                if (list != null && !list.isEmpty()) label = addressText(list.get(0));
+            } catch (Exception ignored) {}
+            String finalLabel = label;
+            runOnUiThread(() -> {
+                Intent data = new Intent();
+                data.putExtra(EXTRA_LAT, selectedLat);
+                data.putExtra(EXTRA_LNG, selectedLng);
+                data.putExtra(EXTRA_LABEL, finalLabel);
+                setResult(RESULT_OK, data);
+                finish();
+            });
+        }, "map-picker-reverse-geocode").start();
+    }
+
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQ_LOCATION || !waitingPermission) return;
+        waitingPermission = false;
+        for (int result : grantResults) {
+            if (result == PackageManager.PERMISSION_GRANTED) {
+                goCurrentLocation();
+                return;
+            }
+        }
+        Toast.makeText(this, "ต้องอนุญาตตำแหน่งก่อนใช้ตำแหน่งปัจจุบัน", Toast.LENGTH_LONG).show();
+    }
+
+    private String addressText(Address a) {
+        if (a.getMaxAddressLineIndex() >= 0 && a.getAddressLine(0) != null) return a.getAddressLine(0);
+        if (a.getFeatureName() != null) return a.getFeatureName();
+        if (a.getLocality() != null) return a.getLocality();
+        return "ตำแหน่งที่เลือกจากแผนที่";
+    }
+
+    private void updateCoordinate() {
+        coordinateText.setText(String.format(Locale.US, "📍 %.6f, %.6f", selectedLat, selectedLng));
+    }
+
+    private final class MapBridge {
+        @JavascriptInterface public void onPick(String lat, String lng) {
+            try {
+                double la = Double.parseDouble(lat);
+                double lo = Double.parseDouble(lng);
+                runOnUiThread(() -> {
+                    selectedLat = la;
+                    selectedLng = lo;
+                    updateCoordinate();
+                    statusText.setText("เลือกจุดแล้ว • กด “ใช้ตำแหน่งนี้” เมื่อตรงตำแหน่ง");
+                });
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private PressFeedbackButton button(String text, float size) {
+        PressFeedbackButton b = new PressFeedbackButton(this);
+        b.setText(text);
+        b.setAllCaps(false);
+        b.setTextColor(0xFFFFFFFF);
+        b.setTextSize(size);
+        b.setGravity(Gravity.CENTER);
+        b.setPadding(dp(7), 0, dp(7), 0);
+        b.setBackgroundResource(R.drawable.bg_button_dark);
+        b.setBackgroundTintList(null);
+        b.setStateListAnimator(null);
+        return b;
+    }
+
+    private TextView text(String text, float size, int color) {
+        TextView v = new TextView(this);
+        v.setText(text);
+        v.setTextSize(size);
+        v.setTextColor(color);
+        v.setGravity(Gravity.CENTER_VERTICAL);
+        return v;
+    }
+
+    private int dp(float value) {
+        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    @Override protected void onDestroy() {
+        if (webView != null) {
+            webView.removeJavascriptInterface("AndroidPicker");
+            webView.destroy();
+        }
         super.onDestroy();
     }
 }
