@@ -9,7 +9,6 @@ import org.json.JSONObject;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -85,6 +84,25 @@ public final class RouteStore {
         if(name==null||name.trim().isEmpty())return;
         ArrayList<Route> all=readAll(c);
         for(Route r:all) if(id!=null&&id.equals(r.id)){r.name=name.trim();r.updated=System.currentTimeMillis();break;}
+        saveAll(c,all);
+    }
+
+    public static void replaceFiles(Context c,String id,List<File> files) {
+        if(id==null)return;
+        ArrayList<Route> all=readAll(c);
+        for(Route r:all){
+            if(!id.equals(r.id))continue;
+            r.paths.clear();
+            if(files!=null){
+                for(File f:files){
+                    if(f==null||!f.exists()||!f.isFile())continue;
+                    String p=f.getAbsolutePath();
+                    if(!r.paths.contains(p))r.paths.add(p);
+                }
+            }
+            r.updated=System.currentTimeMillis();
+            break;
+        }
         saveAll(c,all);
     }
 
