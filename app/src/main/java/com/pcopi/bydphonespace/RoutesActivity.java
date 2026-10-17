@@ -39,12 +39,12 @@ public class RoutesActivity extends Activity {
         super.onCreate(b);
         getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
         String m=getIntent().getStringExtra(EXTRA_MODE);if(m!=null)mode=m;
+        build();
         String open=getIntent().getStringExtra(EXTRA_OPEN_ROUTE_ID);
         if(open!=null){getIntent().removeExtra(EXTRA_OPEN_ROUTE_ID);openRoute(open);}
-        build();
     }
 
-    @Override protected void onResume(){super.onResume();build();}
+    @Override protected void onResume(){super.onResume();if(!isFinishing())build();}
 
     private void build(){
         ScrollView sv=new ScrollView(this);sv.setFillViewport(true);sv.setBackgroundColor(BG);
@@ -107,7 +107,7 @@ public class RoutesActivity extends Activity {
 
     private void openRoute(String id){
         List<File> fs=RouteStore.files(this,id);if(fs.isEmpty()){Toast.makeText(this,"เส้นทางนี้ยังไม่มีรูป",Toast.LENGTH_SHORT).show();return;}
-        RouteStore.touchOpened(this,id);Intent i=new Intent(this,ImageViewerActivity.class);i.putExtra(ImageViewerActivity.EXTRA_PATH,fs.get(0).getAbsolutePath());i.putExtra(ImageViewerActivity.EXTRA_ROUTE_ID,id);startActivity(i);
+        RouteStore.touchOpened(this,id);Intent i=new Intent(this,RouteViewerActivity.class);i.putExtra(RouteViewerActivity.EXTRA_ROUTE_ID,id);startActivity(i);
     }
 
     private void navigateRoute(RouteStore.Route r){
