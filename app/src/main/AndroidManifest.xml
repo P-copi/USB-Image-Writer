@@ -15,6 +15,7 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <activity android:name=".ImageViewerActivity" android:exported="false" />
         <activity android:name=".NasConnectActivity" android:exported="false" />
         <activity android:name=".RouteImagesActivity" android:exported="false" />
         <activity
