@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -8,6 +9,24 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <queries>
+        <package android:name="com.google.android.apps.maps" />
+        <package android:name="com.google.android.gms" />
+        <package android:name="com.android.vending" />
+        <package android:name="com.google.android.gsf" />
+        <package android:name="com.google.android.inputmethod.latin" />
+        <package android:name="com.google.android.googlequicksearchbox" />
+        <package android:name="com.google.android.tts" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="false"
@@ -17,6 +36,7 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <activity android:name=".DeviceInspectorActivity" android:exported="false" />
         <activity android:name=".RouteEditorActivity" android:exported="false" />
         <activity android:name=".RouteViewerActivity" android:exported="false" />
         <activity android:name=".RoutesActivity" android:exported="false" />
