@@ -76,6 +76,7 @@ public final class NavigationLibrary {
         if (source.getParentFile() != null && source.getParentFile().equals(destDir)) return source;
         File dest = uniqueFile(destDir, source.getName());
         if (source.renameTo(dest)) {
+            NavigationTargetStore.move(context, source, dest);
             dest.setLastModified(System.currentTimeMillis());
             return dest;
         }
@@ -90,12 +91,16 @@ public final class NavigationLibrary {
             dest.delete();
             throw new IllegalStateException("ย้ายไฟล์ไม่สำเร็จ");
         }
+        NavigationTargetStore.move(context, source, dest);
         dest.setLastModified(System.currentTimeMillis());
         return dest;
     }
 
-    public static boolean delete(File file) {
-        return file != null && file.exists() && file.delete();
+    public static boolean delete(Context context, File file) {
+        if (file == null || !file.exists()) return false;
+        boolean ok = file.delete();
+        if (ok) NavigationTargetStore.clear(context, file);
+        return ok;
     }
 
     private static File categoryDir(Context context, String category) {
