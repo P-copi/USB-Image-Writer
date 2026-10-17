@@ -26,7 +26,10 @@ public final class NavigationTargetStore {
         public boolean isPlace() { return "place".equals(type) && !name.isEmpty(); }
         public boolean isEmpty() { return !isCoordinate() && !isPlace(); }
         public String display() {
-            if (isCoordinate()) return lat + ", " + lng;
+            if (isCoordinate()) {
+                if (!name.trim().isEmpty()) return name + " • " + lat + ", " + lng;
+                return lat + ", " + lng;
+            }
             return name;
         }
     }
@@ -61,19 +64,24 @@ public final class NavigationTargetStore {
     }
 
     public static void saveCoordinate(Context context, File file, String lat, String lng) {
+        saveCoordinate(context, file, lat, lng, "");
+    }
+
+    public static void saveCoordinate(Context context, File file, String lat, String lng, String label) {
         String k = key(file);
-        prefs(context).edit()
+        SharedPreferences.Editor e = prefs(context).edit()
                 .putString(k + ".type", "coord")
                 .putString(k + ".lat", lat == null ? "" : lat.trim())
-                .putString(k + ".lng", lng == null ? "" : lng.trim())
-                .remove(k + ".name")
-                .apply();
+                .putString(k + ".lng", lng == null ? "" : lng.trim());
+        if (label == null || label.trim().isEmpty()) e.remove(k + ".name");
+        else e.putString(k + ".name", label.trim());
+        e.apply();
     }
 
     public static void move(Context context, File from, File to) {
         Target t = get(context, from);
         if (t.isEmpty()) return;
-        if (t.isCoordinate()) saveCoordinate(context, to, t.lat, t.lng);
+        if (t.isCoordinate()) saveCoordinate(context, to, t.lat, t.lng, t.name);
         else savePlace(context, to, t.name);
         clear(context, from);
     }
