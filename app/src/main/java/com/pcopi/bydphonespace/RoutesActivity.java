@@ -3,6 +3,8 @@ package com.pcopi.bydphonespace;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -11,6 +13,7 @@ import android.os.Bundle;
 import android.view.Gravity;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -75,14 +78,29 @@ public class RoutesActivity extends Activity {
     private String titleForMode(){if(MODE_FAVORITES.equals(mode))return "เส้นทางโปรด";if(MODE_RECENT.equals(mode))return "ใช้งานล่าสุด";return "เส้นทางทั้งหมด";}
 
     private LinearLayout routeCard(RouteStore.Route r){
-        LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(16),dp(14),dp(16),dp(14));card.setBackground(round(CARD,20));LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.setMargins(0,0,0,dp(11));card.setLayoutParams(cp);
-        LinearLayout head=new LinearLayout(this);head.setGravity(Gravity.CENTER_VERTICAL);
-        TextView star=tv(r.favorite?"★":"☆",26,r.favorite?YELLOW:MUTED,true);star.setGravity(Gravity.CENTER);star.setOnClickListener(v->{RouteStore.toggleFavorite(this,r.id);build();});head.addView(star,new LinearLayout.LayoutParams(dp(46),dp(46)));
-        LinearLayout txt=new LinearLayout(this);txt.setOrientation(LinearLayout.VERTICAL);TextView name=tv(r.name,17.5f,TEXT,true);name.setSingleLine(true);txt.addView(name);int gps=gpsCount(r);TextView detail=tv(r.paths.size()+" รูป • "+(gps>0?"มี GPS "+gps+" จุด":"ยังไม่มี GPS")+" • Offline",12.5f,gps>0?GREEN:MUTED,false);detail.setPadding(0,dp(4),0,0);txt.addView(detail);head.addView(txt,new LinearLayout.LayoutParams(0,-2,1));card.addView(head);
+        LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(14),dp(14),dp(14),dp(14));card.setBackground(round(CARD,22));LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.setMargins(0,0,0,dp(12));card.setLayoutParams(cp);
 
-        LinearLayout actions=new LinearLayout(this);actions.setPadding(0,dp(11),0,0);
+        LinearLayout head=new LinearLayout(this);head.setGravity(Gravity.CENTER_VERTICAL);
+        List<File> routeFiles=RouteStore.files(this,r.id);
+        ImageView cover=new ImageView(this);cover.setScaleType(ImageView.ScaleType.CENTER_CROP);cover.setBackground(round(Color.rgb(10,20,31),16));
+        if(!routeFiles.isEmpty())cover.setImageBitmap(decode(routeFiles.get(0).getAbsolutePath(),260));
+        head.addView(cover,new LinearLayout.LayoutParams(dp(78),dp(78)));
+
+        LinearLayout txt=new LinearLayout(this);txt.setOrientation(LinearLayout.VERTICAL);txt.setPadding(dp(12),0,dp(8),0);
+        TextView name=tv(r.name,18,TEXT,true);name.setSingleLine(true);txt.addView(name);
+        int gps=gpsCount(r);TextView detail=tv(r.paths.size()+" รูป • "+(gps>0?"GPS "+gps+" จุด":"ยังไม่มี GPS")+" • Offline",12.5f,gps>0?GREEN:MUTED,false);detail.setPadding(0,dp(5),0,0);txt.addView(detail);
+        TextView order=tv("เรียงรูปตามลำดับการเดินทาง",11.5f,MUTED,false);order.setPadding(0,dp(5),0,0);txt.addView(order);
+        head.addView(txt,new LinearLayout.LayoutParams(0,-2,1));
+
+        TextView star=tv(r.favorite?"★":"☆",28,r.favorite?YELLOW:MUTED,true);star.setGravity(Gravity.CENTER);star.setOnClickListener(v->{RouteStore.toggleFavorite(this,r.id);build();});head.addView(star,new LinearLayout.LayoutParams(dp(48),dp(48)));
+        card.addView(head);
+
+        LinearLayout actions=new LinearLayout(this);actions.setPadding(0,dp(12),0,0);
         Button open=dark("เปิดเส้นทาง");open.setOnClickListener(v->openRoute(r.id));actions.addView(open,new LinearLayout.LayoutParams(0,dp(48),1));
         Button nav=primary("นำทาง");LinearLayout.LayoutParams np=new LinearLayout.LayoutParams(0,dp(48),1);np.setMargins(dp(8),0,0,0);nav.setOnClickListener(v->navigateRoute(r));actions.addView(nav,np);card.addView(actions);
+
+        Button manage=dark("☷  จัดการรูป / ลำดับ");manage.setOnClickListener(v->editRoute(r.id));LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(-1,dp(46));mp.setMargins(0,dp(8),0,0);card.addView(manage,mp);
+
         card.setOnClickListener(v->openRoute(r.id));
         card.setOnLongClickListener(v->{showRouteMenu(r);return true;});
         return card;
@@ -110,6 +128,8 @@ public class RoutesActivity extends Activity {
         RouteStore.touchOpened(this,id);Intent i=new Intent(this,RouteViewerActivity.class);i.putExtra(RouteViewerActivity.EXTRA_ROUTE_ID,id);startActivity(i);
     }
 
+    private void editRoute(String id){Intent i=new Intent(this,RouteEditorActivity.class);i.putExtra(RouteEditorActivity.EXTRA_ROUTE_ID,id);startActivity(i);}
+
     private void navigateRoute(RouteStore.Route r){
         List<File> fs=RouteStore.files(this,r.id);if(fs.isEmpty()){Toast.makeText(this,"เส้นทางนี้ยังไม่มีรูป",Toast.LENGTH_SHORT).show();return;}
         RouteStore.touchOpened(this,r.id);
@@ -120,13 +140,14 @@ public class RoutesActivity extends Activity {
     private void launchNav(String q){try{Intent i=new Intent(Intent.ACTION_VIEW,Uri.parse("google.navigation:q="+Uri.encode(q)+"&mode=d"));i.setPackage("com.google.android.apps.maps");startActivity(i);}catch(Exception e){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("geo:0,0?q="+Uri.encode(q))));}catch(Exception ignored){Toast.makeText(this,"ไม่พบแอปแผนที่",Toast.LENGTH_SHORT).show();}}}
 
     private void showRouteMenu(RouteStore.Route r){
-        String[] options={"เปลี่ยนชื่อเส้นทาง",r.favorite?"เอาออกจากรายการโปรด":"เพิ่มเป็นรายการโปรด","ลบเส้นทาง"};
-        new AlertDialog.Builder(this).setTitle(r.name).setItems(options,(d,w)->{if(w==0)renameRoute(r);else if(w==1){RouteStore.toggleFavorite(this,r.id);build();}else confirmDelete(r);}).setNegativeButton("ยกเลิก",null).show();
+        String[] options={"จัดการรูป / ลำดับ","เปลี่ยนชื่อเส้นทาง",r.favorite?"เอาออกจากรายการโปรด":"เพิ่มเป็นรายการโปรด","ลบเส้นทาง"};
+        new AlertDialog.Builder(this).setTitle(r.name).setItems(options,(d,w)->{if(w==0)editRoute(r.id);else if(w==1)renameRoute(r);else if(w==2){RouteStore.toggleFavorite(this,r.id);build();}else confirmDelete(r);}).setNegativeButton("ยกเลิก",null).show();
     }
 
     private void renameRoute(RouteStore.Route r){EditText e=new EditText(this);e.setText(r.name);e.setSelectAllOnFocus(true);e.setSingleLine(true);AlertDialog d=new AlertDialog.Builder(this).setTitle("เปลี่ยนชื่อเส้นทาง").setView(e).setNegativeButton("ยกเลิก",null).setPositiveButton("บันทึก",null).create();d.setOnShowListener(x->d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{String n=e.getText().toString().trim();if(n.isEmpty()){e.setError("กรุณาใส่ชื่อ");return;}RouteStore.rename(this,r.id,n);d.dismiss();build();}));d.show();}
     private void confirmDelete(RouteStore.Route r){new AlertDialog.Builder(this).setTitle("ลบเส้นทางนี้?").setMessage(r.name+"\n\nรูปภาพจะไม่ถูกลบออกจากคลัง ลบเฉพาะชุดเส้นทางเท่านั้น").setNegativeButton("ยกเลิก",null).setPositiveButton("ลบ",(d,w)->{RouteStore.delete(this,r.id);build();}).show();}
 
+    private Bitmap decode(String path,int target){BitmapFactory.Options o=new BitmapFactory.Options();o.inJustDecodeBounds=true;BitmapFactory.decodeFile(path,o);int s=1;while(o.outWidth/s>target*2||o.outHeight/s>target*2)s*=2;o.inJustDecodeBounds=false;o.inSampleSize=s;return BitmapFactory.decodeFile(path,o);}
     private TextView tab(String s,boolean a){TextView v=tv(s,14,a?Color.rgb(4,22,33):MUTED,true);v.setGravity(Gravity.CENTER);v.setBackground(round(a?CYAN:Color.rgb(13,27,42),18));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(44),1);p.setMargins(dp(3),0,dp(3),0);v.setLayoutParams(p);return v;}
     private Button primary(String s){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTextSize(14.5f);b.setTextColor(Color.rgb(4,22,33));b.setTypeface(Typeface.DEFAULT_BOLD);b.setBackground(round(CYAN,17));return b;}
     private Button dark(String s){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTextSize(14);b.setTextColor(TEXT);b.setBackground(round(Color.rgb(13,27,42),17));return b;}
