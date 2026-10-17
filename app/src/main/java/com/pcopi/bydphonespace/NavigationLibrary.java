@@ -52,16 +52,11 @@ public final class NavigationLibrary {
     }
 
     public static File importImage(Context context, Uri uri, String category) throws Exception {
-        File root = root(context);
-        if (category == null || category.trim().isEmpty()) category = INBOX;
-        File dir = new File(root, category);
-        dir.mkdirs();
-
+        File dir = categoryDir(context, category);
         String name = displayName(context, uri);
         if (name == null || name.trim().isEmpty()) name = "image_" + System.currentTimeMillis() + ".jpg";
         name = safeName(name);
         File out = uniqueFile(dir, name);
-
         try (InputStream raw = context.getContentResolver().openInputStream(uri);
              BufferedInputStream in = raw == null ? null : new BufferedInputStream(raw, 64 * 1024);
              BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(out), 64 * 1024)) {
@@ -73,6 +68,41 @@ public final class NavigationLibrary {
         }
         out.setLastModified(System.currentTimeMillis());
         return out;
+    }
+
+    public static File moveToCategory(Context context, File source, String category) throws Exception {
+        if (source == null || !source.exists()) throw new IllegalStateException("ไม่พบไฟล์");
+        File destDir = categoryDir(context, category);
+        if (source.getParentFile() != null && source.getParentFile().equals(destDir)) return source;
+        File dest = uniqueFile(destDir, source.getName());
+        if (source.renameTo(dest)) {
+            dest.setLastModified(System.currentTimeMillis());
+            return dest;
+        }
+        try (BufferedInputStream in = new BufferedInputStream(new java.io.FileInputStream(source), 64 * 1024);
+             BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(dest), 64 * 1024)) {
+            byte[] buffer = new byte[64 * 1024];
+            int read;
+            while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
+            out.flush();
+        }
+        if (!source.delete()) {
+            dest.delete();
+            throw new IllegalStateException("ย้ายไฟล์ไม่สำเร็จ");
+        }
+        dest.setLastModified(System.currentTimeMillis());
+        return dest;
+    }
+
+    public static boolean delete(File file) {
+        return file != null && file.exists() && file.delete();
+    }
+
+    private static File categoryDir(Context context, String category) {
+        if (category == null || category.trim().isEmpty()) category = INBOX;
+        File dir = new File(root(context), category);
+        dir.mkdirs();
+        return dir;
     }
 
     private static String displayName(Context context, Uri uri) {
