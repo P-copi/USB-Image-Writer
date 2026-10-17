@@ -10,8 +10,8 @@ android {
         applicationId = "com.pcopi.bydphonespace"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "0.2.8"
+        versionCode = 12
+        versionName = "0.3.0"
     }
 
     buildTypes {
