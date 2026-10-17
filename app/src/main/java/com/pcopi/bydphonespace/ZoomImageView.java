@@ -8,13 +8,22 @@ import android.view.ScaleGestureDetector;
 import android.widget.ImageView;
 
 public class ZoomImageView extends ImageView {
+    public interface SwipeListener {
+        void onSwipeLeft();
+        void onSwipeRight();
+    }
+
     private final Matrix matrix = new Matrix();
     private final ScaleGestureDetector scaleDetector;
     private float scale = 1f;
     private float lastX, lastY;
+    private float downX, downY;
+    private long downTime;
     private boolean dragging;
+    private SwipeListener swipeListener;
 
     public ZoomImageView(Context context) { this(context, null); }
+
     public ZoomImageView(Context context, AttributeSet attrs) {
         super(context, attrs);
         setScaleType(ScaleType.MATRIX);
@@ -30,6 +39,14 @@ public class ZoomImageView extends ImageView {
                 return true;
             }
         });
+    }
+
+    public void setSwipeListener(SwipeListener listener) {
+        this.swipeListener = listener;
+    }
+
+    public boolean isZoomed() {
+        return scale > 1.04f;
     }
 
     public void resetZoom() {
@@ -62,18 +79,43 @@ public class ZoomImageView extends ImageView {
         scaleDetector.onTouchEvent(event);
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                lastX = event.getX(); lastY = event.getY(); dragging = true; return true;
+                downX = lastX = event.getX();
+                downY = lastY = event.getY();
+                downTime = System.currentTimeMillis();
+                dragging = true;
+                return true;
+
             case MotionEvent.ACTION_MOVE:
-                if (dragging && !scaleDetector.isInProgress() && scale > 1f) {
+                if (dragging && !scaleDetector.isInProgress() && scale > 1.04f) {
                     float dx = event.getX() - lastX;
                     float dy = event.getY() - lastY;
                     matrix.postTranslate(dx, dy);
                     setImageMatrix(matrix);
                 }
-                lastX = event.getX(); lastY = event.getY(); return true;
+                lastX = event.getX();
+                lastY = event.getY();
+                return true;
+
             case MotionEvent.ACTION_UP:
+                if (!scaleDetector.isInProgress() && scale <= 1.04f && swipeListener != null) {
+                    float dx = event.getX() - downX;
+                    float dy = event.getY() - downY;
+                    long elapsed = Math.max(1, System.currentTimeMillis() - downTime);
+                    float velocity = Math.abs(dx) * 1000f / elapsed;
+                    float minDistance = getResources().getDisplayMetrics().density * 72f;
+                    boolean horizontal = Math.abs(dx) > Math.abs(dy) * 1.35f;
+                    boolean fastEnough = Math.abs(dx) >= minDistance || velocity > 650f;
+                    if (horizontal && fastEnough) {
+                        if (dx < 0) swipeListener.onSwipeLeft();
+                        else swipeListener.onSwipeRight();
+                    }
+                }
+                dragging = false;
+                return true;
+
             case MotionEvent.ACTION_CANCEL:
-                dragging = false; return true;
+                dragging = false;
+                return true;
         }
         return true;
     }
