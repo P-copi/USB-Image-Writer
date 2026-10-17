@@ -1,9 +1,9 @@
-name: Build APK
+name: Build BYD Phone Space APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches: [ "feature/byd-phone-space-v0.1" ]
 
 jobs:
   build:
@@ -15,66 +15,49 @@ jobs:
       - name: Checkout app
         uses: actions/checkout@v5
 
-      - name: Checkout patched libaums source
-        uses: actions/checkout@v5
-        with:
-          repository: magnusja/libaums
-          ref: 57fa4826b792d46073a3329a303a6c9bec430fc8
-          path: _libaums
-
-      - name: Set up JDK 21 for libaums
+      - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "21"
+          java-version: "17"
 
       - name: Prepare Android SDK
         run: |
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0" \
-            "platforms;android-33" \
-            "build-tools;33.0.2" \
-            "ndk;25.2.9519653" \
-            "cmake;3.22.1"
-
-      - name: Apply USB recovery patch to libaums
-        run: python3 scripts/patch_libaums_v014.py _libaums
-
-      - name: Mark v0.1.8 UI
-        run: sed -i 's/v0.1.2 • Background Safe Writer/v0.1.8 • Persistent USB Claim/' app/src/main/java/com/pcopi/usbimager/MainActivity.kt
-
-      - name: Build patched libaums AAR
-        run: |
-          printf 'sdk.dir=%s\nlibusb.dir=/tmp/libusb\n' "$ANDROID_HOME" > _libaums/local.properties
-          mkdir -p /tmp/libusb
-          chmod +x _libaums/gradlew
-          _libaums/gradlew -p _libaums :libaums:assembleRelease --stacktrace
-          mkdir -p app/libs
-          cp _libaums/libaums/build/outputs/aar/libaums-release.aar app/libs/libaums-patched.aar
-          ls -lh app/libs/libaums-patched.aar
-          rm -rf _libaums
-
-      - name: Set up JDK 17 for app
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
 
+      - name: Preserve debug signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: byd-phone-space-debug-signing-v1
+
       - name: Build debug APK
-        run: gradle :app:assembleDebug --stacktrace
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee /tmp/byd-build.log
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BYDPhoneSpace-V0.1-build-log
+          path: /tmp/byd-build.log
+          retention-days: 3
+
+      - name: Verify APK
+        run: test -s app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: USB-Image-Writer-v0.1.8-debug
+          name: BYDPhoneSpace-V0.1-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 3
