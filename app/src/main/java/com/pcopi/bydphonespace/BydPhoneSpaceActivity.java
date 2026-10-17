@@ -92,8 +92,8 @@ public class BydPhoneSpaceActivity extends Activity {
         ScrollView sv=new ScrollView(this); sv.setFillViewport(true); sv.setBackgroundColor(BG);
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(20),dp(18),dp(20),dp(28)); root.setBackgroundColor(BG); sv.addView(root);
         LinearLayout top=new LinearLayout(this); top.setGravity(Gravity.CENTER_VERTICAL); LinearLayout names=new LinearLayout(this); names.setOrientation(LinearLayout.VERTICAL);
-        names.addView(tv("BYD PHONE SPACE",25,TEXT,true)); TextView sub=tv("Navigation • Routes • Quick Access",13.5f,MUTED,false); sub.setPadding(0,dp(4),0,0); names.addView(sub); top.addView(names,new LinearLayout.LayoutParams(0,-2,1));
-        TextView ver=tv("V0.3.1",12,CYAN,true); ver.setPadding(dp(12),dp(8),dp(12),dp(8)); ver.setGravity(Gravity.CENTER); ver.setBackground(rounded(Color.rgb(11,43,66),18)); top.addView(ver); root.addView(top);
+        names.addView(tv("BYD PHONE SPACE",25,TEXT,true)); TextView sub=tv("Navigation • Routes • Car Ready",13.5f,MUTED,false); sub.setPadding(0,dp(4),0,0); names.addView(sub); top.addView(names,new LinearLayout.LayoutParams(0,-2,1));
+        TextView ver=tv("V0.4",12,CYAN,true); ver.setPadding(dp(12),dp(8),dp(12),dp(8)); ver.setGravity(Gravity.CENTER); ver.setBackground(rounded(Color.rgb(11,43,66),18)); top.addView(ver); root.addView(top);
         LinearLayout status=new LinearLayout(this); status.setPadding(0,dp(16),0,dp(18)); status.addView(chip("พร้อมใช้งาน",true)); status.addView(chip("NAS",false)); status.addView(chip("Overlay",Settings.canDrawOverlays(this))); root.addView(status);
         LinearLayout hero=new LinearLayout(this); hero.setOrientation(LinearLayout.VERTICAL); hero.setPadding(dp(18),dp(17),dp(18),dp(17)); hero.setBackground(rounded(CARD2,24));
         hero.addView(tv("QUICK OVERLAY",12,CYAN,true)); TextView ht=tv("เรียกเครื่องมือของเราโดยไม่ปิดการนำทาง",19,TEXT,true); ht.setPadding(0,dp(7),0,dp(5)); hero.addView(ht); hero.addView(tv("กด Google Maps ครั้งเดียว • Overlay จะเปิดให้อัตโนมัติ",13.5f,MUTED,false));
@@ -102,7 +102,12 @@ public class BydPhoneSpaceActivity extends Activity {
         row(root, card("⌖","Google Maps","เปิด Maps + Quick Overlay",v->ensureOverlay(true)), card("▣","รูปภาพนำทาง","GPS • เปลี่ยนชื่อ • นำทาง",v->startActivity(new Intent(this,RouteImagesActivity.class))));
         row(root, card("★","เส้นทางของฉัน","ชุดรูป • โปรด • ล่าสุด",v->startActivity(new Intent(this,RoutesActivity.class))), card("▤","NAS Explorer","LAN / Tailscale (พักไว้ก่อน)",v->startActivity(new Intent(this,NasConnectActivity.class))));
         row(root, card("⌕","ไฟล์ / Flash Drive","ค้นหารูปในเครื่องและ USB",v->openImageBrowser()), card("＋","แอป / APK","ติดตั้งและอัปเดต",v->pickApk()));
-        TextView foot=tv("V0.3.1 เพิ่มการจัดลำดับ เพิ่ม/เอารูปออกจากเส้นทาง และการ์ดเส้นทางพร้อมภาพปก",12.5f,Color.rgb(112,135,158),false); foot.setGravity(Gravity.CENTER); foot.setPadding(dp(10),dp(10),dp(10),0); root.addView(foot);
+
+        TextView car=tv("เตรียมทดสอบบนจอรถ",16,MUTED,true);car.setPadding(dp(2),dp(14),0,dp(10));root.addView(car);
+        LinearLayout inspector=card("◉","ตรวจสอบเครื่อง / จอรถ","Android • GPS • ไมค์ • Maps • Gboard • APK • Overlay",v->startActivity(new Intent(this,DeviceInspectorActivity.class)));
+        root.addView(inspector,new LinearLayout.LayoutParams(-1,dp(126)));
+
+        TextView foot=tv("V0.4 เพิ่ม Car Compatibility Inspector เพื่อเทียบโทรศัพท์กับ BYD ก่อนลงระบบ Google/Gboard ขั้นต่อไป",12.5f,Color.rgb(112,135,158),false); foot.setGravity(Gravity.CENTER); foot.setPadding(dp(10),dp(14),dp(10),0); root.addView(foot);
         setContentView(sv);
     }
 
