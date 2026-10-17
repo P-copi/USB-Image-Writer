@@ -55,7 +55,38 @@ public class BydPhoneSpaceActivity extends Activity {
     }
 
     @Override protected void onCreate(Bundle b) {
-        super.onCreate(b); getWindow().setStatusBarColor(BG); getWindow().setNavigationBarColor(BG); buildHome();
+        super.onCreate(b);
+        getWindow().setStatusBarColor(BG);
+        getWindow().setNavigationBarColor(BG);
+        buildHome();
+        routeSharedIntent(getIntent());
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        routeSharedIntent(intent);
+    }
+
+    private void routeSharedIntent(Intent source) {
+        if (source == null) return;
+        String action = source.getAction();
+        if (!Intent.ACTION_SEND.equals(action) && !Intent.ACTION_SEND_MULTIPLE.equals(action)) return;
+
+        Intent forward = new Intent(this, ShareImportActivity.class);
+        forward.setAction(action);
+        forward.setType(source.getType());
+        forward.setClipData(source.getClipData());
+        forward.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        if (Intent.ACTION_SEND.equals(action)) {
+            Uri u = source.getParcelableExtra(Intent.EXTRA_STREAM);
+            if (u != null) forward.putExtra(Intent.EXTRA_STREAM, u);
+        } else {
+            java.util.ArrayList<Uri> list = source.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+            if (list != null) forward.putParcelableArrayListExtra(Intent.EXTRA_STREAM, list);
+        }
+        source.setAction(null);
+        startActivity(forward);
     }
 
     private void buildHome() {
@@ -63,8 +94,8 @@ public class BydPhoneSpaceActivity extends Activity {
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(20),dp(18),dp(20),dp(28)); root.setBackgroundColor(BG); sv.addView(root);
 
         LinearLayout top=new LinearLayout(this); top.setGravity(Gravity.CENTER_VERTICAL); LinearLayout names=new LinearLayout(this); names.setOrientation(LinearLayout.VERTICAL);
-        names.addView(tv("BYD PHONE SPACE",25,TEXT,true)); TextView sub=tv("Navigation • NAS • Quick Access",13.5f,MUTED,false); sub.setPadding(0,dp(4),0,0); names.addView(sub); top.addView(names,new LinearLayout.LayoutParams(0,-2,1));
-        TextView ver=tv("V0.2",12,CYAN,true); ver.setPadding(dp(12),dp(8),dp(12),dp(8)); ver.setGravity(Gravity.CENTER); ver.setBackground(rounded(Color.rgb(11,43,66),18)); top.addView(ver); root.addView(top);
+        names.addView(tv("BYD PHONE SPACE",25,TEXT,true)); TextView sub=tv("Navigation • Files • Quick Access",13.5f,MUTED,false); sub.setPadding(0,dp(4),0,0); names.addView(sub); top.addView(names,new LinearLayout.LayoutParams(0,-2,1));
+        TextView ver=tv("V0.2.2",12,CYAN,true); ver.setPadding(dp(12),dp(8),dp(12),dp(8)); ver.setGravity(Gravity.CENTER); ver.setBackground(rounded(Color.rgb(11,43,66),18)); top.addView(ver); root.addView(top);
 
         LinearLayout status=new LinearLayout(this); status.setPadding(0,dp(16),0,dp(18)); status.addView(chip("พร้อมใช้งาน",true)); status.addView(chip("NAS",false)); status.addView(chip("Overlay",Settings.canDrawOverlays(this))); root.addView(status);
 
@@ -74,11 +105,17 @@ public class BydPhoneSpaceActivity extends Activity {
 
         TextView sec=tv("เมนูหลัก",16,MUTED,true); sec.setPadding(dp(2),dp(24),0,dp(12)); root.addView(sec);
         row(root, card("⌖","Google Maps","เปิด Maps + Quick Overlay",v->ensureOverlay(true)), card("▣","รูปภาพนำทาง","คลังรูป • ล่าสุด • Offline",v->startActivity(new Intent(this,RouteImagesActivity.class))));
-        row(root, card("★","เส้นทางโปรด","จุดหมายที่ใช้บ่อย",v->toast("เส้นทางโปรดจะเปิดใช้ในขั้นถัดไป")), card("▤","NAS Explorer","LAN / Tailscale",v->startActivity(new Intent(this,NasConnectActivity.class))));
-        row(root, card("↻","ซิงก์จาก NAS","นำรูปใหม่เข้าคลัง",v->toast("V0.2: คลังรูป Offline พร้อมแล้ว • ขั้นถัดไปต่อ NAS Explorer จริง")), card("＋","แอป / APK","ติดตั้งและอัปเดต",v->pickApk()));
+        row(root, card("★","เส้นทางโปรด","จุดหมายที่ใช้บ่อย",v->toast("เส้นทางโปรดจะเปิดใช้ในขั้นถัดไป")), card("▤","NAS Explorer","LAN / Tailscale (พักไว้ก่อน)",v->startActivity(new Intent(this,NasConnectActivity.class))));
+        row(root, card("⌕","ไฟล์ / Flash Drive","ค้นหารูปในเครื่องและ USB",v->openImageBrowser()), card("＋","แอป / APK","ติดตั้งและอัปเดต",v->pickApk()));
 
-        TextView foot=tv("ทดสอบบน Samsung Galaxy S22 Ultra ก่อน แล้วจึงปรับสเกลสำหรับ BYD Sealion 7",12.5f,Color.rgb(112,135,158),false); foot.setGravity(Gravity.CENTER); foot.setPadding(dp(10),dp(10),dp(10),0); root.addView(foot);
+        TextView foot=tv("ค้นหารูปได้จากหน่วยความจำเครื่องและ Flash Drive/USB OTG โดยไม่ต้องพึ่ง NAS",12.5f,Color.rgb(112,135,158),false); foot.setGravity(Gravity.CENTER); foot.setPadding(dp(10),dp(10),dp(10),0); root.addView(foot);
         setContentView(sv);
+    }
+
+    private void openImageBrowser() {
+        Intent i = new Intent(this, RouteImagesActivity.class);
+        i.putExtra("openPicker", true);
+        startActivity(i);
     }
 
     private void openMapsOnly() {
