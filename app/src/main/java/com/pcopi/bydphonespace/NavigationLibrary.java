@@ -75,9 +75,32 @@ public final class NavigationLibrary {
         File destDir = categoryDir(context, category);
         if (source.getParentFile() != null && source.getParentFile().equals(destDir)) return source;
         File dest = uniqueFile(destDir, source.getName());
+        return moveFilePreserveMetadata(context, source, dest);
+    }
+
+    public static File renameImage(Context context, File source, String requestedName) throws Exception {
+        if (source == null || !source.exists()) throw new IllegalStateException("ไม่พบไฟล์");
+        String clean = safeName(requestedName == null ? "" : requestedName.trim());
+        if (clean.isEmpty()) throw new IllegalArgumentException("กรุณาใส่ชื่อรูป");
+
+        String oldName = source.getName();
+        int oldDot = oldName.lastIndexOf('.');
+        String oldExt = oldDot > 0 ? oldName.substring(oldDot) : "";
+        int newDot = clean.lastIndexOf('.');
+        if (newDot <= 0 && !oldExt.isEmpty()) clean += oldExt;
+
+        if (clean.equals(oldName)) return source;
+        File parent = source.getParentFile();
+        if (parent == null) throw new IllegalStateException("ไม่พบโฟลเดอร์ของรูป");
+        File dest = uniqueFile(parent, clean);
+        return moveFilePreserveMetadata(context, source, dest);
+    }
+
+    private static File moveFilePreserveMetadata(Context context, File source, File dest) throws Exception {
+        long oldTime = source.lastModified();
         if (source.renameTo(dest)) {
             NavigationTargetStore.move(context, source, dest);
-            dest.setLastModified(System.currentTimeMillis());
+            if (oldTime > 0) dest.setLastModified(oldTime);
             return dest;
         }
         try (BufferedInputStream in = new BufferedInputStream(new java.io.FileInputStream(source), 64 * 1024);
@@ -92,7 +115,7 @@ public final class NavigationLibrary {
             throw new IllegalStateException("ย้ายไฟล์ไม่สำเร็จ");
         }
         NavigationTargetStore.move(context, source, dest);
-        dest.setLastModified(System.currentTimeMillis());
+        if (oldTime > 0) dest.setLastModified(oldTime);
         return dest;
     }
 
