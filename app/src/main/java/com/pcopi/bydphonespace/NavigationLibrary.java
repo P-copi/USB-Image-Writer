@@ -100,6 +100,7 @@ public final class NavigationLibrary {
         long oldTime = source.lastModified();
         if (source.renameTo(dest)) {
             NavigationTargetStore.move(context, source, dest);
+            RouteStore.moveImagePath(context, source, dest);
             if (oldTime > 0) dest.setLastModified(oldTime);
             return dest;
         }
@@ -115,12 +116,14 @@ public final class NavigationLibrary {
             throw new IllegalStateException("ย้ายไฟล์ไม่สำเร็จ");
         }
         NavigationTargetStore.move(context, source, dest);
+        RouteStore.moveImagePath(context, source, dest);
         if (oldTime > 0) dest.setLastModified(oldTime);
         return dest;
     }
 
     public static boolean delete(Context context, File file) {
         if (file == null || !file.exists()) return false;
+        RouteStore.removeImagePath(context, file);
         boolean ok = file.delete();
         if (ok) NavigationTargetStore.clear(context, file);
         return ok;
