@@ -31,6 +31,7 @@ import java.util.Locale;
 public class ImageViewerActivity extends Activity {
     public static final String EXTRA_PATH = "path";
     private static final int REQ_LOCATION = 7201;
+    private static final int REQ_MAP = 7202;
 
     private ZoomImageView image;
     private TextView title;
@@ -42,6 +43,7 @@ public class ImageViewerActivity extends Activity {
     private int index;
     private boolean animating;
     private File pendingLocationFile;
+    private String pendingMapPath;
 
     private final int BG=Color.rgb(3,8,14), CARD=Color.rgb(15,28,43), TEXT=Color.rgb(242,247,252), MUTED=Color.rgb(157,177,197), CYAN=Color.rgb(77,196,255), GREEN=Color.rgb(93,219,168), ORANGE=Color.rgb(255,183,77);
     private int dp(float v){return (int)(v*getResources().getDisplayMetrics().density+.5f);}
@@ -163,7 +165,6 @@ public class ImageViewerActivity extends Activity {
         hint.setGravity(Gravity.CENTER);
         hint.setPadding(0,dp(7),0,0);
         root.addView(hint,new LinearLayout.LayoutParams(-1,-2));
-
         setContentView(root);
     }
 
@@ -175,13 +176,8 @@ public class ImageViewerActivity extends Activity {
     private void showCurrent(){
         File f=current();
         if(f==null){
-            title.setText("ไม่มีรูป");
-            counter.setText("0 / 0");
-            gpsInfo.setText("○ ไม่พบรูป");
-            targetInfo.setText("");
-            navigateButton.setEnabled(false);
-            image.setImageDrawable(null);
-            return;
+            title.setText("ไม่มีรูป"); counter.setText("0 / 0"); gpsInfo.setText("○ ไม่พบรูป"); targetInfo.setText("");
+            navigateButton.setEnabled(false); image.setImageDrawable(null); return;
         }
         navigateButton.setEnabled(true);
         title.setText(f.getName()+"  •  "+NavigationLibrary.thaiCategory(NavigationLibrary.categoryOf(f)));
@@ -211,13 +207,18 @@ public class ImageViewerActivity extends Activity {
             targetInfo.setText("จุดหมายจากชื่อสถานที่: "+target.name);
             targetInfo.setTextColor(CYAN);
         }else if(target.isCoordinate()){
-            targetInfo.setText("พร้อมนำทางด้วยพิกัดที่บันทึกไว้");
-            targetInfo.setTextColor(MUTED);
+            if(target.name!=null && !target.name.trim().isEmpty()){
+                targetInfo.setText("จุดที่เลือกจากแผนที่: "+target.name);
+                targetInfo.setTextColor(CYAN);
+            }else{
+                targetInfo.setText("พร้อมนำทางด้วยพิกัดที่บันทึกไว้");
+                targetInfo.setTextColor(MUTED);
+            }
         }else if(exif.hasGps){
             targetInfo.setText("พร้อมนำทางจาก GPS ที่ติดมากับภาพ");
             targetInfo.setTextColor(MUTED);
         }else{
-            targetInfo.setText("ยังไม่ได้กำหนดจุดหมาย • ค้นหาสถานที่หรือเพิ่ม GPS ได้ด้านล่าง");
+            targetInfo.setText("ยังไม่ได้กำหนดจุดหมาย • เลือกจากแผนที่ ค้นหาสถานที่ หรือเพิ่ม GPS ได้");
             targetInfo.setTextColor(MUTED);
         }
     }
@@ -227,13 +228,9 @@ public class ImageViewerActivity extends Activity {
         animating=true;
         int next=(index+delta+files.size())%files.size();
         float distance=Math.max(dp(80),image.getWidth()*0.18f);
-        float outX=delta>0?-distance:distance;
-        float inX=-outX;
+        float outX=delta>0?-distance:distance, inX=-outX;
         image.animate().translationX(outX).alpha(0.15f).setDuration(110).withEndAction(()->{
-            index=next;
-            showCurrent();
-            image.setTranslationX(inX);
-            image.setAlpha(0.18f);
+            index=next; showCurrent(); image.setTranslationX(inX); image.setAlpha(0.18f);
             image.animate().translationX(0).alpha(1f).setDuration(160).withEndAction(()->animating=false).start();
         }).start();
     }
@@ -241,28 +238,18 @@ public class ImageViewerActivity extends Activity {
     private void renameCurrent(){
         File f=current(); if(f==null)return;
         EditText input=new EditText(this);
-        input.setSingleLine(true);
-        input.setText(stripExtension(f.getName()));
-        input.setSelectAllOnFocus(true);
-        input.setPadding(dp(18),dp(8),dp(18),dp(8));
-
+        input.setSingleLine(true); input.setText(stripExtension(f.getName())); input.setSelectAllOnFocus(true); input.setPadding(dp(18),dp(8),dp(18),dp(8));
         AlertDialog dialog=new AlertDialog.Builder(this)
                 .setTitle("เปลี่ยนชื่อรูป")
                 .setMessage("ตั้งชื่อให้อ่านแล้วรู้จุดหมายได้ทันที เช่น อนุสรณ์ดอนเจดีย์")
-                .setView(input)
-                .setNegativeButton("ยกเลิก",null)
-                .setPositiveButton("บันทึก",null)
-                .create();
+                .setView(input).setNegativeButton("ยกเลิก",null).setPositiveButton("บันทึก",null).create();
         dialog.setOnShowListener(x->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
             String name=input.getText().toString().trim();
             if(name.isEmpty()){input.setError("กรุณาใส่ชื่อรูป");return;}
             try{
                 File renamed=NavigationLibrary.renameImage(this,f,name);
-                files=NavigationLibrary.listAll(this);
-                index=findIndex(renamed.getAbsolutePath());
-                dialog.dismiss();
-                showCurrent();
-                Toast.makeText(this,"เปลี่ยนชื่อแล้ว",Toast.LENGTH_SHORT).show();
+                files=NavigationLibrary.listAll(this); index=findIndex(renamed.getAbsolutePath());
+                dialog.dismiss(); showCurrent(); Toast.makeText(this,"เปลี่ยนชื่อแล้ว",Toast.LENGTH_SHORT).show();
             }catch(Exception e){Toast.makeText(this,"เปลี่ยนชื่อไม่สำเร็จ: "+e.getMessage(),Toast.LENGTH_LONG).show();}
         }));
         dialog.show();
@@ -279,30 +266,18 @@ public class ImageViewerActivity extends Activity {
         EditText input=new EditText(this);
         input.setHint("เช่น อนุสรณ์ดอนเจดีย์");
         input.setText(old.isPlace()?old.name:stripExtension(f.getName()));
-        input.setSingleLine(false);
-        input.setMinLines(2);
-        input.setPadding(dp(18),dp(10),dp(18),dp(10));
-
+        input.setSingleLine(false); input.setMinLines(2); input.setPadding(dp(18),dp(10),dp(18),dp(10));
         AlertDialog dialog=new AlertDialog.Builder(this)
                 .setTitle("ค้นหาชื่อสถานที่")
-                .setMessage("บันทึกชื่อเป็นจุดหมาย หรือเปิด Google Maps เพื่อตรวจสอบชื่อสถานที่ก่อน")
-                .setView(input)
-                .setNegativeButton("ยกเลิก",null)
-                .setNeutralButton("ค้นหาใน Maps",null)
-                .setPositiveButton("บันทึก",null)
-                .create();
+                .setMessage("บันทึกชื่อเป็นจุดหมาย หรือเปิด Google Maps เพื่อตรวจสอบชื่อก่อน")
+                .setView(input).setNegativeButton("ยกเลิก",null).setNeutralButton("ค้นหาใน Maps",null).setPositiveButton("บันทึก",null).create();
         dialog.setOnShowListener(x->{
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v->{
-                String q=input.getText().toString().trim();
-                if(q.isEmpty()){input.setError("กรุณาใส่ชื่อสถานที่");return;}
-                openMapSearch(q);
+                String q=input.getText().toString().trim(); if(q.isEmpty()){input.setError("กรุณาใส่ชื่อสถานที่");return;} openMapSearch(q);
             });
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
-                String name=input.getText().toString().trim();
-                if(name.isEmpty()){input.setError("กรุณาใส่ชื่อสถานที่");return;}
-                NavigationTargetStore.savePlace(this,f,name);
-                dialog.dismiss();
-                refreshInfo();
+                String name=input.getText().toString().trim(); if(name.isEmpty()){input.setError("กรุณาใส่ชื่อสถานที่");return;}
+                NavigationTargetStore.savePlace(this,f,name); dialog.dismiss(); refreshInfo();
                 if(navigateAfterSave)launchNavigation(NavigationTargetStore.get(this,f));
             });
         });
@@ -311,10 +286,7 @@ public class ImageViewerActivity extends Activity {
 
     private void openMapSearch(String query){
         try{
-            Uri geo=Uri.parse("geo:0,0?q="+Uri.encode(query));
-            Intent i=new Intent(Intent.ACTION_VIEW,geo);
-            i.setPackage("com.google.android.apps.maps");
-            startActivity(i);
+            Uri geo=Uri.parse("geo:0,0?q="+Uri.encode(query)); Intent i=new Intent(Intent.ACTION_VIEW,geo); i.setPackage("com.google.android.apps.maps"); startActivity(i);
         }catch(Exception e){
             try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("geo:0,0?q="+Uri.encode(query))));}
             catch(Exception ignored){Toast.makeText(this,"ไม่พบแอปแผนที่",Toast.LENGTH_SHORT).show();}
@@ -328,6 +300,7 @@ public class ImageViewerActivity extends Activity {
         java.util.ArrayList<String> labels=new java.util.ArrayList<>();
         java.util.ArrayList<Integer> actions=new java.util.ArrayList<>();
 
+        labels.add("🗺 เลือกจากแผนที่ด้วยนิ้ว"); actions.add(0);
         if(exif.hasGps){labels.add("🖼 ใช้ GPS จากภาพ: "+exif.coordinateText());actions.add(1);}
         labels.add("📍 ใช้ตำแหน่งปัจจุบันของเครื่อง");actions.add(2);
         labels.add("🔎 ค้นหาชื่อสถานที่");actions.add(3);
@@ -338,140 +311,122 @@ public class ImageViewerActivity extends Activity {
                 .setTitle("เพิ่ม / แก้ GPS ให้รูป")
                 .setItems(labels.toArray(new String[0]),(d,which)->{
                     int action=actions.get(which);
-                    if(action==1){
-                        NavigationTargetStore.saveCoordinate(this,f,
-                                String.format(Locale.US,"%.6f",exif.lat),
-                                String.format(Locale.US,"%.6f",exif.lng));
-                        refreshInfo();
-                        Toast.makeText(this,"ใช้ GPS จากภาพแล้ว",Toast.LENGTH_SHORT).show();
+                    if(action==0){
+                        openMapPicker(f);
+                    }else if(action==1){
+                        NavigationTargetStore.saveCoordinate(this,f,String.format(Locale.US,"%.6f",exif.lat),String.format(Locale.US,"%.6f",exif.lng));
+                        refreshInfo(); Toast.makeText(this,"ใช้ GPS จากภาพแล้ว",Toast.LENGTH_SHORT).show();
                     }else if(action==2){
-                        pendingLocationFile=f;
-                        useCurrentDeviceLocation();
+                        pendingLocationFile=f; useCurrentDeviceLocation();
                     }else if(action==3){
                         showPlaceDialog(false);
                     }else if(action==4){
                         showCoordinateDialog(false);
                     }else if(action==5){
-                        NavigationTargetStore.clear(this,f);
-                        refreshInfo();
-                        Toast.makeText(this,"ล้างจุดหมายที่เพิ่มไว้แล้ว",Toast.LENGTH_SHORT).show();
+                        NavigationTargetStore.clear(this,f); refreshInfo(); Toast.makeText(this,"ล้างจุดหมายที่เพิ่มไว้แล้ว",Toast.LENGTH_SHORT).show();
                     }
                 })
-                .setNegativeButton("ยกเลิก",null)
-                .show();
+                .setNegativeButton("ยกเลิก",null).show();
+    }
+
+    private void openMapPicker(File f){
+        Intent i=new Intent(this,MapPickerActivity.class);
+        NavigationTargetStore.Target t=NavigationTargetStore.get(this,f);
+        ImageGpsUtils.Info exif=ImageGpsUtils.read(f);
+        if(t.isCoordinate()){
+            try{
+                i.putExtra(MapPickerActivity.EXTRA_LAT,Double.parseDouble(t.lat));
+                i.putExtra(MapPickerActivity.EXTRA_LNG,Double.parseDouble(t.lng));
+                if(t.name!=null&&!t.name.trim().isEmpty())i.putExtra(MapPickerActivity.EXTRA_LABEL,t.name);
+            }catch(Exception ignored){}
+        }else if(exif.hasGps){
+            i.putExtra(MapPickerActivity.EXTRA_LAT,exif.lat);
+            i.putExtra(MapPickerActivity.EXTRA_LNG,exif.lng);
+        }
+        pendingMapPath=f.getAbsolutePath();
+        startActivityForResult(i,REQ_MAP);
+    }
+
+    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
+        super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==REQ_MAP && resultCode==RESULT_OK && data!=null){
+            double lat=data.getDoubleExtra(MapPickerActivity.EXTRA_LAT,Double.NaN);
+            double lng=data.getDoubleExtra(MapPickerActivity.EXTRA_LNG,Double.NaN);
+            String label=data.getStringExtra(MapPickerActivity.EXTRA_LABEL);
+            if(Double.isNaN(lat)||Double.isNaN(lng))return;
+            File f=pendingMapPath==null?current():new File(pendingMapPath);
+            if(f==null||!f.exists())f=current();
+            if(f==null)return;
+            String a=String.format(Locale.US,"%.6f",lat), b=String.format(Locale.US,"%.6f",lng);
+            NavigationTargetStore.saveCoordinate(this,f,a,b,label==null?"":label);
+            pendingMapPath=null;
+            refreshInfo();
+            Toast.makeText(this,"บันทึกจุดจากแผนที่แล้ว",Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void useCurrentDeviceLocation(){
-        if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED &&
-                checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)!=PackageManager.PERMISSION_GRANTED){
-            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},REQ_LOCATION);
-            return;
+        if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)!=PackageManager.PERMISSION_GRANTED){
+            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},REQ_LOCATION); return;
         }
         LocationManager lm=(LocationManager)getSystemService(LOCATION_SERVICE);
         if(lm==null){Toast.makeText(this,"ไม่พบระบบตำแหน่งของเครื่อง",Toast.LENGTH_SHORT).show();return;}
-
         Location best=null;
         try{best=lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);}catch(Exception ignored){}
-        try{
-            Location n=lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
-            if(n!=null&&(best==null||n.getTime()>best.getTime()))best=n;
-        }catch(Exception ignored){}
-
+        try{Location n=lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);if(n!=null&&(best==null||n.getTime()>best.getTime()))best=n;}catch(Exception ignored){}
         if(best!=null){saveCurrentLocation(best);return;}
-
         Toast.makeText(this,"กำลังค้นหาตำแหน่งปัจจุบัน…",Toast.LENGTH_SHORT).show();
         LocationListener listener=new LocationListener(){
-            @Override public void onLocationChanged(Location location){
-                try{lm.removeUpdates(this);}catch(Exception ignored){}
-                saveCurrentLocation(location);
-            }
+            @Override public void onLocationChanged(Location location){try{lm.removeUpdates(this);}catch(Exception ignored){}saveCurrentLocation(location);}
             @Override public void onProviderEnabled(String provider){}
             @Override public void onProviderDisabled(String provider){}
             @Override public void onStatusChanged(String provider,int status,Bundle extras){}
         };
         try{
-            if(lm.isProviderEnabled(LocationManager.GPS_PROVIDER)){
-                lm.requestSingleUpdate(LocationManager.GPS_PROVIDER,listener,Looper.getMainLooper());
-            }else if(lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)){
-                lm.requestSingleUpdate(LocationManager.NETWORK_PROVIDER,listener,Looper.getMainLooper());
-            }else{
-                Toast.makeText(this,"กรุณาเปิด GPS/ตำแหน่งของเครื่องก่อน",Toast.LENGTH_LONG).show();
-            }
+            if(lm.isProviderEnabled(LocationManager.GPS_PROVIDER))lm.requestSingleUpdate(LocationManager.GPS_PROVIDER,listener,Looper.getMainLooper());
+            else if(lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER))lm.requestSingleUpdate(LocationManager.NETWORK_PROVIDER,listener,Looper.getMainLooper());
+            else Toast.makeText(this,"กรุณาเปิด GPS/ตำแหน่งของเครื่องก่อน",Toast.LENGTH_LONG).show();
         }catch(Exception e){Toast.makeText(this,"อ่านตำแหน่งไม่สำเร็จ: "+e.getMessage(),Toast.LENGTH_LONG).show();}
     }
 
     private void saveCurrentLocation(Location location){
-        File f=pendingLocationFile!=null?pendingLocationFile:current();
-        if(f==null||location==null)return;
-        String lat=String.format(Locale.US,"%.6f",location.getLatitude());
-        String lng=String.format(Locale.US,"%.6f",location.getLongitude());
-        NavigationTargetStore.saveCoordinate(this,f,lat,lng);
-        pendingLocationFile=null;
-        refreshInfo();
-        Toast.makeText(this,"บันทึกตำแหน่งปัจจุบันแล้ว: "+lat+", "+lng,Toast.LENGTH_LONG).show();
+        File f=pendingLocationFile!=null?pendingLocationFile:current(); if(f==null||location==null)return;
+        String lat=String.format(Locale.US,"%.6f",location.getLatitude()), lng=String.format(Locale.US,"%.6f",location.getLongitude());
+        NavigationTargetStore.saveCoordinate(this,f,lat,lng,"ตำแหน่งปัจจุบันของเครื่อง");
+        pendingLocationFile=null; refreshInfo(); Toast.makeText(this,"บันทึกตำแหน่งปัจจุบันแล้ว: "+lat+", "+lng,Toast.LENGTH_LONG).show();
     }
 
     @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grantResults){
         super.onRequestPermissionsResult(requestCode,permissions,grantResults);
         if(requestCode==REQ_LOCATION){
-            boolean granted=false;
-            for(int r:grantResults)if(r==PackageManager.PERMISSION_GRANTED)granted=true;
-            if(granted)useCurrentDeviceLocation();
-            else Toast.makeText(this,"ต้องอนุญาตตำแหน่งเพื่อใช้ GPS ปัจจุบันของเครื่อง",Toast.LENGTH_LONG).show();
+            boolean granted=false; for(int r:grantResults)if(r==PackageManager.PERMISSION_GRANTED)granted=true;
+            if(granted)useCurrentDeviceLocation(); else Toast.makeText(this,"ต้องอนุญาตตำแหน่งเพื่อใช้ GPS ปัจจุบันของเครื่อง",Toast.LENGTH_LONG).show();
         }
     }
 
     private void navigateCurrent(){
         File f=current(); if(f==null)return;
         NavigationTargetStore.Target target=NavigationTargetStore.get(this,f);
-        if(!target.isEmpty()){
-            launchNavigation(target);
-            return;
-        }
+        if(!target.isEmpty()){launchNavigation(target);return;}
         ImageGpsUtils.Info exif=ImageGpsUtils.read(f);
-        if(exif.hasGps){
-            launchCoordinates(String.format(Locale.US,"%.6f",exif.lat),String.format(Locale.US,"%.6f",exif.lng));
-            return;
-        }
+        if(exif.hasGps){launchCoordinates(String.format(Locale.US,"%.6f",exif.lat),String.format(Locale.US,"%.6f",exif.lng));return;}
         showGpsOptions();
     }
 
     private void showCoordinateDialog(boolean navigateAfterSave){
         File f=current(); if(f==null)return;
         NavigationTargetStore.Target old=NavigationTargetStore.get(this,f);
-        LinearLayout box=new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(18),0,dp(18),0);
-
-        EditText lat=new EditText(this);
-        lat.setHint("Latitude เช่น 14.634200");
-        lat.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL|InputType.TYPE_NUMBER_FLAG_SIGNED);
-        if(old.isCoordinate())lat.setText(old.lat);
-        box.addView(lat,new LinearLayout.LayoutParams(-1,dp(56)));
-
-        EditText lng=new EditText(this);
-        lng.setHint("Longitude เช่น 100.020300");
-        lng.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL|InputType.TYPE_NUMBER_FLAG_SIGNED);
-        if(old.isCoordinate())lng.setText(old.lng);
-        box.addView(lng,new LinearLayout.LayoutParams(-1,dp(56)));
-
-        AlertDialog dialog=new AlertDialog.Builder(this)
-                .setTitle("กำหนดพิกัด GPS")
-                .setMessage("ใส่ Latitude และ Longitude ของจุดหมาย")
-                .setView(box)
-                .setNegativeButton("ยกเลิก",null)
-                .setPositiveButton("บันทึก",null)
-                .create();
+        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(18),0,dp(18),0);
+        EditText lat=new EditText(this); lat.setHint("Latitude เช่น 14.634200"); lat.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL|InputType.TYPE_NUMBER_FLAG_SIGNED); if(old.isCoordinate())lat.setText(old.lat); box.addView(lat,new LinearLayout.LayoutParams(-1,dp(56)));
+        EditText lng=new EditText(this); lng.setHint("Longitude เช่น 100.020300"); lng.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL|InputType.TYPE_NUMBER_FLAG_SIGNED); if(old.isCoordinate())lng.setText(old.lng); box.addView(lng,new LinearLayout.LayoutParams(-1,dp(56)));
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("กำหนดพิกัด GPS").setMessage("ใส่ Latitude และ Longitude ของจุดหมาย").setView(box).setNegativeButton("ยกเลิก",null).setPositiveButton("บันทึก",null).create();
         dialog.setOnShowListener(x->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
-            String a=lat.getText().toString().trim();
-            String b=lng.getText().toString().trim();
+            String a=lat.getText().toString().trim(), b=lng.getText().toString().trim();
             try{
                 double la=Double.parseDouble(a),lo=Double.parseDouble(b);
                 if(la<-90||la>90){lat.setError("Latitude ต้องอยู่ระหว่าง -90 ถึง 90");return;}
                 if(lo<-180||lo>180){lng.setError("Longitude ต้องอยู่ระหว่าง -180 ถึง 180");return;}
-                NavigationTargetStore.saveCoordinate(this,f,a,b);
-                dialog.dismiss();
-                refreshInfo();
+                NavigationTargetStore.saveCoordinate(this,f,a,b); dialog.dismiss(); refreshInfo();
                 if(navigateAfterSave)launchNavigation(NavigationTargetStore.get(this,f));
             }catch(Exception e){Toast.makeText(this,"กรุณากรอกพิกัดให้ถูกต้อง",Toast.LENGTH_SHORT).show();}
         }));
@@ -479,80 +434,34 @@ public class ImageViewerActivity extends Activity {
     }
 
     private void launchNavigation(NavigationTargetStore.Target target){
-        if(target.isCoordinate())launchCoordinates(target.lat,target.lng);
-        else launchQuery(target.name);
+        if(target.isCoordinate())launchCoordinates(target.lat,target.lng); else launchQuery(target.name);
     }
-
-    private void launchCoordinates(String lat,String lng){
-        launchQuery(lat+","+lng);
-    }
-
+    private void launchCoordinates(String lat,String lng){launchQuery(lat+","+lng);}
     private void launchQuery(String query){
-        try{
-            Uri navUri=Uri.parse("google.navigation:q="+Uri.encode(query)+"&mode=d");
-            Intent maps=new Intent(Intent.ACTION_VIEW,navUri);
-            maps.setPackage("com.google.android.apps.maps");
-            startActivity(maps);
-        }catch(Exception first){
-            try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("geo:0,0?q="+Uri.encode(query))));}
-            catch(Exception second){Toast.makeText(this,"ไม่พบแอปแผนที่สำหรับนำทาง",Toast.LENGTH_LONG).show();}
-        }
+        try{Uri navUri=Uri.parse("google.navigation:q="+Uri.encode(query)+"&mode=d");Intent maps=new Intent(Intent.ACTION_VIEW,navUri);maps.setPackage("com.google.android.apps.maps");startActivity(maps);}
+        catch(Exception first){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("geo:0,0?q="+Uri.encode(query))));}catch(Exception second){Toast.makeText(this,"ไม่พบแอปแผนที่สำหรับนำทาง",Toast.LENGTH_LONG).show();}}
     }
 
     private void moveCurrent(){
         File f=current(); if(f==null)return;
-        String[] th={"Inbox","เส้นทาง","จุดชาร์จ","สถานที่โปรด"};
-        String[] ids=NavigationLibrary.categories();
+        String[] th={"Inbox","เส้นทาง","จุดชาร์จ","สถานที่โปรด"}; String[] ids=NavigationLibrary.categories();
         new AlertDialog.Builder(this).setTitle("ย้ายรูปไปที่").setItems(th,(d,w)->{
-            try{
-                File moved=NavigationLibrary.moveToCategory(this,f,ids[w]);
-                files=NavigationLibrary.listAll(this);
-                index=findIndex(moved.getAbsolutePath());
-                showCurrent();
-                Toast.makeText(this,"ย้ายไป "+NavigationLibrary.thaiCategory(ids[w])+" แล้ว",Toast.LENGTH_SHORT).show();
-            }catch(Exception e){Toast.makeText(this,"ย้ายไม่สำเร็จ: "+e.getMessage(),Toast.LENGTH_LONG).show();}
+            try{File moved=NavigationLibrary.moveToCategory(this,f,ids[w]);files=NavigationLibrary.listAll(this);index=findIndex(moved.getAbsolutePath());showCurrent();Toast.makeText(this,"ย้ายไป "+NavigationLibrary.thaiCategory(ids[w])+" แล้ว",Toast.LENGTH_SHORT).show();}
+            catch(Exception e){Toast.makeText(this,"ย้ายไม่สำเร็จ: "+e.getMessage(),Toast.LENGTH_LONG).show();}
         }).setNegativeButton("ยกเลิก",null).show();
     }
 
     private void deleteCurrent(){
         File f=current(); if(f==null)return;
-        new AlertDialog.Builder(this)
-                .setTitle("ลบรูปนี้?")
-                .setMessage(f.getName()+"\n\nไฟล์จะถูกลบออกจากคลังรูปออฟไลน์ของ BYD Phone Space")
-                .setNegativeButton("ยกเลิก",null)
-                .setPositiveButton("ลบ",(d,w)->{
-                    if(NavigationLibrary.delete(this,f)){
-                        files=NavigationLibrary.listAll(this);
-                        if(index>=files.size())index=Math.max(0,files.size()-1);
-                        showCurrent();
-                        Toast.makeText(this,"ลบแล้ว",Toast.LENGTH_SHORT).show();
-                    }else Toast.makeText(this,"ลบไม่สำเร็จ",Toast.LENGTH_SHORT).show();
-                }).show();
+        new AlertDialog.Builder(this).setTitle("ลบรูปนี้?").setMessage(f.getName()+"\n\nไฟล์จะถูกลบออกจากคลังรูปออฟไลน์ของ BYD Phone Space").setNegativeButton("ยกเลิก",null).setPositiveButton("ลบ",(d,w)->{
+            if(NavigationLibrary.delete(this,f)){files=NavigationLibrary.listAll(this);if(index>=files.size())index=Math.max(0,files.size()-1);showCurrent();Toast.makeText(this,"ลบแล้ว",Toast.LENGTH_SHORT).show();}
+            else Toast.makeText(this,"ลบไม่สำเร็จ",Toast.LENGTH_SHORT).show();
+        }).show();
     }
 
     private Bitmap decode(String path,int target){
-        BitmapFactory.Options o=new BitmapFactory.Options();
-        o.inJustDecodeBounds=true;
-        BitmapFactory.decodeFile(path,o);
-        int sample=1;
-        while(o.outWidth/sample>target*2||o.outHeight/sample>target*2)sample*=2;
-        o.inJustDecodeBounds=false;
-        o.inSampleSize=sample;
-        return BitmapFactory.decodeFile(path,o);
+        BitmapFactory.Options o=new BitmapFactory.Options();o.inJustDecodeBounds=true;BitmapFactory.decodeFile(path,o);int sample=1;while(o.outWidth/sample>target*2||o.outHeight/sample>target*2)sample*=2;o.inJustDecodeBounds=false;o.inSampleSize=sample;return BitmapFactory.decodeFile(path,o);
     }
-
-    private TextView text(String s,float z,int c,boolean b){
-        TextView v=new TextView(this);
-        v.setText(s);v.setTextSize(z);v.setTextColor(c);v.setGravity(Gravity.CENTER_VERTICAL);
-        v.setTypeface(Typeface.create("sans",b?Typeface.BOLD:Typeface.NORMAL));
-        v.setPadding(dp(10),0,dp(10),0);
-        return v;
-    }
-
-    private Button small(String s){
-        Button b=new Button(this);
-        b.setText(s);b.setAllCaps(false);b.setTextSize(13.3f);b.setTextColor(TEXT);
-        b.setBackground(round(CARD,16));
-        return b;
-    }
+    private TextView text(String s,float z,int c,boolean b){TextView v=new TextView(this);v.setText(s);v.setTextSize(z);v.setTextColor(c);v.setGravity(Gravity.CENTER_VERTICAL);v.setTypeface(Typeface.create("sans",b?Typeface.BOLD:Typeface.NORMAL));v.setPadding(dp(10),0,dp(10),0);return v;}
+    private Button small(String s){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTextSize(13.3f);b.setTextColor(TEXT);b.setBackground(round(CARD,16));return b;}
 }
