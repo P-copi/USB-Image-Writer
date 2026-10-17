@@ -17,6 +17,8 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <activity android:name=".RouteViewerActivity" android:exported="false" />
+        <activity android:name=".RoutesActivity" android:exported="false" />
         <activity android:name=".MapPickerActivity" android:exported="false" />
         <activity android:name=".ShareImportActivity" android:exported="false" />
         <activity android:name=".ImageViewerActivity" android:exported="false" />
