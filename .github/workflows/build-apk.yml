@@ -48,10 +48,22 @@ jobs:
             echo "::error::Configure BYD_SIGNING_KEYSTORE_BASE64 and BYD_SIGNING_PASSWORD in Actions secrets."
             exit 1
           fi
-          printf '%s' "$BYD_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$BYD_SIGNING_KEYSTORE"
+          if ! printf '%s' "$BYD_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$BYD_SIGNING_KEYSTORE"; then
+            echo "::error::BYD_SIGNING_KEYSTORE_BASE64 is not valid Base64. Re-paste the entire original file."
+            exit 1
+          fi
           chmod 600 "$BYD_SIGNING_KEYSTORE"
-          keytool -list -storetype PKCS12 -keystore "$BYD_SIGNING_KEYSTORE" \
-            -storepass "$BYD_SIGNING_PASSWORD" -alias "byd-phone-space" >/dev/null
+          EXPECTED_KEYSTORE_SHA256="e764efe52917b28a316468bbb640169a7d5996febc928b725caaa0daa0df474d"
+          ACTUAL_KEYSTORE_SHA256="$(sha256sum "$BYD_SIGNING_KEYSTORE" | cut -d' ' -f1)"
+          if [[ "$ACTUAL_KEYSTORE_SHA256" != "$EXPECTED_KEYSTORE_SHA256" ]]; then
+            echo "::error::BYD_SIGNING_KEYSTORE_BASE64 does not match the original signing key. Re-paste BYD-SIGNING-KEYSTORE-BASE64.txt exactly."
+            exit 1
+          fi
+          if ! keytool -list -storetype PKCS12 -keystore "$BYD_SIGNING_KEYSTORE" \
+               -storepass "$BYD_SIGNING_PASSWORD" -alias "byd-phone-space" >/dev/null 2>&1; then
+            echo "::error::The signing key matches the original, but BYD_SIGNING_PASSWORD is incorrect. Re-paste BYD-SIGNING-PASSWORD.txt exactly."
+            exit 1
+          fi
 
       - name: Build stable-signed APK
         shell: bash
