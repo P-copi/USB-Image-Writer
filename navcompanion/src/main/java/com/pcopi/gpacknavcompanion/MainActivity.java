@@ -63,7 +63,7 @@ public final class MainActivity extends Activity {
         root.setPadding(dp(22),dp(20),dp(22),dp(30));sc.addView(root);
         TextView heading=label("BYD NAV COMPANION",23,WHITE);
         heading.setTypeface(Typeface.DEFAULT_BOLD);root.addView(heading);
-        TextView sub=label("GPack internal Google Maps compatibility test • V0.1.2",13,MUTED);
+        TextView sub=label("GPack internal Google Maps compatibility test • V0.1.3",13,MUTED);
         sub.setPadding(0,dp(6),0,dp(15));root.addView(sub);
         destination=new EditText(this);destination.setSingleLine(false);destination.setMinLines(2);
         destination.setTextColor(WHITE);destination.setTextSize(17);
@@ -103,6 +103,9 @@ public final class MainActivity extends Activity {
         inspect.setOnClickListener(v->showInstallerReport());addButton(root,inspect);
         Button readTrace=button("6. ตรวจว่า GPack อ่านไฟล์ APK จริงหรือไม่",true);
         readTrace.setOnClickListener(v->showHandoffReport());addButton(root,readTrace);
+        Button audit=button("7. ตรวจ GPack ละเอียด: วงเหลือง / ติดตั้ง / เปิดแอป",true);
+        audit.setOnClickListener(v->startActivity(new Intent(this,GpackAppStateActivity.class)));
+        addButton(root,audit);
         installerStatus=label("สถานะ: ยังไม่ได้ทดลองการติดตั้งบนรถ",13,MUTED);
         installerStatus.setTextIsSelectable(true);
         installerStatus.setPadding(dp(7),dp(15),dp(7),dp(6));root.addView(installerStatus);
@@ -141,7 +144,7 @@ public final class MainActivity extends Activity {
     }
 
     private String installerReport(){
-        StringBuilder out=new StringBuilder("BYD Nav Companion V0.1.2 — GPack self-APK handoff\n");
+        StringBuilder out=new StringBuilder("BYD Nav Companion V0.1.3 — GPack self-APK handoff\n");
         out.append("Android: ").append(Build.VERSION.RELEASE).append(" API ").append(Build.VERSION.SDK_INT).append('\n');
         out.append("Companion APK: ").append(getApplicationInfo().sourceDir).append('\n');
         out.append("Own APK URI: ").append(OwnApkProvider.URI).append('\n');
