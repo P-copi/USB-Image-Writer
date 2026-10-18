@@ -23,6 +23,10 @@ public final class NavigationBridge {
     public static final String GPACK_CLIP = "gpack_clip";
     public static final String GPACK_GEO = "gpack_geo";
     public static final String GPACK_WEB = "gpack_web";
+    // Standard Android intents directed at the GPack HOST package, not its internal Google apps.
+    public static final String GPACK_SEARCH_VIEW = "gpack_search_view";
+    public static final String GPACK_SHARE_TEXT = "gpack_share_text";
+    public static final String GPACK_SHARE_MAPS_URL = "gpack_share_maps_url";
     public static final String GPACK_PACKAGE="com.gpack.agent";
 
     private static final String PREFS = "byd_navigation_bridge";
@@ -45,11 +49,16 @@ public final class NavigationBridge {
     private static boolean isValid(String mode){
         return DIRECT.equals(mode)||GEO.equals(mode)||NAV.equals(mode)
                 ||WEB_DIR.equals(mode)||WEB_SEARCH.equals(mode)||GPACK_CLIP.equals(mode)
-                ||GPACK_GEO.equals(mode)||GPACK_WEB.equals(mode);
+                ||GPACK_GEO.equals(mode)||GPACK_WEB.equals(mode)
+                ||GPACK_SEARCH_VIEW.equals(mode)||GPACK_SHARE_TEXT.equals(mode)
+                ||GPACK_SHARE_MAPS_URL.equals(mode);
     }
 
     public static String label(String mode){
-        if(GPACK_CLIP.equals(mode))return "GPack ทางสำรอง: คัดลอกจุดหมาย + เปิด GPack";
+        if(GPACK_CLIP.equals(mode))return "วิธีที่เปิดได้แล้ว: คัดลอกจุดหมาย + เปิด GPack";
+        if(GPACK_SHARE_TEXT.equals(mode))return "ทดลองแชร์ชื่อสถานที่ไป GPack";
+        if(GPACK_SHARE_MAPS_URL.equals(mode))return "ทดลองแชร์ลิงก์ Maps ไป GPack";
+        if(GPACK_SEARCH_VIEW.equals(mode))return "ทดลองส่งลิงก์ค้นหา Maps เข้า GPack";
         if(GPACK_GEO.equals(mode))return "GPack โดยตรง: geo: (ทดสอบ)";
         if(GPACK_WEB.equals(mode))return "GPack โดยตรง: Google Maps URL (ทดสอบ)";
         if(DIRECT.equals(mode))return "Google Maps ตรง (แพ็กเกจมาตรฐาน)";
@@ -67,7 +76,19 @@ public final class NavigationBridge {
 
     public static Intent intentFor(String mode,String destination){
         String q=destination==null?"":destination.trim();
-        if(GPACK_CLIP.equals(mode))return new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(GPACK_PACKAGE);
+        if(GPACK_CLIP.equals(mode))
+            return new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(GPACK_PACKAGE);
+        if(GPACK_SHARE_TEXT.equals(mode)||GPACK_SHARE_MAPS_URL.equals(mode)){
+            String shared=GPACK_SHARE_TEXT.equals(mode)?q:mapsSearchUrl(q);
+            Intent send=new Intent(Intent.ACTION_SEND);
+            send.setType("text/plain");
+            send.putExtra(Intent.EXTRA_TEXT,shared);
+            send.setPackage(GPACK_PACKAGE);
+            return send;
+        }
+        if(GPACK_SEARCH_VIEW.equals(mode)){
+            return new Intent(Intent.ACTION_VIEW,Uri.parse(mapsSearchUrl(q))).setPackage(GPACK_PACKAGE);
+        }
         Intent intent;
         if(DIRECT.equals(mode)||NAV.equals(mode)){
             intent=new Intent(Intent.ACTION_VIEW,Uri.parse("google.navigation:q="+Uri.encode(q)+"&mode=d"));
@@ -84,6 +105,11 @@ public final class NavigationBridge {
                     Uri.parse("https://www.google.com/maps/search/?api=1&query="+Uri.encode(q)));
         }
         return intent;
+    }
+
+    public static String mapsSearchUrl(String destination){
+        String q=destination==null?"":destination.trim();
+        return "https://www.google.com/maps/search/?api=1&query="+Uri.encode(q);
     }
 
     /** Opens the known GPack launcher without undocumented internal APIs or permissions. */
@@ -112,7 +138,7 @@ public final class NavigationBridge {
         if(GPACK_CLIP.equals(mode)){
             ClipboardManager cm=(ClipboardManager)context.getSystemService(Context.CLIPBOARD_SERVICE);
             if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("จุดหมาย BYD Phone Space",destination.trim()));
-            Toast.makeText(context,"คัดลอกจุดหมายแล้ว เปิด Google Maps ใน GPack และวางในช่องค้นหา",Toast.LENGTH_LONG).show();
+            Toast.makeText(context,"คัดลอกแล้ว → เปิด Maps ใน GPack → แตะค้นหา → กดค้าง → วาง",Toast.LENGTH_LONG).show();
             if(hasGpack(context))return openGpack(context);
             Toast.makeText(context,"ไม่พบ GPack บนเครื่องนี้ • จุดหมายถูกคัดลอกไว้แล้ว",Toast.LENGTH_LONG).show();
             return false;
