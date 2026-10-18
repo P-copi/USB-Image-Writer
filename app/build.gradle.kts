@@ -17,8 +17,8 @@ android {
         applicationId = "com.pcopi.bydphonespace"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "0.4.3"
+        versionCode = 18
+        versionName = "0.5.0"
     }
 
     signingConfigs {
@@ -48,4 +48,5 @@ android {
 }
 
 dependencies {
+    implementation("eu.agno3.jcifs:jcifs-ng:2.1.10")
 }
