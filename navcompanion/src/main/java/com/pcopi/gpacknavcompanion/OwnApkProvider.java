@@ -29,10 +29,12 @@ public final class OwnApkProvider extends ContentProvider {
     }
     @Override public boolean onCreate(){return true;}
     @Override public String getType(Uri uri){
+        if(valid(uri))ApkHandoffLog.note(getContext(),"getType");
         return valid(uri)?MIME:null;
     }
     @Override public ParcelFileDescriptor openFile(Uri uri,String mode)throws FileNotFoundException{
         if(!valid(uri)||!"r".equals(mode))throw new FileNotFoundException("Read only companion APK");
+        ApkHandoffLog.note(getContext(),"openFile");
         File file=ownApk();
         if(!file.isFile()||file.length()==0)throw new FileNotFoundException("Installed APK missing");
         return ParcelFileDescriptor.open(file,ParcelFileDescriptor.MODE_READ_ONLY);
@@ -40,6 +42,7 @@ public final class OwnApkProvider extends ContentProvider {
     @Override public Cursor query(Uri uri,String[] projection,String selection,
             String[] args,String sortOrder){
         if(!valid(uri))return null;
+        ApkHandoffLog.note(getContext(),"query");
         String[] columns=projection==null?new String[]{OpenableColumns.DISPLAY_NAME,OpenableColumns.SIZE}:projection;
         MatrixCursor result=new MatrixCursor(columns);
         Object[] values=new Object[columns.length];
