@@ -114,6 +114,18 @@ public class ImageViewerActivity extends Activity {
         tools.addView(del,dpv);
         root.addView(tools);
 
+        LinearLayout orientationTools=new LinearLayout(this);
+        orientationTools.setPadding(0,dp(6),0,0);
+        Button rotateLeft=small("↶ หมุนซ้าย");
+        rotateLeft.setOnClickListener(v->rotateCurrent(-90));
+        orientationTools.addView(rotateLeft,new LinearLayout.LayoutParams(0,dp(44),1));
+        Button rotateRight=small("↷ หมุนขวา");
+        LinearLayout.LayoutParams rotationLp=new LinearLayout.LayoutParams(0,dp(44),1);
+        rotationLp.setMargins(dp(8),0,0,0);
+        rotateRight.setOnClickListener(v->rotateCurrent(90));
+        orientationTools.addView(rotateRight,rotationLp);
+        root.addView(orientationTools);
+
         LinearLayout infoCard=new LinearLayout(this);
         infoCard.setOrientation(LinearLayout.VERTICAL);
         infoCard.setPadding(dp(14),dp(11),dp(14),dp(11));
@@ -185,6 +197,15 @@ public class ImageViewerActivity extends Activity {
         image.setImageBitmap(decode(f.getAbsolutePath(),2200));
         image.post(image::resetZoom);
         refreshInfo();
+    }
+
+    private void rotateCurrent(int degrees){
+        File currentFile=current();
+        if(currentFile==null)return;
+        ImageOrientationStore.rotate(this,currentFile,degrees);
+        image.setImageBitmap(ImageOrientationUtils.decode(this,currentFile,2200));
+        image.post(image::resetZoom);
+        Toast.makeText(this,"บันทึกการหมุนเฉพาะการแสดงผลแล้ว • รูปต้นฉบับไม่เปลี่ยน",Toast.LENGTH_SHORT).show();
     }
 
     private void refreshInfo(){
@@ -458,9 +479,7 @@ public class ImageViewerActivity extends Activity {
         }).show();
     }
 
-    private Bitmap decode(String path,int target){
-        BitmapFactory.Options o=new BitmapFactory.Options();o.inJustDecodeBounds=true;BitmapFactory.decodeFile(path,o);int sample=1;while(o.outWidth/sample>target*2||o.outHeight/sample>target*2)sample*=2;o.inJustDecodeBounds=false;o.inSampleSize=sample;return BitmapFactory.decodeFile(path,o);
-    }
+    private Bitmap decode(String path,int target){return ImageOrientationUtils.decode(this,new File(path),target);}
     private TextView text(String s,float z,int c,boolean b){TextView v=new TextView(this);v.setText(s);v.setTextSize(z);v.setTextColor(c);v.setGravity(Gravity.CENTER_VERTICAL);v.setTypeface(Typeface.create("sans",b?Typeface.BOLD:Typeface.NORMAL));v.setPadding(dp(10),0,dp(10),0);return v;}
     private Button small(String s){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTextSize(13.3f);b.setTextColor(TEXT);b.setBackground(round(CARD,16));return b;}
 }
