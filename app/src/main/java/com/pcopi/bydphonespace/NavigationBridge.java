@@ -21,6 +21,7 @@ public final class NavigationBridge {
     public static final String WEB_DIR = "web_dir";
     public static final String WEB_SEARCH = "web_search";
     public static final String GPACK_CLIP = "gpack_clip";
+    public static final String GPACK_SHORTCUT_CLIP = "gpack_shortcut_clip";
     public static final String GPACK_CLIP_URL = "gpack_clip_url";
     public static final String NEUSOFT_GEO = "neusoft_geo";
     public static final String NEUSOFT_PACKAGE = "com.neusoft.na.navigation";
@@ -55,10 +56,12 @@ public final class NavigationBridge {
                 ||GPACK_GEO.equals(mode)||GPACK_WEB.equals(mode)
                 ||GPACK_SEARCH_VIEW.equals(mode)||GPACK_SHARE_TEXT.equals(mode)
                 ||GPACK_SHARE_MAPS_URL.equals(mode)
-                ||GPACK_CLIP_URL.equals(mode)||NEUSOFT_GEO.equals(mode);
+                ||GPACK_CLIP_URL.equals(mode)||NEUSOFT_GEO.equals(mode)
+                ||GPACK_SHORTCUT_CLIP.equals(mode);
     }
 
     public static String label(String mode){
+        if(GPACK_SHORTCUT_CLIP.equals(mode))return "ทางลัด Maps ของ GPack + คัดลอกจุดหมาย";
         if(GPACK_CLIP.equals(mode))return "ใช้ได้แล้ว: คัดลอกจุดหมาย + เปิด GPack";
         if(GPACK_CLIP_URL.equals(mode))return "ลองลิงก์เส้นทาง Maps ผ่าน Chrome ใน GPack";
         if(NEUSOFT_GEO.equals(mode))return "ลองระบบนำทางของรถ BYD (ไม่ใช่ Google Maps)";
@@ -82,7 +85,7 @@ public final class NavigationBridge {
 
     public static Intent intentFor(String mode,String destination){
         String q=destination==null?"":destination.trim();
-        if(GPACK_CLIP.equals(mode)||GPACK_CLIP_URL.equals(mode))
+        if(GPACK_CLIP.equals(mode)||GPACK_CLIP_URL.equals(mode)||GPACK_SHORTCUT_CLIP.equals(mode))
             return new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(GPACK_PACKAGE);
         if(NEUSOFT_GEO.equals(mode))
             return new Intent(Intent.ACTION_VIEW,Uri.parse("geo:0,0?q="+Uri.encode(q)))
@@ -149,6 +152,17 @@ public final class NavigationBridge {
         if(destination==null||destination.trim().isEmpty()){
             Toast.makeText(context,"ยังไม่ได้เลือกจุดหมาย",Toast.LENGTH_SHORT).show();
             return false;
+        }
+        if(GPACK_SHORTCUT_CLIP.equals(mode)){
+            ClipboardManager clipboard=(ClipboardManager)context.getSystemService(Context.CLIPBOARD_SERVICE);
+            if(clipboard!=null)clipboard.setPrimaryClip(
+                ClipData.newPlainText("จุดหมาย BYD Phone Space",destination.trim()));
+            if(GpackShortcutHelper.confirmed(context)&&GpackShortcutHelper.open(context)){
+                Toast.makeText(context,"เปิด Maps ผ่านทางลัดแล้ว • แตะค้นหาและวางจุดหมาย",Toast.LENGTH_LONG).show();
+                return true;
+            }
+            Toast.makeText(context,"ยังเรียกทางลัด Maps ไม่ได้ • เปิด GPack ตามวิธีที่ผ่านแล้วแทน",Toast.LENGTH_LONG).show();
+            return openGpack(context);
         }
         if(GPACK_CLIP.equals(mode)||GPACK_CLIP_URL.equals(mode)){
             boolean link=GPACK_CLIP_URL.equals(mode);
