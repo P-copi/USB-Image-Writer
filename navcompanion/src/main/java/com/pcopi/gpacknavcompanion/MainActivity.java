@@ -31,6 +31,9 @@ public final class MainActivity extends Activity {
         MUTED=0xff9db1c5,CYAN=0xff4dc4ff;
     private EditText destination;
     private TextView status,installerStatus;
+    private static final int REQ_EXPORT_GPACK=7642;
+    private GpackApkExporter.Info foundGpack;
+    private android.net.Uri lastExportUri;
     private static final String GPACK="com.gpack.agent";
     private static final String GPACK_INSTALLER="com.bratwzi.auto.gpack.activity.AppInstallerActivity";
     private static final String APK_MIME="application/vnd.android.package-archive";
@@ -63,7 +66,7 @@ public final class MainActivity extends Activity {
         root.setPadding(dp(22),dp(20),dp(22),dp(30));sc.addView(root);
         TextView heading=label("BYD NAV COMPANION",23,WHITE);
         heading.setTypeface(Typeface.DEFAULT_BOLD);root.addView(heading);
-        TextView sub=label("GPack internal Google Maps compatibility test • V0.1.3",13,MUTED);
+        TextView sub=label("GPack internal Google Maps compatibility test • V0.1.4",13,MUTED);
         sub.setPadding(0,dp(6),0,dp(15));root.addView(sub);
         destination=new EditText(this);destination.setSingleLine(false);destination.setMinLines(2);
         destination.setTextColor(WHITE);destination.setTextSize(17);
@@ -106,6 +109,21 @@ public final class MainActivity extends Activity {
         Button audit=button("7. ตรวจ GPack ละเอียด: วงเหลือง / ติดตั้ง / เปิดแอป",true);
         audit.setOnClickListener(v->startActivity(new Intent(this,GpackAppStateActivity.class)));
         addButton(root,audit);
+        TextView exportHeading=label("วิเคราะห์ GPack รุ่นที่ติดตั้งจริง",20,WHITE);
+        exportHeading.setTypeface(Typeface.DEFAULT_BOLD);
+        exportHeading.setPadding(0,dp(23),0,dp(9));root.addView(exportHeading);
+        TextView exportHint=label("สำรองเฉพาะ APK ของ GPack ที่ติดตั้งอยู่ในรถ (base.apk และ split APK)"
+            +" ไม่ดึงบัญชี Google ไม่แก้ไขแอป และไม่ต้อง Root\\n"
+            +"ไฟล์ ZIP ที่ได้ให้นำมาแนบใน ChatGPT เพื่อวิเคราะห์ Activity, Intent และระบบติดตั้งจริง",13,MUTED);
+        exportHint.setPadding(0,dp(7),0,dp(11));root.addView(exportHint);
+        Button examine=button("8. ตรวจ APK GPack ที่ติดตั้งอยู่จริง",false);
+        examine.setOnClickListener(v->inspectInstalledGpack());addButton(root,examine);
+        Button export=button("9. สำรอง GPack APK ไปที่ USB หรือโฟลเดอร์ที่เลือก",true);
+        export.setOnClickListener(v->chooseGpackExport());addButton(root,export);
+        Button downloads=button("10. สำรอง GPack APK ลง Downloads ของรถ",false);
+        downloads.setOnClickListener(v->exportGpackDownloads());addButton(root,downloads);
+        Button share=button("11. แชร์ไฟล์สำรอง GPack ที่สร้างแล้ว",false);
+        share.setOnClickListener(v->shareLastGpackExport());addButton(root,share);
         installerStatus=label("สถานะ: ยังไม่ได้ทดลองการติดตั้งบนรถ",13,MUTED);
         installerStatus.setTextIsSelectable(true);
         installerStatus.setPadding(dp(7),dp(15),dp(7),dp(6));root.addView(installerStatus);
@@ -265,6 +283,108 @@ public final class MainActivity extends Activity {
                     updateInstallStatus("ระบบรถไม่เปิดตัวเลือกติดตั้ง: "+error.getClass().getSimpleName());
                 }
             }).show();
+    }
+
+    private GpackApkExporter.Info inspectInstalledGpack(){
+        try{
+            foundGpack=GpackApkExporter.inspect(this);
+            updateInstallStatus(foundGpack.description);
+            new AlertDialog.Builder(this).setTitle("พบ APK ของ GPack บนรถ")
+                .setMessage(foundGpack.description+"\n"
+                    +"ถ้าสำรองได้ เราจะวิเคราะห์ไฟล์รุ่นตรงกับรถโดยไม่ต้องค้นหา APK จากเว็บไซต์ภายนอก")
+                .setPositiveButton("ตกลง",null).show();
+            return foundGpack;
+        }catch(Exception e){
+            foundGpack=null;
+            String message="อ่านตำแหน่ง APK GPack ไม่ได้: "+e.getClass().getSimpleName()
+                +(e.getMessage()==null?"":"\n"+e.getMessage());
+            updateInstallStatus(message);
+            new AlertDialog.Builder(this).setTitle("ยังไม่สามารถอ่าน APK ของ GPack")
+                .setMessage(message+"\n\nบางระบบจำกัดการเข้าถึงไฟล์ APK ของแอปอื่น"
+                    +" ไม่จำเป็นต้อง Root หรือแก้ไขระบบรถ")
+                .setPositiveButton("ตกลง",null).show();
+            return null;
+        }
+    }
+
+    private void chooseGpackExport(){
+        if(foundGpack==null&&inspectInstalledGpack()==null)return;
+        Intent request=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        request.addCategory(Intent.CATEGORY_OPENABLE);
+        request.setType("application/zip");
+        request.putExtra(Intent.EXTRA_TITLE,GpackApkExporter.proposedName(foundGpack));
+        try{startActivityForResult(request,REQ_EXPORT_GPACK);}
+        catch(Exception e){
+            updateInstallStatus("ตัวเลือกบันทึกไฟล์ของรถเปิดไม่ได้: "+e.getClass().getSimpleName()
+                +"\nใช้ปุ่มสำรองไป Downloads แทนได้");
+        }
+    }
+
+    @Override protected void onActivityResult(int request,int result,Intent data){
+        super.onActivityResult(request,result,data);
+        if(request==REQ_EXPORT_GPACK&&result==RESULT_OK&&data!=null&&data.getData()!=null){
+            if(foundGpack==null&&inspectInstalledGpack()==null)return;
+            exportArchive(data.getData(),foundGpack);
+        }
+    }
+
+    private void exportGpackDownloads(){
+        if(foundGpack==null&&inspectInstalledGpack()==null)return;
+        GpackApkExporter.Info snapshot=foundGpack;
+        updateInstallStatus("กำลังสำรอง GPack ลง Downloads ...");
+        new Thread(()->{
+            try{
+                Uri file=GpackApkExporter.saveToDownloads(this,snapshot,
+                    progress->runOnUiThread(()->updateInstallStatus(progress)));
+                runOnUiThread(()->{
+                    lastExportUri=file;
+                    updateInstallStatus("สำรองสำเร็จ: Downloads/BYDPhoneSpace/"+GpackApkExporter.proposedName(snapshot)
+                        +"\nไฟล์ APK ไม่ถูกติดตั้งหรือแก้ไข");
+                    new AlertDialog.Builder(this).setTitle("สำรอง APK ของ GPack สำเร็จ")
+                        .setMessage("บันทึกใน Downloads/BYDPhoneSpace/"+GpackApkExporter.proposedName(snapshot)
+                            +"\nลองกดแชร์ไฟล์ หรือถ่ายโอนไปโทรศัพท์ด้วย USB เพื่อแนบไฟล์มาตรวจ")
+                        .setPositiveButton("ตกลง",null).show();
+                });
+            }catch(Exception e){runOnUiThread(()->updateInstallStatus("บันทึก Downloads ไม่สำเร็จ: "
+                +e.getClass().getSimpleName()+(e.getMessage()==null?"":" / "+e.getMessage())));}
+        },"gpack-export-downloads").start();
+    }
+
+    private void exportArchive(Uri destination,GpackApkExporter.Info snapshot){
+        updateInstallStatus("กำลังสำรอง "+GpackApkExporter.proposedName(snapshot));
+        new Thread(()->{
+            try{
+                String report=GpackApkExporter.writeArchive(this,destination,snapshot,
+                    progress->runOnUiThread(()->updateInstallStatus(progress)));
+                runOnUiThread(()->{
+                    lastExportUri=destination;
+                    updateInstallStatus("สร้าง ZIP สำเร็จ • "+GpackApkExporter.proposedName(snapshot)
+                        +"\n"+report);
+                    new AlertDialog.Builder(this).setTitle("สำรอง GPack สำเร็จ")
+                        .setMessage("บันทึกลงตำแหน่งที่เลือกแล้ว\n"
+                            +"สามารถนำแฟลชไดรฟ์ไปเปิดด้วย Samsung แล้วแนบ ZIP ส่งให้ตรวจได้เลย")
+                        .setPositiveButton("ตกลง",null).show();
+                });
+            }catch(Exception e){runOnUiThread(()->updateInstallStatus("ส่งออก ZIP ไม่สำเร็จ: "
+                +e.getClass().getSimpleName()+(e.getMessage()==null?"":" / "+e.getMessage())));}
+        },"gpack-export-picker").start();
+    }
+
+    private void shareLastGpackExport(){
+        if(lastExportUri==null){
+            new AlertDialog.Builder(this).setTitle("ยังไม่มีไฟล์สำรอง")
+                .setMessage("โปรดใช้ปุ่ม 9 หรือ 10 เพื่อสำรอง APK ของ GPack ก่อน")
+                .setPositiveButton("ตกลง",null).show();return;
+        }
+        Intent share=new Intent(Intent.ACTION_SEND);
+        share.setType("application/zip");
+        share.putExtra(Intent.EXTRA_STREAM,lastExportUri);
+        share.setClipData(ClipData.newUri(getContentResolver(),"GPack APK archive",lastExportUri));
+        share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try{startActivity(Intent.createChooser(share,"ส่งไฟล์ GPack เพื่อตรวจส่วนตัว"));}
+        catch(Exception e){
+            updateInstallStatus("ระบบรถไม่มีแอปรับการแชร์ ZIP: "+e.getClass().getSimpleName());
+        }
     }
 
     private void readClipboard(){
