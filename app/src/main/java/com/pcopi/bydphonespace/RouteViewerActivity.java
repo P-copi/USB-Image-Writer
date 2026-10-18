@@ -82,7 +82,7 @@ public class RouteViewerActivity extends Activity {
         Toast.makeText(this,"รูปนี้ยังไม่มี GPS กด “ชื่อ / GPS” เพื่อกำหนดก่อน",Toast.LENGTH_LONG).show();
     }
 
-    private void launch(String q){try{Intent i=new Intent(Intent.ACTION_VIEW,Uri.parse("google.navigation:q="+Uri.encode(q)+"&mode=d"));i.setPackage("com.google.android.apps.maps");startActivity(i);}catch(Exception e){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("geo:0,0?q="+Uri.encode(q))));}catch(Exception ignored){Toast.makeText(this,"ไม่พบแอปแผนที่",Toast.LENGTH_SHORT).show();}}}
+    private void launch(String q){NavigationBridge.launch(this,q);}
     private Bitmap decode(String path,int target){BitmapFactory.Options o=new BitmapFactory.Options();o.inJustDecodeBounds=true;BitmapFactory.decodeFile(path,o);int s=1;while(o.outWidth/s>target*2||o.outHeight/s>target*2)s*=2;o.inJustDecodeBounds=false;o.inSampleSize=s;return BitmapFactory.decodeFile(path,o);}
     private Button dark(String s){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTextSize(13.5f);b.setTextColor(TEXT);b.setBackground(round(CARD,16));return b;}
     private Button primary(String s){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTextSize(17);b.setTypeface(Typeface.DEFAULT_BOLD);b.setTextColor(Color.rgb(4,22,33));b.setBackground(round(CYAN,18));return b;}
