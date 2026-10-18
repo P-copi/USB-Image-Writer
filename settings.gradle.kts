@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "USBImageWriter"
 include(":app")
+include(":navcompanion")
