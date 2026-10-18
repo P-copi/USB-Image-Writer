@@ -15,6 +15,21 @@
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="google.navigation" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
         <package android:name="com.google.android.apps.maps" />
         <package android:name="com.google.android.gms" />
         <package android:name="com.android.vending" />
@@ -40,6 +55,7 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <activity android:name=".NavigationBridgeActivity" android:exported="false" />
         <activity android:name=".AppManagerActivity" android:exported="false" />
         <activity android:name=".DeviceInspectorActivity" android:exported="false" />
         <activity android:name=".RouteEditorActivity" android:exported="false" />
