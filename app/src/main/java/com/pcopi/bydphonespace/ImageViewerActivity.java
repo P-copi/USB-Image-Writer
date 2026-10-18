@@ -438,8 +438,7 @@ public class ImageViewerActivity extends Activity {
     }
     private void launchCoordinates(String lat,String lng){launchQuery(lat+","+lng);}
     private void launchQuery(String query){
-        try{Uri navUri=Uri.parse("google.navigation:q="+Uri.encode(query)+"&mode=d");Intent maps=new Intent(Intent.ACTION_VIEW,navUri);maps.setPackage("com.google.android.apps.maps");startActivity(maps);}
-        catch(Exception first){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("geo:0,0?q="+Uri.encode(query))));}catch(Exception second){Toast.makeText(this,"ไม่พบแอปแผนที่สำหรับนำทาง",Toast.LENGTH_LONG).show();}}
+        NavigationBridge.launch(this,query);
     }
 
     private void moveCurrent(){
