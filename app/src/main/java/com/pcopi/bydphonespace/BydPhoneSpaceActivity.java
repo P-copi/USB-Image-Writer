@@ -115,7 +115,28 @@ public class BydPhoneSpaceActivity extends Activity {
 
     private void openImageBrowser() { Intent i = new Intent(this, RouteImagesActivity.class); i.putExtra("openPicker", true); startActivity(i); }
     private void openMapsOnly() { Intent app=getPackageManager().getLaunchIntentForPackage("com.google.android.apps.maps"); if(app!=null){ startActivity(app); return; } startActivity(new Intent(this,NavigationBridgeActivity.class)); }
-    private void ensureOverlay(boolean openMapsAfter) { openMapsWhenAllowed = openMapsAfter; if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)){ startOverlayWhenAllowed=true; startActivityForResult(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+getPackageName())),REQ_OVERLAY); return; } startOverlay(); if(openMapsAfter) new Handler(Looper.getMainLooper()).postDelayed(this::openMapsOnly, 300); }
+    private void ensureOverlay(boolean openMapsAfter) {
+        openMapsWhenAllowed = openMapsAfter;
+        if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)){
+            if(openMapsAfter){
+                new android.app.AlertDialog.Builder(this)
+                        .setTitle("Quick Overlay ยังไม่ได้รับอนุญาต")
+                        .setMessage("จอ BYD ยังไม่อนุญาตหน้าต่างลอย คุณสามารถเปิดตัวนำทาง/หน้าทดสอบ GPack โดยไม่ใช้ Overlay ก่อน หรือไปตั้งค่าสิทธิ์เพิ่มเติม")
+                        .setPositiveButton("เปิดโดยไม่ใช้ Overlay",(d,w)->openMapsOnly())
+                        .setNeutralButton("ตั้งค่า Overlay",(d,w)->{
+                            startOverlayWhenAllowed=true;
+                            openMapsWhenAllowed=true;
+                            startActivityForResult(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+getPackageName())),REQ_OVERLAY);
+                        }).setNegativeButton("ยกเลิก",null).show();
+                return;
+            }
+            startOverlayWhenAllowed=true;
+            startActivityForResult(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+getPackageName())),REQ_OVERLAY);
+            return;
+        }
+        startOverlay();
+        if(openMapsAfter)new Handler(Looper.getMainLooper()).postDelayed(this::openMapsOnly,300);
+    }
     private void startOverlay(){ Intent i=new Intent(this,QuickOverlayService.class); if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O) startForegroundService(i); else startService(i); }
     @Override protected void onResume(){ super.onResume(); if(startOverlayWhenAllowed && Settings.canDrawOverlays(this)){ startOverlayWhenAllowed=false; startOverlay(); if(openMapsWhenAllowed) new Handler(Looper.getMainLooper()).postDelayed(this::openMapsOnly, 300); } }
     private void toast(String s){ Toast.makeText(this,s,Toast.LENGTH_SHORT).show(); }
