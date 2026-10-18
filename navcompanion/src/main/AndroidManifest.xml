@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <queries>
+        <package android:name="com.gpack.agent"/>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:mimeType="application/vnd.android.package-archive"/>
+        </intent>
         <package android:name="com.google.android.apps.maps"/>
         <intent><action android:name="android.intent.action.VIEW"/><data android:scheme="geo"/></intent>
         <intent><action android:name="android.intent.action.VIEW"/><data android:scheme="google.navigation"/></intent>
@@ -10,6 +15,10 @@
         android:allowBackup="false"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:usesCleartextTraffic="false">
+        <provider android:name=".OwnApkProvider"
+            android:authorities="com.pcopi.gpacknavcompanion.selfapk"
+            android:exported="false"
+            android:grantUriPermissions="true"/>
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
