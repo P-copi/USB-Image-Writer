@@ -64,6 +64,7 @@ public class NasConnectActivity extends Activity {
     private int thumbGeneration=0;
     private boolean importing=false,loading=false;
     private int displayed=0;
+    private ScrollView folderScroll;
 
     private int dp(float v){return (int)(v*getResources().getDisplayMetrics().density+0.5f);}
     private GradientDrawable rounded(int color,float r){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(r));return d;}
@@ -279,7 +280,9 @@ public class NasConnectActivity extends Activity {
 
     private void showFiles(){
         if(link==null){showSetup();return;}
-        ScrollView scroll=new ScrollView(this);LinearLayout root=newRoot(scroll);
+        ++thumbGeneration;thumbViews.clear();thumbQueued.clear();
+        ScrollView scroll=new ScrollView(this);folderScroll=scroll;
+        LinearLayout root=newRoot(scroll);
         header(root,"● เชื่อมต่อ "+link.route+" • "+link.host);
         LinearLayout top=panel();root.addView(top,cardParams());
         TextView path=tv(currentUrl==null?"/":currentUrl.replace(link.root(),"/"),14,TEXT,true);path.setTextIsSelectable(true);top.addView(path);
@@ -304,7 +307,9 @@ public class NasConnectActivity extends Activity {
             LinearLayout items=vertical();root.addView(items);
             renderBatch(items);
         }
+        scroll.setOnScrollChangeListener((View view,int sx,int sy,int ox,int oy)->scheduleVisibleThumbs());
         setContentView(scroll);
+        scroll.post(this::scheduleVisibleThumbs);
     }
 
     private void renderBatch(LinearLayout items){
@@ -314,7 +319,7 @@ public class NasConnectActivity extends Activity {
         if(displayed<currentFiles.size()){
             Button more=button("แสดงเพิ่มเติมอีก "+Math.min(50,currentFiles.size()-displayed)+" รายการ",false);
             items.addView(more,buttonParams());
-            more.setOnClickListener(v->{items.removeView(more);renderBatch(items);});
+            more.setOnClickListener(v->{items.removeView(more);renderBatch(items);items.post(this::scheduleVisibleThumbs);});
         }
     }
     private void addFileRow(LinearLayout root,NasSmbClient.Entry entry){
@@ -328,8 +333,11 @@ public class NasConnectActivity extends Activity {
             ImageView thumbnail=new ImageView(this);thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
             thumbnail.setBackground(rounded(Color.rgb(30,51,69),12));
             row.addView(thumbnail,new LinearLayout.LayoutParams(dp(50),dp(50)));
-            Bitmap hit=cache.get(entry.url);
-            if(hit!=null)thumbnail.setImageBitmap(hit);else loadThumb(thumbnail,entry);
+            String key=thumbKey(entry);
+            thumbnail.setTag(key);
+            Bitmap hit=cache.get(key);
+            if(hit!=null)thumbnail.setImageBitmap(hit);
+            else thumbViews.put(thumbnail,entry);
         }else{
             TextView icon=tv("▤",23,MUTED,false);icon.setGravity(Gravity.CENTER);
             row.addView(icon,new LinearLayout.LayoutParams(dp(50),dp(58)));
@@ -356,29 +364,111 @@ public class NasConnectActivity extends Activity {
         if(selectedImportButton!=null){selectedImportButton.setText("↓ นำเข้ารูปที่เลือก ("+selected.size()+")");selectedImportButton.setEnabled(!selected.isEmpty());}
     }
 
-    private void loadThumb(ImageView image,NasSmbClient.Entry entry){
-        if(entry.size>12L*1024*1024||entry.size<1)return;
-        image.setTag(entry.url);
-        thumbnails.execute(()->{
-            try(InputStream stream=NasSmbClient.open(link,entry);
-                ByteArrayOutputStream out=new ByteArrayOutputStream()){
-                byte[] buf=new byte[64*1024];int count;long total=0;
-                while((count=stream.read(buf))>0){
-                    total+=count;if(total>12L*1024*1024)return;
-                    out.write(buf,0,count);
+    private String thumbKey(NasSmbClient.Entry entry){
+        String source=activeProfileId+"|"+entry.url+"|"+entry.size+"|"+entry.modified;
+        try{
+            byte[] hash=MessageDigest.getInstance("SHA-256")
+                .digest(source.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder out=new StringBuilder();
+            for(int i=0;i<20;i++)out.append(String.format(Locale.US,"%02x",hash[i]&255));
+            return out.toString();
+        }catch(Exception e){return Integer.toHexString(source.hashCode());}
+    }
+
+    /** Only schedule on-screen thumbnails. Large directories no longer enqueue every image. */
+    private void scheduleVisibleThumbs(){
+        if(link==null||folderScroll==null)return;
+        final int generation=thumbGeneration;
+        final NasSmbClient.Link connection=link;
+        final android.graphics.Rect rectangle=new android.graphics.Rect();
+        int started=0;
+        for(java.util.Map.Entry<ImageView,NasSmbClient.Entry> pair:thumbViews.entrySet()){
+            ImageView view=pair.getKey();
+            NasSmbClient.Entry entry=pair.getValue();
+            if(!view.isShown()||!view.getGlobalVisibleRect(rectangle))continue;
+            String key=thumbKey(entry);
+            Bitmap loaded=cache.get(key);
+            if(loaded!=null){
+                if(key.equals(view.getTag()))view.setImageBitmap(loaded);
+                continue;
+            }
+            if(thumbQueued.contains(key)||entry.size<=0||entry.size>24L*1024*1024)continue;
+            if(thumbQueued.size()>=12||started>=8)break;
+            thumbQueued.add(key);started++;
+            thumbnails.execute(()->{
+                Bitmap result=null;
+                try{
+                    if(generation!=thumbGeneration)return;
+                    File disk=new File(thumbCacheDir(),key+".jpg");
+                    if(disk.exists()){
+                        result=BitmapFactory.decodeFile(disk.getAbsolutePath());
+                        if(result!=null)disk.setLastModified(System.currentTimeMillis());
+                    }
+                    if(result==null&&generation==thumbGeneration){
+                        try(InputStream network=NasSmbClient.open(connection,entry);
+                            java.io.BufferedInputStream buffered=new java.io.BufferedInputStream(network,128*1024)){
+                            BitmapFactory.Options opts=new BitmapFactory.Options();
+                            opts.inSampleSize=4;
+                            opts.inPreferredConfig=Bitmap.Config.RGB_565;
+                            Bitmap decoded=BitmapFactory.decodeStream(buffered,null,opts);
+                            if(decoded!=null){
+                                int width=decoded.getWidth(),height=decoded.getHeight();
+                                float scale=Math.min(180f/Math.max(1,width),180f/Math.max(1,height));
+                                int w=Math.max(1,Math.round(width*Math.min(1f,scale)));
+                                int h=Math.max(1,Math.round(height*Math.min(1f,scale)));
+                                if(w!=width||h!=height){
+                                    result=Bitmap.createScaledBitmap(decoded,w,h,true);
+                                    if(result!=decoded)decoded.recycle();
+                                }else result=decoded;
+                                File tmp=new File(thumbCacheDir(),key+".tmp");
+                                try(java.io.FileOutputStream out=new java.io.FileOutputStream(tmp)){
+                                    result.compress(Bitmap.CompressFormat.JPEG,72,out);
+                                    out.flush();
+                                }
+                                if(!tmp.renameTo(disk))tmp.delete();
+                                trimDiskThumbCache();
+                            }
+                        }
+                    }
+                    if(result!=null&&generation==thumbGeneration){
+                        Bitmap finalBitmap=result;
+                        runOnUiThread(()->{
+                            if(generation!=thumbGeneration)return;
+                            cache.put(key,finalBitmap);
+                            if(key.equals(view.getTag()))view.setImageBitmap(finalBitmap);
+                        });
+                    }
+                }catch(Exception ignored){}
+                finally{
+                    runOnUiThread(()->{
+                        if(generation==thumbGeneration){
+                            thumbQueued.remove(key);
+                            if(folderScroll!=null)folderScroll.postDelayed(this::scheduleVisibleThumbs,50);
+                        }
+                    });
                 }
-                byte[] data=out.toByteArray();
-                BitmapFactory.Options opts=new BitmapFactory.Options();
-                opts.inJustDecodeBounds=true;BitmapFactory.decodeByteArray(data,0,data.length,opts);
-                int scale=1;
-                while(opts.outWidth/scale>220||opts.outHeight/scale>220)scale*=2;
-                opts.inJustDecodeBounds=false;opts.inSampleSize=scale;
-                Bitmap bitmap=BitmapFactory.decodeByteArray(data,0,data.length,opts);
-                if(bitmap!=null){cache.put(entry.url,bitmap);runOnUiThread(()->{
-                    if(entry.url.equals(image.getTag()))image.setImageBitmap(bitmap);
-                });}
-            }catch(Exception ignored){}
-        });
+            });
+        }
+    }
+
+    private File thumbCacheDir(){
+        File path=new File(getCacheDir(),"nas_thumbs_v2");
+        if(!path.exists())path.mkdirs();
+        return path;
+    }
+
+    private void trimDiskThumbCache(){
+        File[] files=thumbCacheDir().listFiles((dir,name)->name.endsWith(".jpg"));
+        if(files==null||files.length<100)return;
+        long size=0;
+        for(File file:files)size+=file.length();
+        if(size<=50L*1024*1024)return;
+        java.util.Arrays.sort(files,(a,b)->Long.compare(a.lastModified(),b.lastModified()));
+        for(File file:files){
+            if(size<=36L*1024*1024)break;
+            long length=file.length();
+            if(file.delete())size-=length;
+        }
     }
 
     private void chooseImportCategory(){
