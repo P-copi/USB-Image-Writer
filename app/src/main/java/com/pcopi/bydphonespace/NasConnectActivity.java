@@ -61,6 +61,7 @@ public class NasConnectActivity extends Activity {
     private String activeProfileId="";
     private final LinkedHashMap<ImageView,NasSmbClient.Entry> thumbViews=new LinkedHashMap<>();
     private final java.util.HashSet<String> thumbQueued=new java.util.HashSet<>();
+    private final java.util.HashSet<String> thumbFailed=new java.util.HashSet<>();
     private int thumbGeneration=0;
     private boolean importing=false,loading=false;
     private int displayed=0;
@@ -89,7 +90,7 @@ public class NasConnectActivity extends Activity {
         showSetup();
     }
     @Override protected void onDestroy(){
-        cancelImport.set(true);io.shutdownNow();thumbnails.shutdownNow();cache.evictAll();super.onDestroy();
+        ++thumbGeneration;cancelImport.set(true);io.shutdownNow();thumbnails.shutdownNow();cache.evictAll();super.onDestroy();
     }
     @Override public void onBackPressed(){
         if(importing){Toast.makeText(this,"กำลังนำเข้าอยู่ กดยกเลิกในหน้าความคืบหน้าก่อน",Toast.LENGTH_SHORT).show();return;}
@@ -126,7 +127,7 @@ public class NasConnectActivity extends Activity {
 
 
     private void showSetup(){
-        thumbGeneration++;thumbViews.clear();thumbQueued.clear();
+        thumbGeneration++;thumbViews.clear();thumbQueued.clear();thumbFailed.clear();
         link=null;currentUrl=null;parents.clear();
         ScrollView scroll=new ScrollView(this);LinearLayout root=newRoot(scroll);
         header(root,"บัญชีที่บันทึกไว้ • SMB2/SMB3 • อัตโนมัติ LAN → Tailscale");
@@ -280,7 +281,7 @@ public class NasConnectActivity extends Activity {
 
     private void showFiles(){
         if(link==null){showSetup();return;}
-        ++thumbGeneration;thumbViews.clear();thumbQueued.clear();
+        ++thumbGeneration;thumbViews.clear();thumbQueued.clear();thumbFailed.clear();
         ScrollView scroll=new ScrollView(this);folderScroll=scroll;
         LinearLayout root=newRoot(scroll);
         header(root,"● เชื่อมต่อ "+link.route+" • "+link.host);
@@ -377,7 +378,7 @@ public class NasConnectActivity extends Activity {
 
     /** Only schedule on-screen thumbnails. Large directories no longer enqueue every image. */
     private void scheduleVisibleThumbs(){
-        if(link==null||folderScroll==null)return;
+        if(link==null||folderScroll==null||thumbnails.isShutdown())return;
         final int generation=thumbGeneration;
         final NasSmbClient.Link connection=link;
         final android.graphics.Rect rectangle=new android.graphics.Rect();
@@ -392,7 +393,7 @@ public class NasConnectActivity extends Activity {
                 if(key.equals(view.getTag()))view.setImageBitmap(loaded);
                 continue;
             }
-            if(thumbQueued.contains(key)||entry.size<=0||entry.size>24L*1024*1024)continue;
+            if(thumbQueued.contains(key)||thumbFailed.contains(key)||entry.size<=0||entry.size>24L*1024*1024)continue;
             if(thumbQueued.size()>=12||started>=8)break;
             thumbQueued.add(key);started++;
             thumbnails.execute(()->{
@@ -430,6 +431,9 @@ public class NasConnectActivity extends Activity {
                             }
                         }
                     }
+                    if(result==null&&generation==thumbGeneration){
+                        runOnUiThread(()->{if(generation==thumbGeneration)thumbFailed.add(key);});
+                    }
                     if(result!=null&&generation==thumbGeneration){
                         Bitmap finalBitmap=result;
                         runOnUiThread(()->{
@@ -438,12 +442,14 @@ public class NasConnectActivity extends Activity {
                             if(key.equals(view.getTag()))view.setImageBitmap(finalBitmap);
                         });
                     }
-                }catch(Exception ignored){}
+                }catch(Exception ignored){
+                    runOnUiThread(()->{if(generation==thumbGeneration)thumbFailed.add(key);});
+                }
                 finally{
                     runOnUiThread(()->{
                         if(generation==thumbGeneration){
                             thumbQueued.remove(key);
-                            if(folderScroll!=null)folderScroll.postDelayed(this::scheduleVisibleThumbs,50);
+                            if(folderScroll!=null&&!thumbnails.isShutdown())folderScroll.postDelayed(this::scheduleVisibleThumbs,50);
                         }
                     });
                 }
@@ -509,7 +515,7 @@ public class NasConnectActivity extends Activity {
                     if(cancelImport.get())break;
                     NasSmbClient.walkImages(link,item,cancelImport,file->{
                         if(!seen.add(file.url))return;
-                        String key=fingerprint(file.url+"|"+file.size+"|"+file.modified+"|"+category);
+                        String key=fingerprint(activeProfileId+"|"+file.url+"|"+file.size+"|"+file.modified+"|"+category);
                         String existing=ledger.getString(key,"");
                         if(!existing.isEmpty()&&new File(existing).isFile()&&new File(existing).length()==file.size){
                             skipped[0]++;return;
