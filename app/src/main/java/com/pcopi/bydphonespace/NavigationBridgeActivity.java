@@ -108,7 +108,8 @@ public class NavigationBridgeActivity extends Activity {
             +"2. ใน GPack เปิด Google Maps แล้วแตะช่อง ค้นหา\n"
             +"3. กดค้างในช่องค้นหา → เลือก วาง (Paste)\n"
             +"4. แตะค้นหา/นำทาง แล้วดูว่าชื่อสถานที่หรือพิกัดตรงกับภาพของเราไหม\n"
-            +"หากกดค้างไม่ขึ้นคำว่า วาง ให้แจ้งผม เพราะคลิปบอร์ดข้าม GPack อาจถูกแยกจาก Android หลัก",
+            +"วิธีใหม่: คัดลอกลิงก์เส้นทาง → เปิด GPack → เปิด Chrome → แตะช่องที่อยู่ → กดค้าง วาง → ไป\n"
+            +"หาก Chrome เปิดลิงก์ได้แต่ไม่เปิด Maps โดยตรง ให้บันทึกผลตามจริง",
             13,MUTED,false);
         pasteHelp.setPadding(0,dp(8),0,dp(2));paste.addView(pasteHelp);
         TextView title=tv("วิธีใช้งานและทดสอบใหม่",16,TEXT,true);title.setPadding(dp(3),dp(20),0,dp(8));root.addView(title);
