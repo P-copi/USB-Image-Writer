@@ -61,7 +61,7 @@ final class NasProfileStore {
         if(!p.getBoolean(KEY_MIGRATED,false)){
             NasSettings old=NasSettings.load(context);
             if(!old.user.isEmpty()&&!old.pass.isEmpty()){
-                out.add(new Profile("p-legacy","NAS • "+old.user,old));
+                out.add(new Profile("p-legacy","บัญชี NAS เดิม",old));
             }
             try{
                 save(context,out);
