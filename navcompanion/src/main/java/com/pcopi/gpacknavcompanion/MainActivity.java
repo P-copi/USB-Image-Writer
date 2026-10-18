@@ -5,6 +5,11 @@ import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
+import android.content.ComponentName;
+import android.content.pm.ActivityInfo;
+import android.content.pm.ResolveInfo;
+import android.os.ParcelFileDescriptor;
+import java.util.List;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -25,7 +30,10 @@ public final class MainActivity extends Activity {
     private final int BG=Color.rgb(7,16,27),SURFACE=Color.rgb(17,31,47),WHITE=0xfff2f7fc,
         MUTED=0xff9db1c5,CYAN=0xff4dc4ff;
     private EditText destination;
-    private TextView status;
+    private TextView status,installerStatus;
+    private static final String GPACK="com.gpack.agent";
+    private static final String GPACK_INSTALLER="com.bratwzi.auto.gpack.activity.AppInstallerActivity";
+    private static final String APK_MIME="application/vnd.android.package-archive";
 
     private int dp(float value){return (int)(getResources().getDisplayMetrics().density*value+.5f);}
     private GradientDrawable background(int color,int radius){
@@ -55,7 +63,7 @@ public final class MainActivity extends Activity {
         root.setPadding(dp(22),dp(20),dp(22),dp(30));sc.addView(root);
         TextView heading=label("BYD NAV COMPANION",23,WHITE);
         heading.setTypeface(Typeface.DEFAULT_BOLD);root.addView(heading);
-        TextView sub=label("GPack internal Google Maps compatibility test • V0.1.0",13,MUTED);
+        TextView sub=label("GPack internal Google Maps compatibility test • V0.1.1",13,MUTED);
         sub.setPadding(0,dp(6),0,dp(15));root.addView(sub);
         destination=new EditText(this);destination.setSingleLine(false);destination.setMinLines(2);
         destination.setTextColor(WHITE);destination.setTextSize(17);
@@ -74,6 +82,28 @@ public final class MainActivity extends Activity {
         Button diagnostics=button("ตรวจว่าพบ Google Maps ภายในหรือไม่",false);
         diagnostics.setOnClickListener(v->updateReport());addButton(root,diagnostics);
         status=label("",13,MUTED);status.setPadding(dp(7),dp(18),dp(7),dp(4));root.addView(status);
+
+        TextView installTitle=label("ส่ง Companion เข้า GPack (ทดสอบ)",19,WHITE);
+        installTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        installTitle.setPadding(0,dp(20),0,dp(8));root.addView(installTitle);
+        TextView installationNote=label(
+            "สำหรับ BYD: ติดตั้ง Companion APK จากแฟลชไดรฟ์บน Android ของรถก่อน "
+            +"จากนั้นกดปุ่มในหน้านี้โดยไม่ต้องเลือกไฟล์อีก\\n"
+            +"GPack ต้องยอมรับไฟล์จากแอปภายนอก จึงจะติดตั้งเข้าเครื่องจำลองได้ "
+            +"แอปจะไม่ติดตั้งเองเงียบ ๆ หรือรีเซ็ต GPack",13,MUTED);
+        installationNote.setPadding(dp(4),dp(7),dp(4),dp(9));root.addView(installationNote);
+
+        Button checkOwn=button("3. ตรวจสอบ APK ตัวช่วยที่ติดตั้งอยู่",false);
+        checkOwn.setOnClickListener(v->checkOwnApk());addButton(root,checkOwn);
+        Button install=button("4. ส่ง APK ตัวช่วยให้ GPack ติดตั้ง",true);
+        install.setOnClickListener(v->confirmInstallToGpack());addButton(root,install);
+        Button chooser=button("5. เปิด APK ด้วยตัวติดตั้งที่เครื่องรองรับ",false);
+        chooser.setOnClickListener(v->confirmOpenSystemInstaller());addButton(root,chooser);
+        Button inspect=button("รายงานช่องทางติดตั้ง GPack",false);
+        inspect.setOnClickListener(v->showInstallerReport());addButton(root,inspect);
+        installerStatus=label("สถานะ: ยังไม่ได้ทดลองการติดตั้งบนรถ",13,MUTED);
+        installerStatus.setTextIsSelectable(true);
+        installerStatus.setPadding(dp(7),dp(15),dp(7),dp(6));root.addView(installerStatus);
         TextView warning=label(
             "ทดสอบขณะรถจอดเท่านั้น • แอปนี้ไม่เข้าถึง NAS หรือบัญชี Google "
             +"และไม่บันทึกคลิปบอร์ดลงดิสก์\n"
@@ -82,6 +112,139 @@ public final class MainActivity extends Activity {
         setContentView(sc);
         updateReport();
     }
+    private void updateInstallStatus(String text){
+        if(installerStatus!=null)installerStatus.setText("ผลทดลองล่าสุด: "+text);
+    }
+
+    /** Tests whether this app can hand out its installed APK without a file picker. */
+    private boolean checkOwnApk(){
+        try(ParcelFileDescriptor fd=getContentResolver().openFileDescriptor(OwnApkProvider.URI,"r")){
+            long length=fd==null?-1:fd.getStatSize();
+            if(length<=0)throw new java.io.IOException("APK มีขนาด 0 หรืออ่านไม่ได้");
+            updateInstallStatus("อ่าน APK ของตัวช่วยจาก ContentProvider ได้ ("+(length/1024)+" KB)");
+            return true;
+        }catch(Exception e){
+            updateInstallStatus("อ่าน APK ของตัวเองไม่ได้: "+e.getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    private ActivityInfo externalGpackInstaller(){
+        try{
+            ActivityInfo info=getPackageManager().getActivityInfo(
+                    new ComponentName(GPACK,GPACK_INSTALLER),0);
+            if(!info.exported || (info.permission!=null&&!info.permission.isEmpty()))return null;
+            return info;
+        }catch(Exception e){return null;}
+    }
+
+    private String installerReport(){
+        StringBuilder out=new StringBuilder("BYD Nav Companion V0.1.1 — GPack self-APK handoff\n");
+        out.append("Android: ").append(Build.VERSION.RELEASE).append(" API ").append(Build.VERSION.SDK_INT).append('\n');
+        out.append("Companion APK: ").append(getApplicationInfo().sourceDir).append('\n');
+        out.append("Own APK URI: ").append(OwnApkProvider.URI).append('\n');
+        out.append("GPack visible: ");
+        try{
+            android.content.pm.PackageInfo pkg=getPackageManager().getPackageInfo(GPACK,0);
+            out.append("YES v").append(pkg.versionName).append('\n');
+        }catch(Exception e){out.append("NO\n");}
+        try{
+            ActivityInfo info=getPackageManager().getActivityInfo(new ComponentName(GPACK,GPACK_INSTALLER),0);
+            out.append("GPack AppInstaller exists: YES\n");
+            out.append("Exported: ").append(info.exported).append('\n');
+            out.append("Required permission: ").append(info.permission==null?"none":info.permission).append('\n');
+        }catch(Exception e){
+            out.append("GPack AppInstaller not accessible: ").append(e.getClass().getSimpleName()).append('\n');
+        }
+        Intent view=new Intent(Intent.ACTION_VIEW).setDataAndType(OwnApkProvider.URI,APK_MIME);
+        try{
+            List<ResolveInfo> apps=getPackageManager().queryIntentActivities(view,0);
+            out.append("Host APK view handlers: ").append(apps.size()).append('\n');
+            for(ResolveInfo r:apps)if(r.activityInfo!=null){
+                out.append(" • ").append(r.activityInfo.packageName)
+                    .append("/").append(r.activityInfo.name).append('\n');
+            }
+        }catch(Exception e){out.append("Cannot enumerate APK handlers\n");}
+        out.append("NOTE: startActivity success is NOT proof of installation inside GPack.");
+        return out.toString();
+    }
+
+    private void showInstallerReport(){
+        String report=installerReport();
+        new AlertDialog.Builder(this).setTitle("ผลตรวจ GPack Installer")
+            .setMessage(report)
+            .setPositiveButton("ตกลง",null)
+            .setNeutralButton("คัดลอกรายงาน",(d,w)->{
+                ClipboardManager cb=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+                if(cb!=null)cb.setPrimaryClip(ClipData.newPlainText("GPack Installer Report",report));
+            }).show();
+    }
+
+    private Intent attachOwnApk(Intent intent){
+        intent.setDataAndType(OwnApkProvider.URI,APK_MIME);
+        intent.setClipData(ClipData.newUri(getContentResolver(),"BYD Nav Companion APK",OwnApkProvider.URI));
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        return intent;
+    }
+
+    private void confirmInstallToGpack(){
+        if(!checkOwnApk())return;
+        if(externalGpackInstaller()==null){
+            new AlertDialog.Builder(this)
+                .setTitle("ยังสั่งตัวติดตั้ง GPack จากภายนอกไม่ได้")
+                .setMessage("ไม่พบ AppInstallerActivity ที่เปิดให้แอปภายนอกใช้ได้ "
+                    +"หรือ GPack ยังไม่ติดตั้งใน Android หลัก\n\n"
+                    +"การติดตั้ง APK บนรถตามปกติไม่ได้หมายความว่า APK ถูกติดตั้งภายใน GPack")
+                .setPositiveButton("ดูรายงาน",(d,w)->showInstallerReport())
+                .setNegativeButton("ปิด",null).show();
+            updateInstallStatus("GPack installer ไม่เปิดให้เรียกตรง หรือไม่พบ GPack");
+            return;
+        }
+        new AlertDialog.Builder(this)
+            .setTitle("ส่งตัวช่วยเข้า GPack?")
+            .setMessage("ตัวช่วยจะส่ง APK ที่ติดตั้งอยู่ของตัวเองให้ GPack AppInstaller "
+                +"โดยไม่ต้องเลือกไฟล์จาก USB อีกครั้ง\n\n"
+                +"ระบบ GPack อาจไม่ยอมรับไฟล์ หรืออาจแสดงหน้าติดตั้งให้คุณกดยืนยัน "
+                +"กรุณาตรวจว่าตัวช่วยปรากฏ *ในหน้ารวมแอปภายใน GPack* จริงหรือไม่\n\n"
+                +"ไม่แก้ไขบัญชี Google และไม่รีเซ็ต GPack")
+            .setNegativeButton("ยกเลิก",null)
+            .setPositiveButton("ทดลองส่งไฟล์",(d,w)->{
+                Intent request=attachOwnApk(new Intent(Intent.ACTION_VIEW)
+                    .setComponent(new ComponentName(GPACK,GPACK_INSTALLER)));
+                try{
+                    startActivity(request);
+                    updateInstallStatus("ส่งคำขอเปิดตัวติดตั้ง GPack แล้ว — ต้องตรวจผลจริง ไม่ใช่ยืนยันว่าติดตั้งสำเร็จ");
+                }catch(Exception error){
+                    updateInstallStatus("GPack ปฏิเสธคำขอ: "+error.getClass().getSimpleName()
+                        +(error.getMessage()==null?"":" / "+error.getMessage()));
+                    new AlertDialog.Builder(this).setTitle("ส่งเข้า GPack ไม่สำเร็จ")
+                        .setMessage("GPack ไม่รับคำขอติดตั้งจาก Companion\n"
+                            +error.getClass().getSimpleName()+"\n"
+                            +"กรุณาถ่ายภาพรายงานส่งกลับมา ไม่ต้องแก้ระบบรถ")
+                        .setPositiveButton("ตกลง",null).show();
+                }
+            }).show();
+    }
+
+    private void confirmOpenSystemInstaller(){
+        if(!checkOwnApk())return;
+        new AlertDialog.Builder(this)
+            .setTitle("เปิดด้วยตัวติดตั้ง APK ที่เครื่องรองรับ")
+            .setMessage("วิธีนี้อาจเปิดตัวติดตั้ง Android หลักของ BYD ซึ่งไม่ใช่ GPack\n\n"
+                +"ถ้ามีตัวเลือก GPack ให้เลือก GPack แล้วตรวจว่าติดตั้งภายในจริง "
+                +"ถ้าไม่มี ไม่จำเป็นต้องกดยืนยันติดตั้งซ้ำ")
+            .setNegativeButton("ยกเลิก",null)
+            .setPositiveButton("แสดงตัวเลือก",(d,w)->{
+                Intent view=attachOwnApk(new Intent(Intent.ACTION_VIEW));
+                try{
+                    startActivity(Intent.createChooser(view,"เลือกตัวติดตั้ง APK"));
+                    updateInstallStatus("เปิดตัวเลือกรับไฟล์ APK แล้ว — ตรวจว่า GPack ปรากฏหรือไม่");
+                }catch(Exception error){
+                    updateInstallStatus("ระบบรถไม่เปิดตัวเลือกติดตั้ง: "+error.getClass().getSimpleName());
+                }
+            }).show();
+    }
+
     private void readClipboard(){
         ClipboardManager cm=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
         if(cm==null||!cm.hasPrimaryClip()){message("ไม่พบข้อมูลคลิปบอร์ดในสภาพแวดล้อมนี้");return;}
