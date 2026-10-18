@@ -116,6 +116,11 @@ public class NavigationBridgeActivity extends Activity {
             }LinearLayout c=card();LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.setMargins(0,0,0,dp(9));root.addView(c,cp);
             c.addView(tv((i+1)+". "+NavigationBridge.label(mode),14.5f,TEXT,true));
             TextView status=tv(handlerSummary(mode),12,MUTED,false);status.setPadding(0,dp(6),0,0);c.addView(status);
+            String lastResult=outcome(mode);
+            if(!lastResult.isEmpty()){
+                TextView last=tv("ผลทดลองล่าสุด: "+lastResult,12,GREEN,false);
+                last.setPadding(0,dp(5),0,0);c.addView(last);
+            }
             Button test=button("ทดลองเปิดจุดหมายด้วยวิธีนี้",true);test.setOnClickListener(v->test(mode));c.addView(test,buttonLp());
         }
 
@@ -146,6 +151,7 @@ public class NavigationBridgeActivity extends Activity {
         try{pendingMode=mode;startActivity(intent);}
         catch(Exception e){
             pendingMode=null;
+            recordOutcome(mode,"Android เปิดคำสั่งไม่ได้");
             new AlertDialog.Builder(this).setTitle("Android เปิดวิธีนี้ไม่ได้")
                 .setMessage("ยังไม่พบตัวรับคำสั่งจากระบบหลักหรือจาก GPack\n"+e.getClass().getSimpleName())
                 .setPositiveButton("ตกลง",null).show();
@@ -158,11 +164,13 @@ public class NavigationBridgeActivity extends Activity {
                 .setTitle("ทดสอบเปิด GPack")
                 .setMessage("GPack เปิดแล้วหรือไม่? กรุณาลองเปิด Maps → แตะค้นหา → กดค้าง → วาง เพื่อตรวจว่าข้อความจากแอปเราข้ามเข้า GPack ได้หรือไม่")
                 .setPositiveButton("เปิดได้และวางได้",(d,w)->{
+                    recordOutcome(mode,"GPack เปิดได้ + วางข้อความใน Maps ได้ (ยังไม่อัตโนมัติ)");
                     NavigationBridge.saveConfirmed(this,NavigationBridge.GPACK_CLIP);
                     build();
                     Toast.makeText(this,"บันทึกทางสำรองแล้ว ยังต้องเปิด Maps และวางข้อความเอง",Toast.LENGTH_LONG).show();
                 })
                 .setNeutralButton("GPack เปิดได้ แต่วางไม่ได้",(d,w)->{
+                    recordOutcome(mode,"GPack เปิดได้ แต่ยังวางข้อความใน Maps ไม่ได้");
                     NavigationBridge.saveConfirmed(this,NavigationBridge.GPACK_CLIP);
                     build();
                     new AlertDialog.Builder(this).setTitle("GPack แยกคลิปบอร์ดหรือแป้นพิมพ์")
@@ -179,16 +187,27 @@ public class NavigationBridgeActivity extends Activity {
                 .setMessage("โปรดดูบนจอรถจริงก่อนเลือกผล หากไม่แน่ใจอย่าเพิ่งบันทึกวิธีนำทาง")
                 .setItems(options,(d,which)->{
                     if(which==0){
+                        recordOutcome(mode,"ยืนยันเปิด Maps พร้อมจุดหมายจริง");
                         new AlertDialog.Builder(this).setTitle("ตั้งเป็นวิธีนำทางหลัก?")
                                 .setMessage("หลังบันทึก ปุ่ม “นำทางไปที่นี่” ของรูปและเส้นทางจะใช้วิธีนี้จนกว่าจะเปลี่ยนใหม่")
                                 .setNegativeButton("ยังไม่บันทึก",null)
                                 .setPositiveButton("บันทึกวิธีนี้",(d2,w2)->{NavigationBridge.saveConfirmed(this,mode);build();Toast.makeText(this,"ตั้งวิธีนำทางหลักแล้ว",Toast.LENGTH_SHORT).show();})
                                 .show();
                     }else{
+                        recordOutcome(mode,which==1?"เปิดหน้าอื่นหรือ GPack แต่ไม่ถึง Maps พร้อมจุดหมาย":"ไม่เปิดหรือไม่มีจุดหมาย");
                         Toast.makeText(this,"ยังไม่บันทึกวิธีนี้ ลองรูปแบบอื่นต่อได้",Toast.LENGTH_LONG).show();
                     }
                 })
                 .setNegativeButton("ข้าม",null).show();
+    }
+
+    private void recordOutcome(String mode,String text){
+        getSharedPreferences("gpack_nav_test_results_v061",MODE_PRIVATE)
+            .edit().putString(mode,text).apply();
+    }
+    private String outcome(String mode){
+        return getSharedPreferences("gpack_nav_test_results_v061",MODE_PRIVATE)
+            .getString(mode,"");
     }
 
     private String handlerSummary(String mode){
@@ -238,7 +257,12 @@ public class NavigationBridgeActivity extends Activity {
         StringBuilder b=new StringBuilder("BYD Phone Space Navigation Bridge V0.6.1\n");
         b.append("Android: ").append(android.os.Build.VERSION.RELEASE).append(" API ").append(android.os.Build.VERSION.SDK_INT).append("\n");
         b.append("Chosen method: ").append(NavigationBridge.label(NavigationBridge.selected(this))).append("\n");
-        for(String mode:MODES){b.append("\n").append(NavigationBridge.label(mode)).append("\n").append(handlerSummary(mode)).append("\n");}
+        for(String mode:MODES){
+            b.append("\n").append(NavigationBridge.label(mode)).append("\n")
+                .append(handlerSummary(mode)).append("\n");
+            String result=outcome(mode);
+            if(!result.isEmpty())b.append("Actual user test: ").append(result).append("\n");
+        }
         List<ResolveInfo> list=gpackLaunchers();b.append("\nGPack-like launcher count: ").append(list.size()).append("\n");
         for(ResolveInfo r:list){if(r.activityInfo!=null){CharSequence label=r.loadLabel(getPackageManager());b.append("• ").append(label).append(" / ").append(r.activityInfo.packageName).append(" / ").append(r.activityInfo.name).append("\n");}}
         Intent speech=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
