@@ -69,7 +69,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gradle :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee /tmp/byd-build.log
+          gradle :app:assembleDebug :navcompanion:assembleDebug --stacktrace --no-daemon 2>&1 | tee /tmp/byd-build.log
 
       - name: Upload build log on failure
         if: failure()
@@ -84,7 +84,9 @@ jobs:
         run: |
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
+          COMPANION="navcompanion/build/outputs/apk/debug/navcompanion-debug.apk"
           test -s "$APK"
+          test -s "$COMPANION"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify \
             --min-sdk-version 26 --verbose --print-certs "$APK" | tee /tmp/byd-sign-verify.log
           EXPECTED="2859cc6d8afc6b3e864565ba1d7249473fea55527cf22fa7f25559f3004cda6f"
@@ -92,10 +94,18 @@ jobs:
             echo "::error::Unexpected APK signing certificate. Do not distribute this APK."
             exit 1
           fi
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify \
+            --min-sdk-version 26 --verbose --print-certs "$COMPANION" | tee /tmp/byd-companion-sign-verify.log
+          if ! grep -qi "Signer #1 certificate SHA-256 digest: $EXPECTED" /tmp/byd-companion-sign-verify.log; then
+            echo "::error::Unexpected companion APK signing certificate. Do not distribute."
+            exit 1
+          fi
 
       - name: Upload stable-signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: BYDPhoneSpace-stable-signed
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: BYDPhoneSpace-V0.7.0-and-NavCompanion
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            navcompanion/build/outputs/apk/debug/navcompanion-debug.apk
           retention-days: 30
