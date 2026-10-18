@@ -56,6 +56,12 @@ public class RouteViewerActivity extends Activity {
         info=tv("",12.5f,MUTED,false);info.setGravity(Gravity.CENTER);info.setPadding(dp(8),dp(8),dp(8),dp(4));root.addView(info);
 
         LinearLayout tools=new LinearLayout(this);tools.setPadding(0,dp(6),0,0);Button reset=dark("รีเซ็ตซูม");reset.setOnClickListener(v->image.resetZoom());tools.addView(reset,new LinearLayout.LayoutParams(0,dp(46),1));Button manage=dark("ชื่อ / GPS");LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(0,dp(46),1);mp.setMargins(dp(8),0,0,0);manage.setOnClickListener(v->manageCurrent());tools.addView(manage,mp);root.addView(tools);
+        LinearLayout rotations=new LinearLayout(this);rotations.setPadding(0,dp(6),0,0);
+        Button left=dark("↶ หมุนซ้าย");left.setOnClickListener(v->rotateCurrent(-90));
+        rotations.addView(left,new LinearLayout.LayoutParams(0,dp(44),1));
+        Button right=dark("↷ หมุนขวา");right.setOnClickListener(v->rotateCurrent(90));
+        LinearLayout.LayoutParams rightLp=new LinearLayout.LayoutParams(0,dp(44),1);rightLp.setMargins(dp(8),0,0,0);
+        rotations.addView(right,rightLp);root.addView(rotations);
 
         navigate=primary("นำทางไปที่นี่");navigate.setOnClickListener(v->navigateCurrent());LinearLayout.LayoutParams np=new LinearLayout.LayoutParams(-1,dp(58));np.setMargins(0,dp(8),0,0);root.addView(navigate,np);
         TextView hint=tv("ปัดซ้าย/ขวาเพื่อดูรูปตามชุดเส้นทาง",11.5f,MUTED,false);hint.setGravity(Gravity.CENTER);hint.setPadding(0,dp(7),0,0);root.addView(hint);
@@ -72,6 +78,14 @@ public class RouteViewerActivity extends Activity {
         info.setText(f.getName()+"  •  "+gps);info.setTextColor((!t.isEmpty()||exif.hasGps)?GREEN:MUTED);
     }
 
+    private void rotateCurrent(int degrees){
+        File f=current();if(f==null)return;
+        ImageOrientationStore.rotate(this,f,degrees);
+        image.setImageBitmap(ImageOrientationUtils.decode(this,f,2200));
+        image.post(image::resetZoom);
+        Toast.makeText(this,"บันทึกการหมุนรูปในแอปแล้ว",Toast.LENGTH_SHORT).show();
+    }
+
     private void swipe(int delta){if(animating||files.size()<2)return;animating=true;int next=(index+delta+files.size())%files.size();float d=Math.max(dp(80),image.getWidth()*0.18f);float out=delta>0?-d:d,in=-out;image.animate().translationX(out).alpha(.15f).setDuration(110).withEndAction(()->{index=next;showCurrent();image.setTranslationX(in);image.setAlpha(.18f);image.animate().translationX(0).alpha(1f).setDuration(160).withEndAction(()->animating=false).start();}).start();}
 
     private void manageCurrent(){File f=current();if(f==null)return;Intent i=new Intent(this,ImageViewerActivity.class);i.putExtra(ImageViewerActivity.EXTRA_PATH,f.getAbsolutePath());startActivity(i);}
@@ -83,7 +97,7 @@ public class RouteViewerActivity extends Activity {
     }
 
     private void launch(String q){NavigationBridge.launch(this,q);}
-    private Bitmap decode(String path,int target){BitmapFactory.Options o=new BitmapFactory.Options();o.inJustDecodeBounds=true;BitmapFactory.decodeFile(path,o);int s=1;while(o.outWidth/s>target*2||o.outHeight/s>target*2)s*=2;o.inJustDecodeBounds=false;o.inSampleSize=s;return BitmapFactory.decodeFile(path,o);}
+    private Bitmap decode(String path,int target){return ImageOrientationUtils.decode(this,new File(path),target);}
     private Button dark(String s){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTextSize(13.5f);b.setTextColor(TEXT);b.setBackground(round(CARD,16));return b;}
     private Button primary(String s){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTextSize(17);b.setTypeface(Typeface.DEFAULT_BOLD);b.setTextColor(Color.rgb(4,22,33));b.setBackground(round(CYAN,18));return b;}
 }
