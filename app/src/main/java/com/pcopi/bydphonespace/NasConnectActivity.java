@@ -44,7 +44,7 @@ public class NasConnectActivity extends Activity {
             CYAN=Color.rgb(77,196,255),GREEN=Color.rgb(93,219,168);
 
     private final ExecutorService io=Executors.newSingleThreadExecutor();
-    private final ExecutorService thumbnails=Executors.newSingleThreadExecutor();
+    private final ExecutorService thumbnails=Executors.newFixedThreadPool(2);
     private final LruCache<String,Bitmap> cache=new LruCache<String,Bitmap>(12*1024*1024){
         @Override protected int sizeOf(String key,Bitmap bitmap){return bitmap.getByteCount();}
     };
@@ -55,9 +55,13 @@ public class NasConnectActivity extends Activity {
     private NasSmbClient.Link link;
     private String currentUrl;
     private List<NasSmbClient.Entry> currentFiles=new ArrayList<>();
-    private EditText lan,tail,user,pass;
+    private EditText lan,tail,user,pass,profileName;
     private Spinner mode;
     private TextView status;
+    private String activeProfileId="";
+    private final LinkedHashMap<ImageView,NasSmbClient.Entry> thumbViews=new LinkedHashMap<>();
+    private final java.util.HashSet<String> thumbQueued=new java.util.HashSet<>();
+    private int thumbGeneration=0;
     private boolean importing=false,loading=false;
     private int displayed=0;
 
@@ -119,56 +123,138 @@ public class NasConnectActivity extends Activity {
     }
     private LinearLayout.LayoutParams fieldParams(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(51));p.setMargins(0,0,0,dp(3));return p;}
 
-    private void showSetup(){
-        ScrollView scroll=new ScrollView(this);LinearLayout root=newRoot(scroll);
-        header(root,"SMB2/SMB3 • LAN หรือ Tailscale • Synology Photos ไม่จำเป็น");
-        NasSettings saved=NasSettings.load(this);
-        LinearLayout card=panel();root.addView(card,cardParams());
-        card.addView(tv("เลือกช่องทางการเชื่อมต่อ",17,TEXT,true));
-        TextView subtitle=tv("อัตโนมัติจะลอง LAN ก่อน ถ้าเชื่อมต่อไม่ได้จึงลอง Tailscale",12.5f,MUTED,false);
-        subtitle.setPadding(0,dp(5),0,dp(10));card.addView(subtitle);
-        mode=new Spinner(this);
-        String[] choices={"อัตโนมัติ (LAN → Tailscale)","LAN เท่านั้น","Tailscale เท่านั้น"};
-        ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,choices);
-        mode.setAdapter(adapter);mode.setSelection(NasSettings.LAN.equals(saved.mode)?1:NasSettings.TAIL.equals(saved.mode)?2:0);
-        card.addView(mode,new LinearLayout.LayoutParams(-1,dp(50)));
-        card.addView(label("LAN IP / Hostname"));lan=field("เช่น 192.168.1.100",saved.lan,false);card.addView(lan,fieldParams());
-        card.addView(label("Tailscale IP / MagicDNS"));tail=field("เช่น 100.x.y.z",saved.tail,false);card.addView(tail,fieldParams());
-        card.addView(label("ชื่อผู้ใช้บน NAS"));user=field("Username",saved.user,false);card.addView(user,fieldParams());
-        card.addView(label("รหัสผ่าน NAS (เก็บแบบเข้ารหัส)"));pass=field("Password",saved.pass,true);card.addView(pass,fieldParams());
 
-        status=tv("○  รอทดสอบการเชื่อมต่อ",13,MUTED,true);status.setPadding(dp(5),dp(10),dp(5),dp(8));root.addView(status);
-        Button connect=button("เชื่อมต่อและเปิด Shared Folder",true);connect.setOnClickListener(v->connect());root.addView(connect,buttonParams());
-        TextView note=tv("ต้องใช้บัญชี NAS ที่มีสิทธิ์อ่าน Shared Folder และเปิด SMB ใน DSM เท่านั้น ไม่ต้องเปิด Synology Photos\n"
-                +"หากอยู่ภายนอกบ้าน ต้องเชื่อม Tailscale บนโทรศัพท์/จอรถก่อน",12.5f,MUTED,false);
-        note.setPadding(dp(4),dp(18),dp(4),0);root.addView(note);
+    private void showSetup(){
+        thumbGeneration++;thumbViews.clear();thumbQueued.clear();
+        link=null;currentUrl=null;parents.clear();
+        ScrollView scroll=new ScrollView(this);LinearLayout root=newRoot(scroll);
+        header(root,"บัญชีที่บันทึกไว้ • SMB2/SMB3 • อัตโนมัติ LAN → Tailscale");
+        List<NasProfileStore.Profile> profiles;
+        try{profiles=NasProfileStore.load(this);}
+        catch(Exception e){
+            TextView error=tv("อ่านโปรไฟล์ที่เข้ารหัสไม่ได้: "+e.getMessage(),14,Color.rgb(255,160,140),false);
+            error.setPadding(dp(12),dp(16),dp(12),dp(12));root.addView(error);setContentView(scroll);return;
+        }
+        LinearLayout intro=panel();intro.addView(tv("เลือกผู้ใช้ NAS",19,TEXT,true));
+        TextView note=tv("กด “เชื่อมต่อ” จากโปรไฟล์ที่บันทึกไว้ได้ทันที ไม่แสดงชื่อผู้ใช้หรือรหัสผ่านทุกครั้ง\n"
+                +"บัญชีแต่ละชุดมี LAN / Tailscale / โหมดอัตโนมัติของตนเอง",13,MUTED,false);
+        note.setPadding(0,dp(8),0,0);intro.addView(note);root.addView(intro,cardParams());
+        if(profiles.isEmpty()){
+            TextView empty=tv("ยังไม่มีผู้ใช้ที่บันทึกไว้ กด “＋ เพิ่มผู้ใช้ NAS” เพื่อเริ่มต้น",14,MUTED,false);
+            empty.setPadding(dp(8),dp(20),dp(8),dp(15));root.addView(empty);
+        }
+        final String last=NasProfileStore.last(this);
+        for(NasProfileStore.Profile profile:profiles){
+            LinearLayout box=panel();root.addView(box,cardParams());
+            String title=profile.label+(last.equals(profile.id)?"  ★ ล่าสุด":"");
+            box.addView(tv(title,18,TEXT,true));
+            String modeLabel=NasSettings.LAN.equals(profile.settings.mode)?"LAN เท่านั้น":
+                    NasSettings.TAIL.equals(profile.settings.mode)?"Tailscale เท่านั้น":"อัตโนมัติ (LAN → Tailscale)";
+            TextView sub=tv("SMB • "+modeLabel+"  •  เก็บข้อมูลเข้าสู่ระบบแบบเข้ารหัส",12.5f,MUTED,false);
+            sub.setPadding(0,dp(5),0,dp(8));box.addView(sub);
+            Button connect=button("เชื่อมต่อ NAS",true);
+            connect.setOnClickListener(v->connect(profile));box.addView(connect,buttonParams());
+            LinearLayout bar=new LinearLayout(this);bar.setOrientation(LinearLayout.HORIZONTAL);
+            Button edit=button("✎ แก้ไข",false);
+            Button delete=button("ลบโปรไฟล์",false);
+            LinearLayout.LayoutParams e=new LinearLayout.LayoutParams(0,dp(48),1);e.setMargins(0,dp(7),dp(5),0);
+            LinearLayout.LayoutParams d=new LinearLayout.LayoutParams(0,dp(48),1);d.setMargins(dp(5),dp(7),0,0);
+            bar.addView(edit,e);bar.addView(delete,d);box.addView(bar);
+            edit.setOnClickListener(v->showProfileEditor(profile));
+            delete.setOnClickListener(v->new AlertDialog.Builder(this)
+                    .setTitle("ลบโปรไฟล์ "+profile.label+"?")
+                    .setMessage("ลบเฉพาะค่าการเชื่อมต่อและรหัสผ่านที่เก็บไว้ในโทรศัพท์ ไม่ลบข้อมูลใน NAS หรือคลังรูป")
+                    .setNegativeButton("ยกเลิก",null)
+                    .setPositiveButton("ลบ",(dia,w)->{
+                        try{
+                            List<NasProfileStore.Profile> updated=NasProfileStore.load(this);
+                            updated.removeIf(x->x.id.equals(profile.id));
+                            NasProfileStore.save(this,updated);
+                            if(NasProfileStore.last(this).equals(profile.id))NasProfileStore.setLast(this,"");
+                            showSetup();
+                        }catch(Exception ex){Toast.makeText(this,"ลบโปรไฟล์ไม่สำเร็จ: "+ex.getMessage(),Toast.LENGTH_LONG).show();}
+                    }).show());
+        }
+        Button add=button("＋ เพิ่มผู้ใช้ NAS",true);add.setOnClickListener(v->showProfileEditor(null));
+        root.addView(add,buttonParams());
+        TextView help=tv("แนะนำให้ทดสอบ LAN บนโทรศัพท์ก่อน จากนั้นเลือก AUTO สำหรับเชื่อม LAN และ Tailscale โดยไม่ต้องเปลี่ยนบัญชี\n"
+                +"ไม่ต้องเปิด Synology Photos • ห้ามเปิดพอร์ต SMB 445 สู่ Internet สาธารณะ",12.5f,MUTED,false);
+        help.setPadding(dp(6),dp(20),dp(6),0);root.addView(help);
         setContentView(scroll);
     }
 
-    private void connect(){
+    private void showProfileEditor(NasProfileStore.Profile old){
+        ScrollView scroll=new ScrollView(this);LinearLayout root=newRoot(scroll);
+        header(root,old==null?"เพิ่มบัญชีใหม่":"แก้ไขบัญชี • แสดงข้อมูลเฉพาะหน้านี้");
+        LinearLayout card=panel();root.addView(card,cardParams());
+        NasSettings settings=old==null?new NasSettings("","","","",NasSettings.AUTO):old.settings;
+        card.addView(label("ชื่อโปรไฟล์ (แสดงบนหน้าแรก)"));
+        profileName=field("เช่น บัญชีบ้าน / Family",old==null?"":old.label,false);card.addView(profileName,fieldParams());
+        card.addView(label("เส้นทางเชื่อมต่อ"));
+        mode=new Spinner(this);
+        String[] choices={"อัตโนมัติ (LAN → Tailscale)","LAN เท่านั้น","Tailscale เท่านั้น"};
+        ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,choices);
+        mode.setAdapter(adapter);mode.setSelection(NasSettings.LAN.equals(settings.mode)?1:NasSettings.TAIL.equals(settings.mode)?2:0);
+        card.addView(mode,new LinearLayout.LayoutParams(-1,dp(50)));
+        card.addView(label("LAN IP / Hostname"));lan=field("เช่น 192.168.1.100",settings.lan,false);card.addView(lan,fieldParams());
+        card.addView(label("Tailscale IP / MagicDNS"));tail=field("เช่น 100.x.y.z",settings.tail,false);card.addView(tail,fieldParams());
+        card.addView(label("Username"));user=field("ชื่อผู้ใช้ Synology",settings.user,false);card.addView(user,fieldParams());
+        card.addView(label("Password (ปิดบังอักขระ)"));pass=field("รหัสผ่าน Synology",settings.pass,true);card.addView(pass,fieldParams());
+        Button save=button("บันทึกโปรไฟล์ (เข้ารหัส)",true);root.addView(save,buttonParams());
+        save.setOnClickListener(v->{
+            String label=profileName.getText().toString().trim();
+            String modeValue=mode.getSelectedItemPosition()==1?NasSettings.LAN:
+                    mode.getSelectedItemPosition()==2?NasSettings.TAIL:NasSettings.AUTO;
+            NasSettings s=new NasSettings(lan.getText().toString(),tail.getText().toString(),
+                    user.getText().toString(),pass.getText().toString(),modeValue);
+            if(label.isEmpty()){profileName.setError("กรุณาตั้งชื่อโปรไฟล์");return;}
+            if(s.user.isEmpty()){user.setError("กรุณากรอก Username");return;}
+            if(s.pass.isEmpty()){pass.setError("กรุณากรอก Password");return;}
+            if(s.lan.isEmpty()&&s.tail.isEmpty()){lan.setError("กรุณากรอก LAN หรือ Tailscale");return;}
+            try{
+                List<NasProfileStore.Profile> list=NasProfileStore.load(this);
+                String id=old==null?NasProfileStore.newId():old.id;
+                NasProfileStore.Profile saved=new NasProfileStore.Profile(id,label,s);
+                if(old!=null)list.removeIf(x->x.id.equals(id));
+                list.add(saved);NasProfileStore.save(this,list);
+                Toast.makeText(this,"บันทึกผู้ใช้แล้ว",Toast.LENGTH_SHORT).show();showSetup();
+            }catch(Exception e){Toast.makeText(this,"บันทึกไม่สำเร็จ: "+e.getMessage(),Toast.LENGTH_LONG).show();}
+        });
+        Button cancel=button("กลับไปเลือกรายชื่อผู้ใช้",false);
+        cancel.setOnClickListener(v->showSetup());root.addView(cancel,buttonParams());
+        setContentView(scroll);
+    }
+
+    private void connect(NasProfileStore.Profile profile){
         if(loading)return;
-        String choice=mode.getSelectedItemPosition()==1?NasSettings.LAN:
-                      mode.getSelectedItemPosition()==2?NasSettings.TAIL:NasSettings.AUTO;
-        NasSettings settings=new NasSettings(lan.getText().toString(),tail.getText().toString(),
-                user.getText().toString(),pass.getText().toString(),choice);
+        NasSettings settings=profile.settings;
         if(settings.user.isEmpty()||settings.pass.isEmpty()){
-            status.setText("กรุณากรอก Username และ Password");return;
+            Toast.makeText(this,"ไม่มี Username/Password กรุณาแก้ไขโปรไฟล์",Toast.LENGTH_LONG).show();return;
         }
-        try{settings.save(this);}catch(Exception e){
-            status.setText("ไม่สามารถเข้ารหัสและบันทึกรหัสผ่าน NAS ได้: "+e.getMessage());return;
-        }
-        loading=true;status.setText("กำลังเชื่อม NAS ผ่าน "+(NasSettings.AUTO.equals(choice)?"LAN → Tailscale":choice)+" …");
+        loading=true;activeProfileId=profile.id;
+        final android.app.ProgressDialog spinner=new android.app.ProgressDialog(this);
+        spinner.setMessage("กำลังเชื่อม "+profile.label+" • "+(
+            NasSettings.AUTO.equals(settings.mode)?"LAN → Tailscale":settings.mode));
+        spinner.setCancelable(false);spinner.show();
         io.execute(()->{
             try{
                 NasSmbClient.Link connected=NasSmbClient.connect(settings);
-                List<NasSmbClient.Entry> rootFiles=NasSmbClient.list(connected,connected.root());
+                List<NasSmbClient.Entry> files=NasSmbClient.list(connected,connected.root());
                 runOnUiThread(()->{
-                    loading=false;link=connected;currentUrl=connected.root();currentFiles=rootFiles;
-                    parents.clear();selected.clear();displayed=0;showFiles();
-                    Toast.makeText(this,"เชื่อมต่อสำเร็จผ่าน "+connected.route,Toast.LENGTH_SHORT).show();
+                    loading=false;spinner.dismiss();
+                    link=connected;currentUrl=connected.root();currentFiles=files;
+                    parents.clear();selected.clear();displayed=0;
+                    NasProfileStore.setLast(this,profile.id);
+                    showFiles();
+                    Toast.makeText(this,"เชื่อมต่อ "+connected.route+" สำเร็จ",Toast.LENGTH_SHORT).show();
                 });
             }catch(Exception e){
-                runOnUiThread(()->{loading=false;status.setText("เชื่อมต่อไม่สำเร็จ: "+NasSmbClient.friendly(e));});
+                runOnUiThread(()->{
+                    loading=false;spinner.dismiss();
+                    new AlertDialog.Builder(this).setTitle("เชื่อมต่อ NAS ไม่สำเร็จ")
+                        .setMessage(NasSmbClient.friendly(e))
+                        .setPositiveButton("ตกลง",null).show();
+                });
             }
         });
     }
