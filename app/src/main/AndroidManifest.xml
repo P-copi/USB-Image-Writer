@@ -31,6 +31,7 @@
             <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
         </intent>
         <package android:name="com.google.android.apps.maps" />
+        <package android:name="com.gpack.agent" />
         <package android:name="com.google.android.gms" />
         <package android:name="com.android.vending" />
         <package android:name="com.google.android.gsf" />
