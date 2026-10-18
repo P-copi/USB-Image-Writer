@@ -21,6 +21,9 @@ public final class NavigationBridge {
     public static final String WEB_DIR = "web_dir";
     public static final String WEB_SEARCH = "web_search";
     public static final String GPACK_CLIP = "gpack_clip";
+    public static final String GPACK_CLIP_URL = "gpack_clip_url";
+    public static final String NEUSOFT_GEO = "neusoft_geo";
+    public static final String NEUSOFT_PACKAGE = "com.neusoft.na.navigation";
     public static final String GPACK_GEO = "gpack_geo";
     public static final String GPACK_WEB = "gpack_web";
     // Standard Android intents directed at the GPack HOST package, not its internal Google apps.
@@ -51,11 +54,14 @@ public final class NavigationBridge {
                 ||WEB_DIR.equals(mode)||WEB_SEARCH.equals(mode)||GPACK_CLIP.equals(mode)
                 ||GPACK_GEO.equals(mode)||GPACK_WEB.equals(mode)
                 ||GPACK_SEARCH_VIEW.equals(mode)||GPACK_SHARE_TEXT.equals(mode)
-                ||GPACK_SHARE_MAPS_URL.equals(mode);
+                ||GPACK_SHARE_MAPS_URL.equals(mode)
+                ||GPACK_CLIP_URL.equals(mode)||NEUSOFT_GEO.equals(mode);
     }
 
     public static String label(String mode){
-        if(GPACK_CLIP.equals(mode))return "วิธีที่เปิดได้แล้ว: คัดลอกจุดหมาย + เปิด GPack";
+        if(GPACK_CLIP.equals(mode))return "ใช้ได้แล้ว: คัดลอกจุดหมาย + เปิด GPack";
+        if(GPACK_CLIP_URL.equals(mode))return "ลองลิงก์เส้นทาง Maps ผ่าน Chrome ใน GPack";
+        if(NEUSOFT_GEO.equals(mode))return "ลองระบบนำทางของรถ BYD (ไม่ใช่ Google Maps)";
         if(GPACK_SHARE_TEXT.equals(mode))return "ทดลองแชร์ชื่อสถานที่ไป GPack";
         if(GPACK_SHARE_MAPS_URL.equals(mode))return "ทดลองแชร์ลิงก์ Maps ไป GPack";
         if(GPACK_SEARCH_VIEW.equals(mode))return "ทดลองส่งลิงก์ค้นหา Maps เข้า GPack";
@@ -76,8 +82,11 @@ public final class NavigationBridge {
 
     public static Intent intentFor(String mode,String destination){
         String q=destination==null?"":destination.trim();
-        if(GPACK_CLIP.equals(mode))
+        if(GPACK_CLIP.equals(mode)||GPACK_CLIP_URL.equals(mode))
             return new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(GPACK_PACKAGE);
+        if(NEUSOFT_GEO.equals(mode))
+            return new Intent(Intent.ACTION_VIEW,Uri.parse("geo:0,0?q="+Uri.encode(q)))
+                .setPackage(NEUSOFT_PACKAGE);
         if(GPACK_SHARE_TEXT.equals(mode)||GPACK_SHARE_MAPS_URL.equals(mode)){
             String shared=GPACK_SHARE_TEXT.equals(mode)?q:mapsSearchUrl(q);
             Intent send=new Intent(Intent.ACTION_SEND);
@@ -112,6 +121,12 @@ public final class NavigationBridge {
         return "https://www.google.com/maps/search/?api=1&query="+Uri.encode(q);
     }
 
+    public static String mapsDirectionsUrl(String destination){
+        String q=destination==null?"":destination.trim();
+        return "https://www.google.com/maps/dir/?api=1&destination="+
+            Uri.encode(q)+"&travelmode=driving";
+    }
+
     /** Opens the known GPack launcher without undocumented internal APIs or permissions. */
     public static boolean openGpack(Context context){
         Intent launcher=context.getPackageManager().getLaunchIntentForPackage(GPACK_PACKAGE);
@@ -135,10 +150,14 @@ public final class NavigationBridge {
             Toast.makeText(context,"ยังไม่ได้เลือกจุดหมาย",Toast.LENGTH_SHORT).show();
             return false;
         }
-        if(GPACK_CLIP.equals(mode)){
+        if(GPACK_CLIP.equals(mode)||GPACK_CLIP_URL.equals(mode)){
+            boolean link=GPACK_CLIP_URL.equals(mode);
+            String copied=link?mapsDirectionsUrl(destination):destination.trim();
             ClipboardManager cm=(ClipboardManager)context.getSystemService(Context.CLIPBOARD_SERVICE);
-            if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("จุดหมาย BYD Phone Space",destination.trim()));
-            Toast.makeText(context,"คัดลอกแล้ว → เปิด Maps ใน GPack → แตะค้นหา → กดค้าง → วาง",Toast.LENGTH_LONG).show();
+            if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText(link?"ลิงก์เส้นทาง Google Maps":"จุดหมาย BYD Phone Space",copied));
+            Toast.makeText(context,link
+                    ?"คัดลอกลิงก์แล้ว → ใน GPack เปิด Chrome → แตะช่องที่อยู่ → กดค้าง → วาง → ไป"
+                    :"คัดลอกแล้ว → เปิด Maps ใน GPack → แตะค้นหา → กดค้าง → วาง",Toast.LENGTH_LONG).show();
             if(hasGpack(context))return openGpack(context);
             Toast.makeText(context,"ไม่พบ GPack บนเครื่องนี้ • จุดหมายถูกคัดลอกไว้แล้ว",Toast.LENGTH_LONG).show();
             return false;
