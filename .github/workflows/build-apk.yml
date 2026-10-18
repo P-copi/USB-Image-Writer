@@ -1,9 +1,12 @@
-name: Build BYD Phone Space APK
+name: Build BYD Phone Space Stable-Signed APK
 
 on:
   workflow_dispatch:
   push:
     branches: [ "feature/byd-phone-space-v0.1" ]
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -11,6 +14,8 @@ jobs:
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      BYD_SIGNING_KEYSTORE: ${{ runner.temp }}/byd-phone-space.p12
+      BYD_SIGNING_PASSWORD: ${{ secrets.BYD_SIGNING_PASSWORD }}
     steps:
       - name: Checkout app
         uses: actions/checkout@v5
@@ -32,32 +37,53 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Preserve debug signing key
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: byd-phone-space-debug-signing-v1
+      # The update key is stored ONLY in encrypted repository secrets, not git or cache.
+      - name: Restore stable signing key
+        shell: bash
+        env:
+          BYD_SIGNING_KEYSTORE_BASE64: ${{ secrets.BYD_SIGNING_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$BYD_SIGNING_KEYSTORE_BASE64" || -z "$BYD_SIGNING_PASSWORD" ]]; then
+            echo "::error::Configure BYD_SIGNING_KEYSTORE_BASE64 and BYD_SIGNING_PASSWORD in Actions secrets."
+            exit 1
+          fi
+          printf '%s' "$BYD_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$BYD_SIGNING_KEYSTORE"
+          chmod 600 "$BYD_SIGNING_KEYSTORE"
+          keytool -list -storetype PKCS12 -keystore "$BYD_SIGNING_KEYSTORE" \
+            -storepass "$BYD_SIGNING_PASSWORD" -alias "byd-phone-space" >/dev/null
 
-      - name: Build debug APK
+      - name: Build stable-signed APK
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
           gradle :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee /tmp/byd-build.log
 
       - name: Upload build log on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: BYDPhoneSpace-V0.1-build-log
+          name: BYDPhoneSpace-build-log
           path: /tmp/byd-build.log
           retention-days: 3
 
-      - name: Verify APK
-        run: test -s app/build/outputs/apk/debug/app-debug.apk
+      - name: Verify APK and permanent signing certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify \
+            --min-sdk-version 26 --verbose --print-certs "$APK" | tee /tmp/byd-sign-verify.log
+          EXPECTED="2859cc6d8afc6b3e864565ba1d7249473fea55527cf22fa7f25559f3004cda6f"
+          if ! grep -qi "Signer #1 certificate SHA-256 digest: $EXPECTED" /tmp/byd-sign-verify.log; then
+            echo "::error::Unexpected APK signing certificate. Do not distribute this APK."
+            exit 1
+          fi
 
-      - name: Upload APK
+      - name: Upload stable-signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: BYDPhoneSpace-V0.1-debug
+          name: BYDPhoneSpace-stable-signed
           path: app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 3
+          retention-days: 30
