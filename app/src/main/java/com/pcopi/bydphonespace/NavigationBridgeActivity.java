@@ -34,6 +34,8 @@ public class NavigationBridgeActivity extends Activity {
     private final int MUTED=Color.rgb(157,177,197),CYAN=Color.rgb(77,196,255),GREEN=Color.rgb(93,219,168),ORANGE=Color.rgb(255,197,111);
     private final String[] MODES = {
         NavigationBridge.GPACK_CLIP,
+        NavigationBridge.GPACK_CLIP_URL,
+        NavigationBridge.NEUSOFT_GEO,
         NavigationBridge.GPACK_SHARE_TEXT,
         NavigationBridge.GPACK_SHARE_MAPS_URL,
         NavigationBridge.GPACK_SEARCH_VIEW,
@@ -48,6 +50,7 @@ public class NavigationBridgeActivity extends Activity {
     private String pendingMode;
     private String destination="อนุสรณ์ดอนเจดีย์ สุพรรณบุรี";
     private EditText destinationInput;
+    private boolean showOlderTests=false;
 
     private int dp(float v){return (int)(v*getResources().getDisplayMetrics().density+0.5f);}
     private GradientDrawable round(int color,float r){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(r));return d;}
@@ -82,10 +85,10 @@ public class NavigationBridgeActivity extends Activity {
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(17),dp(15),dp(17),dp(30));scroll.addView(root);
         LinearLayout head=new LinearLayout(this);head.setGravity(Gravity.CENTER_VERTICAL);
         TextView back=tv("‹",36,TEXT,false);back.setGravity(Gravity.CENTER);back.setOnClickListener(v->finish());head.addView(back,new LinearLayout.LayoutParams(dp(48),dp(48)));
-        LinearLayout htxt=new LinearLayout(this);htxt.setOrientation(LinearLayout.VERTICAL);htxt.addView(tv("ทดสอบเชื่อม Maps / GPack",21,TEXT,true));htxt.addView(tv("Navigation Bridge • V0.6.1",12,MUTED,false));head.addView(htxt);root.addView(head);
+        LinearLayout htxt=new LinearLayout(this);htxt.setOrientation(LinearLayout.VERTICAL);htxt.addView(tv("ทดสอบเชื่อม Maps / GPack",21,TEXT,true));htxt.addView(tv("Navigation Bridge • V0.6.2",12,MUTED,false));head.addView(htxt);root.addView(head);
 
         LinearLayout intro=card();LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,dp(16),0,dp(12));root.addView(intro,p);
-        intro.addView(tv("Google Maps ภายใน GPack",17,CYAN,true));
+        intro.addView(tv("นำทางจากรูป → GPack หรือแผนที่รถ",17,CYAN,true));
         intro.addView(tv("ผลจอ BYD: พบ com.gpack.agent • geo: เดิมเปิดตัวนำทาง Neusoft ไม่ใช่ Maps ใน GPack",12.5f,ORANGE,false));
         TextView note=tv("บนจอ BYD แอป Maps อาจอยู่ใน GPack ไม่ใช่แพ็กเกจ Google Maps ของ Android หลัก\n"
                 +"ขั้นแรกลองทางสำรองที่เปิด GPack ได้แล้ว จากนั้นทดลองแชร์ข้อความ/ลิงก์เข้า GPack ทีละวิธี\nกดทดสอบเมื่อรถจอดเท่านั้น • ถ้าเปิดได้แต่ไม่ถึงจุดหมาย ห้ามบันทึกเป็นวิธีส่งตรง",13,MUTED,false);
@@ -108,9 +111,9 @@ public class NavigationBridgeActivity extends Activity {
             +"หากกดค้างไม่ขึ้นคำว่า วาง ให้แจ้งผม เพราะคลิปบอร์ดข้าม GPack อาจถูกแยกจาก Android หลัก",
             13,MUTED,false);
         pasteHelp.setPadding(0,dp(8),0,dp(2));paste.addView(pasteHelp);
-        TextView title=tv("ทดสอบส่งจุดหมายจากแอปไป GPack",16,TEXT,true);title.setPadding(dp(3),dp(20),0,dp(8));root.addView(title);
-        for(int i=0;i<MODES.length;i++){String mode=MODES[i];
-            if(i==6){
+        TextView title=tv("วิธีใช้งานและทดสอบใหม่",16,TEXT,true);title.setPadding(dp(3),dp(20),0,dp(8));root.addView(title);
+        for(int i=0;i<MODES.length;i++){if(i>2&&!showOlderTests)continue;String mode=MODES[i];
+            if(i==8){
                 TextView other=tv("การทดสอบมาตรฐาน Android (ส่วนใหญ่ไม่เห็น Maps ภายใน GPack)",14.5f,MUTED,true);
                 other.setPadding(dp(3),dp(12),0,dp(12));root.addView(other);
             }LinearLayout c=card();LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.setMargins(0,0,0,dp(9));root.addView(c,cp);
@@ -121,8 +124,16 @@ public class NavigationBridgeActivity extends Activity {
                 TextView last=tv("ผลทดลองล่าสุด: "+lastResult,12,GREEN,false);
                 last.setPadding(0,dp(5),0,0);c.addView(last);
             }
-            Button test=button("ทดลองเปิดจุดหมายด้วยวิธีนี้",true);test.setOnClickListener(v->test(mode));c.addView(test,buttonLp());
+            Button test=button(i==0?"คัดลอกชื่อ/พิกัด + เปิด GPack":i==1?"คัดลอกลิงก์ Maps + เปิด GPack":i==2?"ทดสอบแผนที่รถ":"ลองอีกครั้ง",true);
+            test.setOnClickListener(v->test(mode));c.addView(test,buttonLp());
         }
+
+        Button older=button(showOlderTests?"ซ่อนวิธีเดิมที่ไม่ผ่าน":"แสดงวิธีทดลองเดิมที่ไม่ผ่าน",false);
+        older.setOnClickListener(v->{
+            if(destinationInput!=null)destination=destinationInput.getText().toString();
+            showOlderTests=!showOlderTests;build();
+        });
+        root.addView(older,buttonLp());
 
         TextView help=tv("การแชร์เป็นการทดลอง ไม่ได้หมายความว่า GPack จะส่งข้อความให้ Google Maps ภายในได้อัตโนมัติ หากไม่ผ่าน ให้ใช้คัดลอกแล้ววางใน Maps เอง",12.5f,MUTED,false);
         help.setPadding(dp(3),dp(11),0,dp(10));root.addView(help);
@@ -137,7 +148,7 @@ public class NavigationBridgeActivity extends Activity {
     private void test(String mode){
         if(destinationInput!=null)destination=destinationInput.getText().toString().trim();
         if(destination.isEmpty()){destinationInput.setError("กรุณาใส่จุดหมาย");return;}
-        if(NavigationBridge.GPACK_CLIP.equals(mode)){
+        if(NavigationBridge.GPACK_CLIP.equals(mode)||NavigationBridge.GPACK_CLIP_URL.equals(mode)){
             if(!NavigationBridge.hasGpack(this)){
                 new AlertDialog.Builder(this).setTitle("ไม่พบ GPack")
                     .setMessage("บนโทรศัพท์ไม่ต้องติดตั้ง GPack เพื่อทดสอบวิธีอื่น\nให้ทดสอบวิธีนี้บนจอรถที่ติดตั้ง GPack")
@@ -159,6 +170,43 @@ public class NavigationBridgeActivity extends Activity {
     }
 
     private void askOutcome(String mode){
+        if(NavigationBridge.GPACK_CLIP_URL.equals(mode)){
+            new AlertDialog.Builder(this).setTitle("ผลการทดสอบลิงก์ใน Chrome ภายใน GPack")
+                .setMessage("ลองเปิด Chrome ภายใน GPack แล้วกดค้างที่ช่องที่อยู่ → วาง → ไป จากนั้นตรวจว่าปลายทางที่ส่งตรงหรือไม่")
+                .setItems(new String[]{
+                    "เปิด Google Maps พร้อมจุดหมาย/เส้นทางได้",
+                    "เปิดหน้าเว็บ แต่ยังไม่ใช่ Maps พร้อมจุดหมาย",
+                    "เปิดไม่ได้หรือวางลิงก์ไม่ได้"
+                },(d,which)->{
+                    recordOutcome(mode,which==0?"เปิด Maps พร้อมจุดหมายจากลิงก์ได้":
+                        which==1?"เปิดเว็บได้ แต่ยังไม่ถึง Maps พร้อมจุดหมาย":"เปิดไม่ได้หรือวางไม่ได้");
+                    if(which==0)new AlertDialog.Builder(this).setTitle("ใช้วิธีนี้เป็นหลัก?")
+                        .setMessage("ยังต้องเปิด Chrome ใน GPack แล้ววางลิงก์ด้วยตัวเอง แต่ไม่ต้องพิมพ์จุดหมายใหม่")
+                        .setNegativeButton("ยังไม่เลือก",null)
+                        .setPositiveButton("ตั้งเป็นหลัก",(dia,w)->{NavigationBridge.saveConfirmed(this,mode);build();})
+                        .show();
+                    else build();
+                }).setNegativeButton("ไว้ก่อน",null).show();
+            return;
+        }
+        if(NavigationBridge.NEUSOFT_GEO.equals(mode)){
+            new AlertDialog.Builder(this).setTitle("ผลการทดสอบแผนที่ของ BYD")
+                .setMessage("นี่เป็นระบบนำทางของรถ ไม่ใช่ Google Maps ใน GPack")
+                .setItems(new String[]{
+                    "เปิดแผนที่รถพร้อมจุดหมายถูกต้อง",
+                    "เปิดได้แต่ไม่มีจุดหมาย",
+                    "เปิดไม่ได้"
+                },(d,which)->{
+                    recordOutcome(mode,which==0?"แผนที่รถรับจุดหมายได้":
+                        which==1?"เปิดแผนที่รถ แต่ไม่มีจุดหมาย":"เปิดไม่ได้");
+                    if(which==0)new AlertDialog.Builder(this).setTitle("เลือกแผนที่รถเป็นหลัก?")
+                        .setMessage("หากเลือก ปุ่มนำทางจากรูปจะไปยังแผนที่รถ แทน Google Maps ใน GPack")
+                        .setNegativeButton("ยังไม่เลือก",null)
+                        .setPositiveButton("เลือก",(dia,w)->{NavigationBridge.saveConfirmed(this,mode);build();}).show();
+                    else build();
+                }).setNegativeButton("ไว้ก่อน",null).show();
+            return;
+        }
         if(NavigationBridge.GPACK_CLIP.equals(mode)){
             new AlertDialog.Builder(this)
                 .setTitle("ทดสอบเปิด GPack")
@@ -211,6 +259,12 @@ public class NavigationBridgeActivity extends Activity {
     }
 
     private String handlerSummary(String mode){
+        if(NavigationBridge.GPACK_CLIP_URL.equals(mode))
+            return NavigationBridge.hasGpack(this)
+                ?"คัดลอกลิงก์ Google Maps → เปิด GPack → วางใน Chrome ภายใน GPack"
+                :"ไม่พบ GPack บนเครื่องนี้";
+        if(NavigationBridge.NEUSOFT_GEO.equals(mode))
+            return "ทดสอบส่ง geo: โดยตรงไป com.neusoft.na.navigation • ไม่ใช่ GPack";
         if((NavigationBridge.GPACK_SHARE_TEXT.equals(mode)
                 ||NavigationBridge.GPACK_SHARE_MAPS_URL.equals(mode)
                 ||NavigationBridge.GPACK_SEARCH_VIEW.equals(mode))
@@ -254,7 +308,7 @@ public class NavigationBridgeActivity extends Activity {
     }
 
     private String report(){
-        StringBuilder b=new StringBuilder("BYD Phone Space Navigation Bridge V0.6.1\n");
+        StringBuilder b=new StringBuilder("BYD Phone Space Navigation Bridge V0.6.2\n");
         b.append("Android: ").append(android.os.Build.VERSION.RELEASE).append(" API ").append(android.os.Build.VERSION.SDK_INT).append("\n");
         b.append("Chosen method: ").append(NavigationBridge.label(NavigationBridge.selected(this))).append("\n");
         for(String mode:MODES){
