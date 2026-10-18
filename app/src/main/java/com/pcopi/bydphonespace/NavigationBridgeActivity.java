@@ -85,7 +85,7 @@ public class NavigationBridgeActivity extends Activity {
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(17),dp(15),dp(17),dp(30));scroll.addView(root);
         LinearLayout head=new LinearLayout(this);head.setGravity(Gravity.CENTER_VERTICAL);
         TextView back=tv("‹",36,TEXT,false);back.setGravity(Gravity.CENTER);back.setOnClickListener(v->finish());head.addView(back,new LinearLayout.LayoutParams(dp(48),dp(48)));
-        LinearLayout htxt=new LinearLayout(this);htxt.setOrientation(LinearLayout.VERTICAL);htxt.addView(tv("ทดสอบเชื่อม Maps / GPack",21,TEXT,true));htxt.addView(tv("Navigation Bridge • V0.6.2",12,MUTED,false));head.addView(htxt);root.addView(head);
+        LinearLayout htxt=new LinearLayout(this);htxt.setOrientation(LinearLayout.VERTICAL);htxt.addView(tv("ทดสอบเชื่อม Maps / GPack",21,TEXT,true));htxt.addView(tv("Navigation Bridge • V0.6.3",12,MUTED,false));head.addView(htxt);root.addView(head);
 
         LinearLayout intro=card();LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,dp(16),0,dp(12));root.addView(intro,p);
         intro.addView(tv("นำทางจากรูป → GPack หรือแผนที่รถ",17,CYAN,true));
@@ -96,6 +96,50 @@ public class NavigationBridgeActivity extends Activity {
         intro.addView(tv("วิธีที่บันทึกไว้: "+NavigationBridge.label(NavigationBridge.selected(this)),13,GREEN,true));
         Button reset=button("คืนค่าการนำทางแบบเดิม",false);reset.setOnClickListener(v->{NavigationBridge.reset(this);build();});intro.addView(reset,buttonLp());
 
+        LinearLayout shortcut=card();
+        LinearLayout.LayoutParams scp=new LinearLayout.LayoutParams(-1,-2);
+        scp.setMargins(0,dp(8),0,dp(12));root.addView(shortcut,scp);
+        shortcut.addView(tv("Maps ทางลัดจาก GPack • ตรวจอย่างปลอดภัย",17,CYAN,true));
+        TextView hint=tv("คุณยืนยันว่าไอคอน Maps บนหน้ารถเปิด Maps ได้ทันที\\n"
+            +"เราจะตรวจว่า GPack อนุญาตให้นำทางลัดนั้นมาใช้ใน BYD Phone Space ได้หรือไม่"
+            +" โดยไม่เปลี่ยน Launcher หรือแก้ไข GPack",12.5f,MUTED,false);
+        hint.setPadding(0,dp(8),0,dp(8));shortcut.addView(hint);
+        String availability=GpackShortcutHelper.createShortcutProviders(this).isEmpty()
+            ?"ยังไม่พบช่องทางให้แอปอื่นขอสร้างทางลัดจาก GPack"
+            :"พบช่องทางขอสร้างทางลัดอย่างเป็นทางการจาก GPack";
+        shortcut.addView(tv(availability,12,
+            GpackShortcutHelper.createShortcutProviders(this).isEmpty()?ORANGE:GREEN,false));
+        Button check=button("ตรวจรายงานทางลัด Maps",false);
+        check.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("ผลตรวจทางลัด Maps")
+            .setMessage(GpackShortcutHelper.report(this))
+            .setPositiveButton("ตกลง",null)
+            .setNeutralButton("คัดลอก",(d,w)->{
+                copy(GpackShortcutHelper.report(this));
+                Toast.makeText(this,"คัดลอกรายงานทางลัดแล้ว",Toast.LENGTH_SHORT).show();
+            }).show());
+        shortcut.addView(check,buttonLp());
+        Button request=button("ขอทางลัด Maps จาก GPack (ถ้ารองรับ)",false);
+        request.setEnabled(!GpackShortcutHelper.createShortcutProviders(this).isEmpty());
+        request.setOnClickListener(v->{
+            Intent intent=GpackShortcutHelper.createShortcutRequest(this);
+            if(intent==null)return;
+            try{startActivityForResult(intent,GpackShortcutHelper.REQUEST_CREATE);}
+            catch(Exception e){Toast.makeText(this,"GPack ไม่อนุญาตให้ขอทางลัดด้วยวิธีนี้",Toast.LENGTH_LONG).show();}
+        });
+        shortcut.addView(request,buttonLp());
+        if(GpackShortcutHelper.hasCandidate(this)){
+            Button tryShortcut=button("ทดสอบเปิด Maps จากทางลัดที่ได้รับ",true);
+            tryShortcut.setOnClickListener(v->{
+                if(destinationInput!=null)destination=destinationInput.getText().toString().trim();
+                if(destination.isEmpty())destination="อนุสรณ์ดอนเจดีย์ สุพรรณบุรี";
+                pendingMode="probe_shortcut";
+                if(!GpackShortcutHelper.open(this)){
+                    pendingMode=null;
+                    Toast.makeText(this,"เปิดจากทางลัดไม่สำเร็จ",Toast.LENGTH_LONG).show();
+                }
+            });
+            shortcut.addView(tryShortcut,buttonLp());
+        }
         TextView label=tv("สถานที่สำหรับทดสอบ (แก้ไขได้)",15,TEXT,true);label.setPadding(dp(3),dp(4),0,dp(6));root.addView(label);
         destinationInput=new EditText(this);destinationInput.setText(destination);destinationInput.setSingleLine(true);destinationInput.setTextSize(15);destinationInput.setTextColor(TEXT);destinationInput.setHintTextColor(MUTED);destinationInput.setHint("ชื่อสถานที่ หรือ latitude,longitude");
         destinationInput.setPadding(dp(13),dp(8),dp(13),dp(8));destinationInput.setBackground(round(CARD,16));root.addView(destinationInput,new LinearLayout.LayoutParams(-1,dp(52)));
@@ -170,7 +214,42 @@ public class NavigationBridgeActivity extends Activity {
         }
     }
 
+    @Override protected void onActivityResult(int request,int result,Intent data){
+        super.onActivityResult(request,result,data);
+        if(request!=GpackShortcutHelper.REQUEST_CREATE)return;
+        if(result==RESULT_OK&&GpackShortcutHelper.saveFromResult(this,data)){
+            new AlertDialog.Builder(this).setTitle("ได้รับทางลัดจาก GPack")
+                .setMessage("ได้รับทางลัดที่ชี้ไปยัง GPack แล้ว แต่ยังไม่รับรองว่าเปิด Google Maps ได้\\n"
+                    +"ให้กดทดสอบเปิด Maps ก่อนเลือกใช้เป็นตัวนำทางหลัก")
+                .setPositiveButton("ตกลง",(d,w)->build()).show();
+        }else{
+            new AlertDialog.Builder(this).setTitle("ยังไม่ได้รับทางลัด Maps")
+                .setMessage("GPack อาจรองรับเฉพาะการสร้างทางลัดบน Launcher ของรถ"
+                    +" จึงไม่ส่งข้อมูลทางลัดให้อีกแอปหนึ่งได้\\n"
+                    +"ระบบนำทางเดิมและการคัดลอกจุดหมายยังใช้งานได้ตามปกติ")
+                .setPositiveButton("ตกลง",null).show();
+        }
+    }
+
     private void askOutcome(String mode){
+        if("probe_shortcut".equals(mode)){
+            new AlertDialog.Builder(this).setTitle("ผลทดสอบทางลัด GPack")
+                .setMessage("ทางลัดที่ GPack ส่งมา เปิดถึงหน้า Google Maps โดยตรงหรือไม่?")
+                .setPositiveButton("เปิด Maps ได้ทันที",(d,w)->{
+                    GpackShortcutHelper.confirm(this);
+                    new AlertDialog.Builder(this).setTitle("เลือกใช้ทางลัด Maps?")
+                        .setMessage("เมื่อกดนำทาง แอปจะคัดลอกจุดหมาย แล้วเปิด Maps ผ่านทางลัดที่ยืนยัน\\n"
+                            +"ยังต้องกดค้นหาแล้ววางจุดหมายเอง เพราะ GPack ยังไม่รองรับการส่งพิกัดตรง")
+                        .setPositiveButton("เลือกใช้",(dia,which)->{
+                            NavigationBridge.saveConfirmed(this,NavigationBridge.GPACK_SHORTCUT_CLIP);build();
+                        }).setNegativeButton("เก็บไว้ก่อน",(dia,which)->build()).show();
+                })
+                .setNeutralButton("เปิด GPack แต่ไม่ถึง Maps",(d,w)->{
+                    GpackShortcutHelper.reset(this);build();
+                })
+                .setNegativeButton("ไว้ก่อน",null).show();
+            return;
+        }
         if(NavigationBridge.GPACK_CLIP_URL.equals(mode)){
             new AlertDialog.Builder(this).setTitle("ผลการทดสอบลิงก์ใน Chrome ภายใน GPack")
                 .setMessage("ลองเปิด Chrome ภายใน GPack แล้วกดค้างที่ช่องที่อยู่ → วาง → ไป จากนั้นตรวจว่าปลายทางที่ส่งตรงหรือไม่")
@@ -337,6 +416,7 @@ public class NavigationBridgeActivity extends Activity {
             }
             b.append("Exported activity count: ").append(exposed).append("\n");
         }catch(Exception e){b.append("Not visible from Android host\n");}
+        b.append("\\n").append(GpackShortcutHelper.report(this)).append("\\n");
         b.append("GPack discovered package: ").append(NavigationBridge.GPACK_PACKAGE)
             .append(" / visible: ").append(NavigationBridge.hasGpack(this)).append("\n");
         b.append("หมายเหตุ: ตัวรับ intent != ยืนยันว่า Google Maps ภายใน GPack รับจุดหมายแล้ว\n");
