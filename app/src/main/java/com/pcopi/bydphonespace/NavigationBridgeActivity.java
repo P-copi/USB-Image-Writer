@@ -1,0 +1,196 @@
+package com.pcopi.bydphonespace;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
+import android.os.Bundle;
+import android.speech.RecognizerIntent;
+import android.view.Gravity;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+public class NavigationBridgeActivity extends Activity {
+    private final int BG=Color.rgb(7,16,27),CARD=Color.rgb(17,31,47),TEXT=Color.rgb(242,247,252);
+    private final int MUTED=Color.rgb(157,177,197),CYAN=Color.rgb(77,196,255),GREEN=Color.rgb(93,219,168),ORANGE=Color.rgb(255,197,111);
+    private final String[] MODES = {NavigationBridge.DIRECT, NavigationBridge.GEO, NavigationBridge.NAV, NavigationBridge.WEB_DIR, NavigationBridge.WEB_SEARCH};
+    private String pendingMode;
+    private String destination="อนุสรณ์ดอนเจดีย์ สุพรรณบุรี";
+    private EditText destinationInput;
+
+    private int dp(float v){return (int)(v*getResources().getDisplayMetrics().density+0.5f);}
+    private GradientDrawable round(int color,float r){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(r));return d;}
+    private TextView tv(String text,float size,int color,boolean bold){TextView v=new TextView(this);v.setText(text);v.setTextSize(size);v.setTextColor(color);v.setTypeface(Typeface.create("sans",bold?Typeface.BOLD:Typeface.NORMAL));return v;}
+    private Button button(String label,boolean primary){Button b=new Button(this);b.setAllCaps(false);b.setText(label);b.setTextSize(14);b.setTextColor(primary?Color.rgb(4,22,33):TEXT);b.setBackground(round(primary?CYAN:Color.rgb(25,44,63),16));return b;}
+    private LinearLayout.LayoutParams buttonLp(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(48));p.setMargins(0,dp(8),0,0);return p;}
+    private LinearLayout card(){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);c.setPadding(dp(16),dp(14),dp(16),dp(14));c.setBackground(round(CARD,19));return c;}
+
+    @Override public void onCreate(Bundle state){
+        super.onCreate(state);
+        getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
+        if(state!=null){destination=state.getString("destination",destination);pendingMode=state.getString("pendingMode");}
+        build();
+    }
+
+    @Override protected void onSaveInstanceState(Bundle out){
+        if(destinationInput!=null)destination=destinationInput.getText().toString();
+        out.putString("destination",destination);out.putString("pendingMode",pendingMode);
+        super.onSaveInstanceState(out);
+    }
+
+    @Override protected void onResume(){
+        super.onResume();
+        if(pendingMode!=null){
+            String mode=pendingMode;pendingMode=null;
+            getWindow().getDecorView().postDelayed(()->askOutcome(mode),200);
+        }
+    }
+
+    private void build(){
+        ScrollView scroll=new ScrollView(this);scroll.setBackgroundColor(BG);scroll.setFillViewport(true);
+        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(17),dp(15),dp(17),dp(30));scroll.addView(root);
+        LinearLayout head=new LinearLayout(this);head.setGravity(Gravity.CENTER_VERTICAL);
+        TextView back=tv("‹",36,TEXT,false);back.setGravity(Gravity.CENTER);back.setOnClickListener(v->finish());head.addView(back,new LinearLayout.LayoutParams(dp(48),dp(48)));
+        LinearLayout htxt=new LinearLayout(this);htxt.setOrientation(LinearLayout.VERTICAL);htxt.addView(tv("ทดสอบเชื่อม Maps / GPack",21,TEXT,true));htxt.addView(tv("Navigation Bridge • V0.4.2",12,MUTED,false));head.addView(htxt);root.addView(head);
+
+        LinearLayout intro=card();LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,dp(16),0,dp(12));root.addView(intro,p);
+        intro.addView(tv("Google Maps ภายใน GPack",17,CYAN,true));
+        TextView note=tv("บนจอ BYD แอป Maps อาจอยู่ใน GPack ไม่ใช่แพ็กเกจ Google Maps ของ Android หลัก\n"
+                +"ทดสอบทีละวิธี แล้วกลับมากดว่าจุดหมายเปิดใน Maps จริงหรือไม่ เราจะจำเฉพาะวิธีที่คุณยืนยันแล้วเท่านั้น",13,MUTED,false);
+        note.setPadding(0,dp(8),0,dp(8));intro.addView(note);
+        intro.addView(tv("วิธีที่บันทึกไว้: "+NavigationBridge.label(NavigationBridge.selected(this)),13,GREEN,true));
+        Button reset=button("คืนค่าการนำทางแบบเดิม",false);reset.setOnClickListener(v->{NavigationBridge.reset(this);build();});intro.addView(reset,buttonLp());
+
+        TextView label=tv("สถานที่สำหรับทดสอบ (แก้ไขได้)",15,TEXT,true);label.setPadding(dp(3),dp(4),0,dp(6));root.addView(label);
+        destinationInput=new EditText(this);destinationInput.setText(destination);destinationInput.setSingleLine(true);destinationInput.setTextSize(15);destinationInput.setTextColor(TEXT);destinationInput.setHintTextColor(MUTED);destinationInput.setHint("ชื่อสถานที่ หรือ latitude,longitude");
+        destinationInput.setPadding(dp(13),dp(8),dp(13),dp(8));destinationInput.setBackground(round(CARD,16));root.addView(destinationInput,new LinearLayout.LayoutParams(-1,dp(52)));
+
+        TextView title=tv("ทดสอบรูปแบบการส่งจุดหมาย",16,TEXT,true);title.setPadding(dp(3),dp(20),0,dp(8));root.addView(title);
+        for(int i=0;i<MODES.length;i++){String mode=MODES[i];LinearLayout c=card();LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.setMargins(0,0,0,dp(9));root.addView(c,cp);
+            c.addView(tv((i+1)+". "+NavigationBridge.label(mode),14.5f,TEXT,true));
+            TextView status=tv(handlerSummary(mode),12,MUTED,false);status.setPadding(0,dp(6),0,0);c.addView(status);
+            Button test=button("ทดลองเปิดจุดหมายด้วยวิธีนี้",true);test.setOnClickListener(v->test(mode));c.addView(test,buttonLp());
+        }
+
+        TextView help=tv("ถ้าทุกวิธีเปิด GPack แต่ไม่ส่งจุดหมายเข้า Maps ได้ ให้ใช้ปุ่มด้านล่างเป็นทางสำรอง: คัดลอกจุดหมายแล้วเปิด GPack เพื่อวางในช่องค้นหา",12.5f,MUTED,false);
+        help.setPadding(dp(3),dp(11),0,dp(10));root.addView(help);
+        Button manual=button("คัดลอกจุดหมาย + เปิด GPack",false);manual.setOnClickListener(v->openGpackManual());root.addView(manual,buttonLp());
+
+        TextView repTitle=tv("รายงานการตรวจระบบ",16,TEXT,true);repTitle.setPadding(dp(3),dp(24),0,dp(8));root.addView(repTitle);
+        TextView report=tv(report(),12.5f,MUTED,false);report.setPadding(dp(14),dp(14),dp(14),dp(14));report.setTextIsSelectable(true);report.setBackground(round(CARD,16));root.addView(report);
+        Button copy=button("คัดลอกรายงาน Navigation Bridge",true);copy.setOnClickListener(v->{copy(report());Toast.makeText(this,"คัดลอกรายงานแล้ว",Toast.LENGTH_SHORT).show();});root.addView(copy,buttonLp());
+        setContentView(scroll);
+    }
+
+    private void test(String mode){
+        if(destinationInput!=null)destination=destinationInput.getText().toString().trim();
+        if(destination.isEmpty()){destinationInput.setError("กรุณาใส่จุดหมาย");return;}
+        Intent intent=NavigationBridge.intentFor(mode,destination);
+        try{pendingMode=mode;startActivity(intent);}
+        catch(Exception e){pendingMode=null;new AlertDialog.Builder(this).setTitle("Android เปิดวิธีนี้ไม่ได้")
+                .setMessage("ไม่พบตัวรับคำสั่ง หรือแอปปลายทางปฏิเสธคำสั่ง\n"+e.getClass().getSimpleName())
+                .setPositiveButton("ตกลง",null).show();}
+    }
+
+    private void askOutcome(String mode){
+        String[] options={"เปิด Google Maps ใน GPack ถึงจุดหมายจริง",
+                "เปิดเว็บ/แอปอื่น แต่ไม่ใช่ Maps ใน GPack",
+                "เปิดไม่ได้ หรือเปิดได้แต่ไม่ถึงจุดหมาย"};
+        new AlertDialog.Builder(this).setTitle("ผลทดลอง: "+NavigationBridge.label(mode))
+                .setMessage("โปรดดูบนจอรถจริงก่อนเลือกผล หากไม่แน่ใจอย่าเพิ่งบันทึกวิธีนำทาง")
+                .setItems(options,(d,which)->{
+                    if(which==0){
+                        new AlertDialog.Builder(this).setTitle("ตั้งเป็นวิธีนำทางหลัก?")
+                                .setMessage("หลังบันทึก ปุ่ม “นำทางไปที่นี่” ของรูปและเส้นทางจะใช้วิธีนี้จนกว่าจะเปลี่ยนใหม่")
+                                .setNegativeButton("ยังไม่บันทึก",null)
+                                .setPositiveButton("บันทึกวิธีนี้",(d2,w2)->{NavigationBridge.saveConfirmed(this,mode);build();Toast.makeText(this,"ตั้งวิธีนำทางหลักแล้ว",Toast.LENGTH_SHORT).show();})
+                                .show();
+                    }else{
+                        Toast.makeText(this,"ยังไม่บันทึกวิธีนี้ ลองรูปแบบอื่นต่อได้",Toast.LENGTH_LONG).show();
+                    }
+                })
+                .setNegativeButton("ข้าม",null).show();
+    }
+
+    private String handlerSummary(String mode){
+        Intent i=NavigationBridge.intentFor(mode,"Bangkok");
+        List<ResolveInfo> apps;
+        try{apps=getPackageManager().queryIntentActivities(i,PackageManager.MATCH_DEFAULT_ONLY);}
+        catch(Exception e){return "อ่านรายชื่อแอปที่รับคำสั่งไม่ได้";}
+        if(apps==null||apps.isEmpty())return "Android หลัก: ยังไม่พบแอปที่ประกาศรับคำสั่งนี้ (ยังทดลองกดได้)";
+        StringBuilder s=new StringBuilder("Android หลักพบ "+apps.size()+" ตัวรับ");
+        int n=0;for(ResolveInfo r:apps){if(r.activityInfo==null)continue;if(n++>=3)break;s.append("\n• ").append(r.activityInfo.packageName);}
+        return s.toString();
+    }
+
+    private void openGpackManual(){
+        if(destinationInput!=null)destination=destinationInput.getText().toString().trim();
+        if(destination.isEmpty()){destinationInput.setError("กรุณาใส่จุดหมาย");return;}
+        copy(destination);
+        List<ResolveInfo> list=gpackLaunchers();
+        if(list.isEmpty()){new AlertDialog.Builder(this).setTitle("คัดลอกจุดหมายแล้ว")
+                .setMessage("ยังมองไม่เห็นแพ็กเกจ GPack จาก Android หลัก ให้กดเปิดไอคอน GPack ที่หน้า Home รถ แล้ววางจุดหมายใน Google Maps ได้เลย")
+                .setPositiveButton("ตกลง",null).show();return;}
+        ResolveInfo r=list.get(0);
+        try{
+            Intent launch=getPackageManager().getLaunchIntentForPackage(r.activityInfo.packageName);
+            if(launch==null){launch=new Intent(Intent.ACTION_MAIN);launch.addCategory(Intent.CATEGORY_LAUNCHER);launch.setClassName(r.activityInfo.packageName,r.activityInfo.name);}
+            startActivity(launch);
+        }catch(Exception e){Toast.makeText(this,"คัดลอกแล้ว แต่เปิด GPack อัตโนมัติไม่ได้ ให้กดไอคอน GPack เอง",Toast.LENGTH_LONG).show();}
+    }
+
+    private List<ResolveInfo> gpackLaunchers(){
+        ArrayList<ResolveInfo> result=new ArrayList<>();
+        try{
+            Intent launcher=new Intent(Intent.ACTION_MAIN);launcher.addCategory(Intent.CATEGORY_LAUNCHER);
+            List<ResolveInfo> all=getPackageManager().queryIntentActivities(launcher,0);
+            for(ResolveInfo r:all){
+                if(r.activityInfo==null)continue;
+                String pkg=r.activityInfo.packageName;
+                CharSequence raw=r.loadLabel(getPackageManager());
+                String label=raw==null?"":raw.toString();
+                String text=(pkg+" "+label).toLowerCase(Locale.ROOT);
+                if(text.contains("gpack")||text.contains("gbox")||text.contains("gspace"))result.add(r);
+            }
+        }catch(Exception ignored){}
+        return result;
+    }
+
+    private String report(){
+        StringBuilder b=new StringBuilder("BYD Phone Space Navigation Bridge V0.4.2\n");
+        b.append("Android: ").append(android.os.Build.VERSION.RELEASE).append(" API ").append(android.os.Build.VERSION.SDK_INT).append("\n");
+        b.append("Chosen method: ").append(NavigationBridge.label(NavigationBridge.selected(this))).append("\n");
+        for(String mode:MODES){b.append("\n").append(NavigationBridge.label(mode)).append("\n").append(handlerSummary(mode)).append("\n");}
+        List<ResolveInfo> list=gpackLaunchers();b.append("\nGPack-like launcher count: ").append(list.size()).append("\n");
+        for(ResolveInfo r:list){if(r.activityInfo!=null){CharSequence label=r.loadLabel(getPackageManager());b.append("• ").append(label).append(" / ").append(r.activityInfo.packageName).append(" / ").append(r.activityInfo.name).append("\n");}}
+        Intent speech=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        try{
+            List<ResolveInfo> speechApps=getPackageManager().queryIntentActivities(speech,PackageManager.MATCH_DEFAULT_ONLY);
+            b.append("Speech recognition handlers (Android host): ").append(speechApps==null?0:speechApps.size()).append("\n");
+        }catch(Exception e){b.append("Speech recognition handlers: unknown\n");}
+        b.append("หมายเหตุ: ตัวรับ intent != ยืนยันว่า Google Maps ภายใน GPack รับจุดหมายแล้ว");
+        return b.toString();
+    }
+
+    private void copy(String s){
+        ClipboardManager cm=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+        if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("BYD Phone Space",s));
+    }
+}
