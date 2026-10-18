@@ -130,12 +130,33 @@ public class BydPhoneSpaceActivity extends Activity {
                         }).setNegativeButton("ยกเลิก",null).show();
                 return;
             }
-            startOverlayWhenAllowed=true;
-            startActivityForResult(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+getPackageName())),REQ_OVERLAY);
+            boolean byd=Build.MANUFACTURER!=null&&Build.MANUFACTURER.toLowerCase(java.util.Locale.ROOT).contains("byd");
+            if(byd){
+                new android.app.AlertDialog.Builder(this)
+                    .setTitle("จอ BYD ไม่อนุญาต Quick Overlay")
+                    .setMessage("ระบบ BYD อาจจำกัดหน้าต่างลอยของแอปที่ติดตั้งเพิ่ม\n"
+                        +"ใช้เมนู BYD Phone Space ได้ตามปกติโดยไม่ต้องใช้ Overlay\n"
+                        +"หากต้องการลองตั้งค่าสิทธิ์ ให้กดปุ่มด้านล่าง")
+                    .setPositiveButton("ลองเปิดหน้าสิทธิ์",(d,w)->openOverlayPermission(false))
+                    .setNegativeButton("ใช้เมนูหลัก",null).show();
+            }else openOverlayPermission(false);
             return;
         }
         startOverlay();
         if(openMapsAfter)new Handler(Looper.getMainLooper()).postDelayed(this::openMapsOnly,300);
+    }
+    private void openOverlayPermission(boolean openMapsAfter){
+        try{
+            startOverlayWhenAllowed=true;openMapsWhenAllowed=openMapsAfter;
+            startActivityForResult(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+getPackageName())),REQ_OVERLAY);
+        }catch(Exception e){
+            startOverlayWhenAllowed=false;
+            new android.app.AlertDialog.Builder(this)
+                .setTitle("ระบบไม่รองรับหน้าตั้งค่า Overlay")
+                .setMessage("จอรถไม่เปิดหน้าขอสิทธิ์ Overlay ให้แอปนี้ได้\n"
+                    +"ยังใช้งานรูปนำทาง NAS Photo Import และเมนูหลักได้ตามปกติ")
+                .setPositiveButton("ตกลง",null).show();
+        }
     }
     private void startOverlay(){ Intent i=new Intent(this,QuickOverlayService.class); if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O) startForegroundService(i); else startService(i); }
     @Override protected void onResume(){ super.onResume(); if(startOverlayWhenAllowed && Settings.canDrawOverlays(this)){ startOverlayWhenAllowed=false; startOverlay(); if(openMapsWhenAllowed) new Handler(Looper.getMainLooper()).postDelayed(this::openMapsOnly, 300); } }
