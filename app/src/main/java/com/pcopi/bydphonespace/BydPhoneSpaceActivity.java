@@ -93,7 +93,7 @@ public class BydPhoneSpaceActivity extends Activity {
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(20),dp(18),dp(20),dp(28)); root.setBackgroundColor(BG); sv.addView(root);
         LinearLayout top=new LinearLayout(this); top.setGravity(Gravity.CENTER_VERTICAL); LinearLayout names=new LinearLayout(this); names.setOrientation(LinearLayout.VERTICAL);
         names.addView(tv("BYD PHONE SPACE",25,TEXT,true)); TextView sub=tv("Navigation • Routes • Car Ready",13.5f,MUTED,false); sub.setPadding(0,dp(4),0,0); names.addView(sub); top.addView(names,new LinearLayout.LayoutParams(0,-2,1));
-        TextView ver=tv("V0.5.0",12,CYAN,true); ver.setPadding(dp(12),dp(8),dp(12),dp(8)); ver.setGravity(Gravity.CENTER); ver.setBackground(rounded(Color.rgb(11,43,66),18)); top.addView(ver); root.addView(top);
+        TextView ver=tv("V0.5.1",12,CYAN,true); ver.setPadding(dp(12),dp(8),dp(12),dp(8)); ver.setGravity(Gravity.CENTER); ver.setBackground(rounded(Color.rgb(11,43,66),18)); top.addView(ver); root.addView(top);
         LinearLayout status=new LinearLayout(this); status.setPadding(0,dp(16),0,dp(18)); status.addView(chip("พร้อมใช้งาน",true)); status.addView(chip("NAS Import",true)); status.addView(chip("Overlay",Settings.canDrawOverlays(this))); root.addView(status);
         LinearLayout hero=new LinearLayout(this); hero.setOrientation(LinearLayout.VERTICAL); hero.setPadding(dp(18),dp(17),dp(18),dp(17)); hero.setBackground(rounded(CARD2,24));
         hero.addView(tv("QUICK OVERLAY",12,CYAN,true)); TextView ht=tv("เรียกเครื่องมือของเราโดยไม่ปิดการนำทาง",19,TEXT,true); ht.setPadding(0,dp(7),0,dp(5)); hero.addView(ht); hero.addView(tv("บนโทรศัพท์ใช้ Overlay ได้ตามเดิม • จอ BYD บางรุ่นไม่อนุญาต ให้ใช้เมนูปกติแทน",13.5f,MUTED,false));
@@ -109,7 +109,7 @@ public class BydPhoneSpaceActivity extends Activity {
         LinearLayout mapsBridge=card("↗","ทดสอบเชื่อม Google Maps / GPack","ลองส่งพิกัด • ตรวจตัวรับ • บันทึกวิธีที่ผ่านจริง",v->startActivity(new Intent(this,NavigationBridgeActivity.class)));
         LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(-1,dp(126));bp.setMargins(0,dp(10),0,0);root.addView(mapsBridge,bp);
 
-        TextView foot=tv("V0.5.0 เพิ่ม NAS Photo Import ผ่าน SMB2/3 • LAN/Tailscale อัตโนมัติ • นำเข้าแบบออฟไลน์",12.5f,Color.rgb(112,135,158),false); foot.setGravity(Gravity.CENTER); foot.setPadding(dp(10),dp(14),dp(10),0); root.addView(foot);
+        TextView foot=tv("V0.5.1 เพิ่มหลายผู้ใช้ NAS + เปิดดูภาพย่อเร็วขึ้นด้วยแคช • LAN/Tailscale อัตโนมัติ",12.5f,Color.rgb(112,135,158),false); foot.setGravity(Gravity.CENTER); foot.setPadding(dp(10),dp(14),dp(10),0); root.addView(foot);
         setContentView(sv);
     }
 
