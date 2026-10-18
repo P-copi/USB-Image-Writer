@@ -78,7 +78,18 @@ public class RouteImagesActivity extends Activity {
         setContentView(sv);
     }
 
-    private void buildNas(LinearLayout root){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);c.setPadding(dp(18),dp(18),dp(18),dp(18));c.setBackground(round(CARD,22));c.addView(tv("▤  NAS Explorer",20,TEXT,true));TextView s=tv("NAS ยังพักไว้ก่อนในช่วงที่เครื่องกำลังแก้ไขครับ\n\nคลังรูปในเครื่องและ Flash Drive ใช้งานได้แยกจาก NAS โดยสมบูรณ์ เมื่อ NAS กลับมาแล้วเราจะเพิ่มปุ่ม “คัดลอกเข้า รูปภาพนำทาง” ตรงนี้",13.5f,MUTED,false);s.setPadding(0,dp(10),0,dp(14));c.addView(s);Button open=button("เปิดการตั้งค่า NAS");open.setOnClickListener(v->startActivity(new Intent(this,NasConnectActivity.class)));c.addView(open,new LinearLayout.LayoutParams(-1,dp(54)));root.addView(c);}
+    private void buildNas(LinearLayout root){
+        LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(18),dp(18),dp(18),dp(18));card.setBackground(round(CARD,22));
+        card.addView(tv("▤  NAS Photo Import",20,TEXT,true));
+        TextView sub=tv("เรียกรูปจาก Shared Folder ของ NAS ผ่าน SMB2/SMB3 ได้โดยตรง\n"
+                +"เลือก LAN / Tailscale / อัตโนมัติ พร้อมเลือกหลายรูปหรือทั้งโฟลเดอร์\n"
+                +"ไฟล์ที่นำเข้าจะคัดลอกมาอยู่ในคลังออฟไลน์ ไม่ต้องพึ่ง Synology Photos",13.5f,MUTED,false);
+        sub.setPadding(0,dp(10),0,dp(12));card.addView(sub);
+        Button open=button("เชื่อม NAS / นำเข้ารูป");
+        open.setOnClickListener(v->startActivity(new Intent(this,NasConnectActivity.class)));
+        card.addView(open,new LinearLayout.LayoutParams(-1,dp(54)));root.addView(card);
+    }
 
     private void chooseCategoryAndImport(){String[] th={"Inbox","เส้นทาง","จุดชาร์จ","สถานที่โปรด"};String[] ids=NavigationLibrary.categories();new AlertDialog.Builder(this).setTitle("นำเข้าไปที่").setItems(th,(d,w)->{pendingCategory=ids[w];Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("image/*");i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);try{startActivityForResult(i,REQ_IMAGES);}catch(Exception e){Toast.makeText(this,"ไม่พบตัวเลือกไฟล์ในเครื่อง",Toast.LENGTH_LONG).show();}}).setNegativeButton("ยกเลิก",null).show();}
 
