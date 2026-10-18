@@ -132,6 +132,7 @@ public final class NavigationLibrary {
         if (source.renameTo(dest)) {
             NavigationTargetStore.move(context, source, dest);
             RouteStore.moveImagePath(context, source, dest);
+            ImageOrientationStore.move(context,source,dest);
             if (oldTime > 0) dest.setLastModified(oldTime);
             return dest;
         }
@@ -148,6 +149,7 @@ public final class NavigationLibrary {
         }
         NavigationTargetStore.move(context, source, dest);
         RouteStore.moveImagePath(context, source, dest);
+        ImageOrientationStore.move(context,source,dest);
         if (oldTime > 0) dest.setLastModified(oldTime);
         return dest;
     }
@@ -156,7 +158,10 @@ public final class NavigationLibrary {
         if (file == null || !file.exists()) return false;
         RouteStore.removeImagePath(context, file);
         boolean ok = file.delete();
-        if (ok) NavigationTargetStore.clear(context, file);
+        if (ok){
+            NavigationTargetStore.clear(context, file);
+            ImageOrientationStore.remove(context,file);
+        }
         return ok;
     }
 
