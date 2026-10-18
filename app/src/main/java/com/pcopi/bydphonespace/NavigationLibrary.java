@@ -210,7 +210,7 @@ public final class NavigationLibrary {
                 if (!dir.isDirectory()) continue;
                 File[] children = dir.listFiles();
                 if (children == null) continue;
-                for (File f : children) if (f.isFile()) files.add(f);
+                for (File f : children) if (f.isFile() && !f.getName().startsWith(".nas_incomplete_")) files.add(f);
             }
         }
         sortNewest(files);
@@ -221,7 +221,7 @@ public final class NavigationLibrary {
         ArrayList<File> files = new ArrayList<>();
         File dir = new File(root(context), category);
         File[] children = dir.listFiles();
-        if (children != null) for (File f : children) if (f.isFile()) files.add(f);
+        if (children != null) for (File f : children) if (f.isFile() && !f.getName().startsWith(".nas_incomplete_")) files.add(f);
         sortNewest(files);
         return files;
     }
