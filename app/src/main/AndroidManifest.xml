@@ -32,6 +32,7 @@
         </intent>
         <package android:name="com.google.android.apps.maps" />
         <package android:name="com.gpack.agent" />
+        <package android:name="com.neusoft.na.navigation" />
         <package android:name="com.google.android.gms" />
         <package android:name="com.android.vending" />
         <package android:name="com.google.android.gsf" />
