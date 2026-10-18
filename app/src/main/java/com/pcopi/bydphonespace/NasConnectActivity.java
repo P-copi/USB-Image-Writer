@@ -201,6 +201,7 @@ public class NasConnectActivity extends Activity {
         statusLine.setPadding(0,dp(7),0,dp(7));top.addView(statusLine);
         Button importNow=button("↓ นำเข้ารูปที่เลือก ("+selected.size()+")",true);importNow.setEnabled(!selected.isEmpty());
         importNow.setOnClickListener(v->chooseImportCategory());top.addView(importNow,buttonParams());
+        selectedCountView=statusLine;selectedImportButton=importNow;
         Button switchHost=button("เปลี่ยนการเชื่อมต่อ / LAN / Tailscale",false);
         switchHost.setOnClickListener(v->{link=null;selected.clear();parents.clear();showSetup();});top.addView(switchHost,buttonParams());
         if(!parents.isEmpty()){
@@ -255,9 +256,6 @@ public class NasConnectActivity extends Activity {
         if(entry.directory||NasSmbClient.isImage(entry.name)){
             CheckBox check=new CheckBox(this);check.setButtonTintList(android.content.res.ColorStateList.valueOf(CYAN));
             check.setChecked(selected.containsKey(entry.url));row.addView(check,new LinearLayout.LayoutParams(dp(42),dp(50)));
-            check.setOnCheckedChangeListener((v,checked)->{
-                if(checked)selected.put(entry.url,entry);else selected.remove(entry.url);
-            });
             row.setOnClickListener(v->{if(entry.directory)enterFolder(entry);else check.setChecked(!check.isChecked());});
             // Updates the count/action bar without changing folder position.
             check.setOnCheckedChangeListener((v,checked)->{
