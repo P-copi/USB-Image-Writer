@@ -30,7 +30,7 @@ import java.util.Map;
 public class NavigationBridgeActivity extends Activity {
     private final int BG=Color.rgb(7,16,27),CARD=Color.rgb(17,31,47),TEXT=Color.rgb(242,247,252);
     private final int MUTED=Color.rgb(157,177,197),CYAN=Color.rgb(77,196,255),GREEN=Color.rgb(93,219,168),ORANGE=Color.rgb(255,197,111);
-    private final String[] MODES = {NavigationBridge.DIRECT, NavigationBridge.GEO, NavigationBridge.NAV, NavigationBridge.WEB_DIR, NavigationBridge.WEB_SEARCH};
+    private final String[] MODES = {NavigationBridge.GPACK_CLIP, NavigationBridge.GPACK_GEO, NavigationBridge.GPACK_WEB, NavigationBridge.DIRECT, NavigationBridge.GEO, NavigationBridge.NAV, NavigationBridge.WEB_DIR, NavigationBridge.WEB_SEARCH};
     private String pendingMode;
     private String destination="อนุสรณ์ดอนเจดีย์ สุพรรณบุรี";
     private EditText destinationInput;
@@ -68,12 +68,13 @@ public class NavigationBridgeActivity extends Activity {
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(17),dp(15),dp(17),dp(30));scroll.addView(root);
         LinearLayout head=new LinearLayout(this);head.setGravity(Gravity.CENTER_VERTICAL);
         TextView back=tv("‹",36,TEXT,false);back.setGravity(Gravity.CENTER);back.setOnClickListener(v->finish());head.addView(back,new LinearLayout.LayoutParams(dp(48),dp(48)));
-        LinearLayout htxt=new LinearLayout(this);htxt.setOrientation(LinearLayout.VERTICAL);htxt.addView(tv("ทดสอบเชื่อม Maps / GPack",21,TEXT,true));htxt.addView(tv("Navigation Bridge • V0.4.2",12,MUTED,false));head.addView(htxt);root.addView(head);
+        LinearLayout htxt=new LinearLayout(this);htxt.setOrientation(LinearLayout.VERTICAL);htxt.addView(tv("ทดสอบเชื่อม Maps / GPack",21,TEXT,true));htxt.addView(tv("Navigation Bridge • V0.6.0",12,MUTED,false));head.addView(htxt);root.addView(head);
 
         LinearLayout intro=card();LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,dp(16),0,dp(12));root.addView(intro,p);
         intro.addView(tv("Google Maps ภายใน GPack",17,CYAN,true));
+        intro.addView(tv("ผลจอ BYD: พบ com.gpack.agent • geo: เดิมเปิดตัวนำทาง Neusoft ไม่ใช่ Maps ใน GPack",12.5f,ORANGE,false));
         TextView note=tv("บนจอ BYD แอป Maps อาจอยู่ใน GPack ไม่ใช่แพ็กเกจ Google Maps ของ Android หลัก\n"
-                +"ทดสอบทีละวิธี แล้วกลับมากดว่าจุดหมายเปิดใน Maps จริงหรือไม่ เราจะจำเฉพาะวิธีที่คุณยืนยันแล้วเท่านั้น",13,MUTED,false);
+                +"3 รายการแรกเป็นวิธีเฉพาะ GPack โดย “คัดลอก+เปิด GPack” ใช้งานได้เป็นทางสำรอง แต่ยังต้องวางจุดหมายเองใน Maps\nทดสอบทีละวิธีตอนรถจอด และบันทึกเฉพาะวิธีที่ยืนยันผลจริง",13,MUTED,false);
         note.setPadding(0,dp(8),0,dp(8));intro.addView(note);
         intro.addView(tv("วิธีที่บันทึกไว้: "+NavigationBridge.label(NavigationBridge.selected(this)),13,GREEN,true));
         Button reset=button("คืนค่าการนำทางแบบเดิม",false);reset.setOnClickListener(v->{NavigationBridge.reset(this);build();});intro.addView(reset,buttonLp());
@@ -102,14 +103,40 @@ public class NavigationBridgeActivity extends Activity {
     private void test(String mode){
         if(destinationInput!=null)destination=destinationInput.getText().toString().trim();
         if(destination.isEmpty()){destinationInput.setError("กรุณาใส่จุดหมาย");return;}
+        if(NavigationBridge.GPACK_CLIP.equals(mode)){
+            if(!NavigationBridge.hasGpack(this)){
+                new AlertDialog.Builder(this).setTitle("ไม่พบ GPack")
+                    .setMessage("บนโทรศัพท์ไม่ต้องติดตั้ง GPack เพื่อทดสอบวิธีอื่น\nให้ทดสอบวิธีนี้บนจอรถที่ติดตั้ง GPack")
+                    .setPositiveButton("ตกลง",null).show();return;
+            }
+            pendingMode=mode;
+            if(!NavigationBridge.launchUsing(this,mode,destination))pendingMode=null;
+            return;
+        }
         Intent intent=NavigationBridge.intentFor(mode,destination);
         try{pendingMode=mode;startActivity(intent);}
-        catch(Exception e){pendingMode=null;new AlertDialog.Builder(this).setTitle("Android เปิดวิธีนี้ไม่ได้")
-                .setMessage("ไม่พบตัวรับคำสั่ง หรือแอปปลายทางปฏิเสธคำสั่ง\n"+e.getClass().getSimpleName())
-                .setPositiveButton("ตกลง",null).show();}
+        catch(Exception e){
+            pendingMode=null;
+            new AlertDialog.Builder(this).setTitle("Android เปิดวิธีนี้ไม่ได้")
+                .setMessage("ยังไม่พบตัวรับคำสั่งจากระบบหลักหรือจาก GPack\n"+e.getClass().getSimpleName())
+                .setPositiveButton("ตกลง",null).show();
+        }
     }
 
     private void askOutcome(String mode){
+        if(NavigationBridge.GPACK_CLIP.equals(mode)){
+            new AlertDialog.Builder(this)
+                .setTitle("ทดสอบเปิด GPack")
+                .setMessage("GPack เปิดได้หรือไม่? ข้อจำกัด: วิธีนี้คัดลอกจุดหมายไว้ แต่ยังไม่ได้ยืนยันว่า Maps ค้นหาพิกัดโดยอัตโนมัติ")
+                .setPositiveButton("เปิดได้ • บันทึกเป็นทางสำรอง",(d,w)->{
+                    NavigationBridge.saveConfirmed(this,NavigationBridge.GPACK_CLIP);
+                    build();
+                    Toast.makeText(this,"บันทึก GPack แบบคัดลอกจุดหมาย + เปิด GPack แล้ว",Toast.LENGTH_LONG).show();
+                })
+                .setNeutralButton("เปิดไม่ได้",(d,w)->Toast.makeText(this,"ยังไม่บันทึกวิธีนี้",Toast.LENGTH_SHORT).show())
+                .setNegativeButton("ไว้ก่อน",null).show();
+            return;
+        }
         String[] options={"เปิด Google Maps ใน GPack ถึงจุดหมายจริง",
                 "เปิดเว็บ/แอปอื่น แต่ไม่ใช่ Maps ใน GPack",
                 "เปิดไม่ได้ หรือเปิดได้แต่ไม่ถึงจุดหมาย"};
@@ -130,6 +157,10 @@ public class NavigationBridgeActivity extends Activity {
     }
 
     private String handlerSummary(String mode){
+        if(NavigationBridge.GPACK_CLIP.equals(mode))
+            return NavigationBridge.hasGpack(this)
+                ?"พบ com.gpack.agent • กดแล้วคัดลอกจุดหมาย + เปิด GPack (ไม่ส่งไปถึง Maps อัตโนมัติ)"
+                :"ไม่พบ GPack ใน Android หลัก";
         Intent i=NavigationBridge.intentFor(mode,"Bangkok");
         List<ResolveInfo> apps;
         try{apps=getPackageManager().queryIntentActivities(i,PackageManager.MATCH_DEFAULT_ONLY);}
@@ -143,17 +174,7 @@ public class NavigationBridgeActivity extends Activity {
     private void openGpackManual(){
         if(destinationInput!=null)destination=destinationInput.getText().toString().trim();
         if(destination.isEmpty()){destinationInput.setError("กรุณาใส่จุดหมาย");return;}
-        copy(destination);
-        List<ResolveInfo> list=gpackLaunchers();
-        if(list.isEmpty()){new AlertDialog.Builder(this).setTitle("คัดลอกจุดหมายแล้ว")
-                .setMessage("ยังมองไม่เห็นแพ็กเกจ GPack จาก Android หลัก ให้กดเปิดไอคอน GPack ที่หน้า Home รถ แล้ววางจุดหมายใน Google Maps ได้เลย")
-                .setPositiveButton("ตกลง",null).show();return;}
-        ResolveInfo r=list.get(0);
-        try{
-            Intent launch=getPackageManager().getLaunchIntentForPackage(r.activityInfo.packageName);
-            if(launch==null){launch=new Intent(Intent.ACTION_MAIN);launch.addCategory(Intent.CATEGORY_LAUNCHER);launch.setClassName(r.activityInfo.packageName,r.activityInfo.name);}
-            startActivity(launch);
-        }catch(Exception e){Toast.makeText(this,"คัดลอกแล้ว แต่เปิด GPack อัตโนมัติไม่ได้ ให้กดไอคอน GPack เอง",Toast.LENGTH_LONG).show();}
+        NavigationBridge.launchUsing(this,NavigationBridge.GPACK_CLIP,destination);
     }
 
     private List<ResolveInfo> gpackLaunchers(){
@@ -174,7 +195,7 @@ public class NavigationBridgeActivity extends Activity {
     }
 
     private String report(){
-        StringBuilder b=new StringBuilder("BYD Phone Space Navigation Bridge V0.4.2\n");
+        StringBuilder b=new StringBuilder("BYD Phone Space Navigation Bridge V0.6.0\n");
         b.append("Android: ").append(android.os.Build.VERSION.RELEASE).append(" API ").append(android.os.Build.VERSION.SDK_INT).append("\n");
         b.append("Chosen method: ").append(NavigationBridge.label(NavigationBridge.selected(this))).append("\n");
         for(String mode:MODES){b.append("\n").append(NavigationBridge.label(mode)).append("\n").append(handlerSummary(mode)).append("\n");}
@@ -185,7 +206,10 @@ public class NavigationBridgeActivity extends Activity {
             List<ResolveInfo> speechApps=getPackageManager().queryIntentActivities(speech,PackageManager.MATCH_DEFAULT_ONLY);
             b.append("Speech recognition handlers (Android host): ").append(speechApps==null?0:speechApps.size()).append("\n");
         }catch(Exception e){b.append("Speech recognition handlers: unknown\n");}
-        b.append("หมายเหตุ: ตัวรับ intent != ยืนยันว่า Google Maps ภายใน GPack รับจุดหมายแล้ว");
+        b.append("GPack discovered package: ").append(NavigationBridge.GPACK_PACKAGE)
+            .append(" / visible: ").append(NavigationBridge.hasGpack(this)).append("\n");
+        b.append("หมายเหตุ: ตัวรับ intent != ยืนยันว่า Google Maps ภายใน GPack รับจุดหมายแล้ว\n");
+        b.append("GPack fallback copies destination to clipboard and launches GPack; user must open Maps and paste.");
         return b.toString();
     }
 
