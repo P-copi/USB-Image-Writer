@@ -137,7 +137,7 @@ public class RoutesActivity extends Activity {
         Toast.makeText(this,"ยังไม่มี GPS/จุดหมายในเส้นทางนี้ เปิดเส้นทางเพื่อกำหนดให้รูปก่อน",Toast.LENGTH_LONG).show();openRoute(r.id);
     }
 
-    private void launchNav(String q){try{Intent i=new Intent(Intent.ACTION_VIEW,Uri.parse("google.navigation:q="+Uri.encode(q)+"&mode=d"));i.setPackage("com.google.android.apps.maps");startActivity(i);}catch(Exception e){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("geo:0,0?q="+Uri.encode(q))));}catch(Exception ignored){Toast.makeText(this,"ไม่พบแอปแผนที่",Toast.LENGTH_SHORT).show();}}}
+    private void launchNav(String q){NavigationBridge.launch(this,q);}
 
     private void showRouteMenu(RouteStore.Route r){
         String[] options={"จัดการรูป / ลำดับ","เปลี่ยนชื่อเส้นทาง",r.favorite?"เอาออกจากรายการโปรด":"เพิ่มเป็นรายการโปรด","ลบเส้นทาง"};
