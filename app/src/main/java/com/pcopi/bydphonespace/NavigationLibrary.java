@@ -70,6 +70,37 @@ public final class NavigationLibrary {
         return out;
     }
 
+    /** Copies a NAS image atomically; an interrupted transfer leaves no visible partial image. */
+    public static File importNasImage(Context context,String requestedName,InputStream stream,String category,
+                                      long expectedBytes,java.util.concurrent.atomic.AtomicBoolean cancel) throws Exception {
+        if(stream==null)throw new java.io.IOException("ไม่มีข้อมูลต้นทาง");
+        String name=safeName(requestedName==null?"":requestedName);
+        if(name.isEmpty()||name.equals(".")||name.equals(".."))throw new java.io.IOException("ชื่อภาพไม่ถูกต้อง");
+        File dir=categoryDir(context,category);
+        File temp=File.createTempFile(".nas_incomplete_",".part",dir);
+        final long MAX_IMAGE=120L*1024*1024;
+        long copied=0;
+        try {
+            try(BufferedOutputStream out=new BufferedOutputStream(new FileOutputStream(temp),128*1024)){
+                byte[] buffer=new byte[128*1024];int n;
+                while((n=stream.read(buffer))!=-1){
+                    if(cancel!=null&&cancel.get())throw new InterruptedException("ผู้ใช้ยกเลิก");
+                    copied+=n;
+                    if(copied>MAX_IMAGE)throw new java.io.IOException("ภาพมีขนาดเกิน 120 MB");
+                    out.write(buffer,0,n);
+                }
+                out.flush();
+            }
+            if(copied==0)throw new java.io.IOException("ไฟล์ภาพว่างเปล่า");
+            if(expectedBytes>0&&expectedBytes!=copied)throw new java.io.IOException("ข้อมูลภาพไม่ครบ: "+copied+"/"+expectedBytes);
+            File destination=uniqueFile(dir,name);
+            if(!temp.renameTo(destination))throw new java.io.IOException("บันทึกภาพไม่สำเร็จ");
+            return destination;
+        }finally {
+            if(temp.exists())temp.delete();
+        }
+    }
+
     public static File moveToCategory(Context context, File source, String category) throws Exception {
         if (source == null || !source.exists()) throw new IllegalStateException("ไม่พบไฟล์");
         File destDir = categoryDir(context, category);
