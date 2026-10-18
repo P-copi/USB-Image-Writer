@@ -14,7 +14,7 @@ jobs:
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-      BYD_SIGNING_KEYSTORE: ${{ runner.temp }}/byd-phone-space.p12
+      BYD_SIGNING_KEYSTORE: /tmp/byd-phone-space-signing.p12
       BYD_SIGNING_PASSWORD: ${{ secrets.BYD_SIGNING_PASSWORD }}
     steps:
       - name: Checkout app
