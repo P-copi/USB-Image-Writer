@@ -71,7 +71,7 @@ public class DeviceInspectorActivity extends Activity {
 
         LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);
         TextView back=tv("‹",36,TEXT,false);back.setGravity(Gravity.CENTER);back.setOnClickListener(v->finish());top.addView(back,new LinearLayout.LayoutParams(dp(48),dp(48)));
-        LinearLayout names=new LinearLayout(this);names.setOrientation(LinearLayout.VERTICAL);names.addView(tv("ตรวจสอบเครื่อง / จอรถ",23,TEXT,true));TextView sub=tv("Car Compatibility Inspector • V0.4",12.5f,MUTED,false);sub.setPadding(0,dp(2),0,0);names.addView(sub);top.addView(names,new LinearLayout.LayoutParams(0,-2,1));root.addView(top);
+        LinearLayout names=new LinearLayout(this);names.setOrientation(LinearLayout.VERTICAL);names.addView(tv("ตรวจสอบเครื่อง / จอรถ",23,TEXT,true));TextView sub=tv("Car Compatibility Inspector • V0.4.2",12.5f,MUTED,false);sub.setPadding(0,dp(2),0,0);names.addView(sub);top.addView(names,new LinearLayout.LayoutParams(0,-2,1));root.addView(top);
 
         int ready=0,total=8;
         boolean overlay=Settings.canDrawOverlays(this); if(overlay)ready++;
@@ -103,6 +103,8 @@ public class DeviceInspectorActivity extends Activity {
         addRow(root,"GPS provider",gps?(isGpsEnabled()?"มี • เปิดอยู่":"มี • ยังปิดอยู่"):"ไม่พบ GPS provider",gps,gps&&!isGpsEnabled());
         addRow(root,"สิทธิ์ตำแหน่ง",hasLocationPermission()?"อนุญาตแล้ว":"ยังไม่ได้อนุญาต",hasLocationPermission(),!hasLocationPermission());
         addRow(root,"Google Maps",maps?"พบ • "+packageVersion("com.google.android.apps.maps"):"ไม่พบ",maps,!maps);
+        TextView mapsNote=tv("หากเปิด Maps ใน GPack ได้ แต่ตรงนี้ขึ้นว่าไม่พบ แปลว่าตัวตรวจบน Android หลักยังมองไม่เห็นแพ็กเกจ Google Maps ภายใน GPack ไม่ได้หมายความว่า Maps เสีย",12.5f,MUTED,false);mapsNote.setPadding(dp(4),dp(2),dp(4),dp(8));root.addView(mapsNote);
+        Button bridge=primary("↗  ทดสอบเชื่อม Google Maps / GPack");bridge.setOnClickListener(v->startActivity(new Intent(this,NavigationBridgeActivity.class)));root.addView(bridge,buttonLp());
         boolean gms=hasPackage("com.google.android.gms");
         addRow(root,"Google Play Services",gms?"พบ • "+packageVersion("com.google.android.gms"):"ไม่พบ (ระบบหลักของแอปเรายังทำงานได้)",gms,!gms);
         boolean play=hasPackage("com.android.vending");
