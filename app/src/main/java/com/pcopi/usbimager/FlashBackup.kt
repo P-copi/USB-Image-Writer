@@ -5,8 +5,12 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.provider.OpenableColumns
 import java.io.BufferedOutputStream
 import java.io.IOException
+import java.io.OutputStream
+import java.util.zip.GZIPOutputStream
+import java.util.zip.Deflater
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 import kotlin.math.min
@@ -30,7 +34,9 @@ object FlashBackup {
         val sha256: String,
         val readMillis: Long,
         val verifyMillis: Long,
-        val outputUri: Uri
+        val outputUri: Uri,
+        val storedBytes: Long,
+        val compressed: Boolean
     )
 
     @Throws(Exception::class)
@@ -39,6 +45,7 @@ object FlashBackup {
         targetUri: Uri,
         manager: UsbManager,
         device: UsbDevice,
+        compressed: Boolean,
         onProgress: (Progress) -> Unit,
         isCancelled: () -> Boolean
     ): Result {
@@ -60,7 +67,13 @@ object FlashBackup {
 
                 val stream = resolver.openOutputStream(targetUri, "wt")
                     ?: throw IOException("ไม่สามารถเปิดไฟล์ปลายทางเพื่อเขียนได้")
-                BufferedOutputStream(stream, chunk).use { out ->
+                val rawOut = BufferedOutputStream(stream, chunk)
+                val output: OutputStream = if (compressed) {
+                    object : GZIPOutputStream(rawOut, chunk) {
+                        init { def.setLevel(Deflater.BEST_SPEED) }
+                    }
+                } else rawOut
+                output.use { out ->
                     while (position < total) {
                         checkCancelled(isCancelled)
                         val count = min(chunk.toLong(), total - position).toInt()
@@ -91,9 +104,7 @@ object FlashBackup {
                 val verifyStart = System.nanoTime()
                 val savedDigest = MessageDigest.getInstance("SHA-256")
                 var checked = 0L
-                val input = resolver.openInputStream(targetUri)
-                    ?: throw IOException("เปิด Image ที่บันทึกแล้วเพื่อตรวจสอบไม่ได้")
-                input.use { incoming ->
+                CompressedImage.open(resolver, targetUri, compressed).use { incoming ->
                     while (true) {
                         checkCancelled(isCancelled)
                         val len = incoming.read(buffer)
@@ -110,7 +121,16 @@ object FlashBackup {
                 if (checked != total || !originalHash.equals(savedDigest.digest().toHex(), ignoreCase = true))
                     throw IOException("Verify ไม่ผ่าน: ไฟล์ Image ที่บันทึกไม่ตรงกับข้อมูลที่อ่านจาก USB")
 
-                Result(total, originalHash, readMillis, nanosMillis(verifyStart), targetUri)
+                val savedBytes = resolver.query(
+                    targetUri, arrayOf(OpenableColumns.SIZE), null, null, null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val col = cursor.getColumnIndex(OpenableColumns.SIZE)
+                        if (col >= 0 && !cursor.isNull(col)) cursor.getLong(col) else -1L
+                    } else -1L
+                } ?: -1L
+                Result(total, originalHash, readMillis, nanosMillis(verifyStart),
+                    targetUri, savedBytes, compressed)
             }
             completed = true
             return result
