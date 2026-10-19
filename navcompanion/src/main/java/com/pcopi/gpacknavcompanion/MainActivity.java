@@ -66,7 +66,7 @@ public final class MainActivity extends Activity {
         root.setPadding(dp(22),dp(20),dp(22),dp(30));sc.addView(root);
         TextView heading=label("BYD NAV COMPANION",23,WHITE);
         heading.setTypeface(Typeface.DEFAULT_BOLD);root.addView(heading);
-        TextView sub=label("GPack internal Google Maps compatibility test • V0.1.5",13,MUTED);
+        TextView sub=label("GPack internal Google Maps compatibility test • V0.1.6",13,MUTED);
         sub.setPadding(0,dp(6),0,dp(15));root.addView(sub);
         destination=new EditText(this);destination.setSingleLine(false);destination.setMinLines(2);
         destination.setTextColor(WHITE);destination.setTextSize(17);
