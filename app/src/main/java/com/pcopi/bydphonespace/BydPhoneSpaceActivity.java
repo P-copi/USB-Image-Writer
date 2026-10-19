@@ -93,7 +93,7 @@ public class BydPhoneSpaceActivity extends Activity {
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(20),dp(18),dp(20),dp(28)); root.setBackgroundColor(BG); sv.addView(root);
         LinearLayout top=new LinearLayout(this); top.setGravity(Gravity.CENTER_VERTICAL); LinearLayout names=new LinearLayout(this); names.setOrientation(LinearLayout.VERTICAL);
         names.addView(tv("BYD PHONE SPACE",25,TEXT,true)); TextView sub=tv("Navigation • Routes • Car Ready",13.5f,MUTED,false); sub.setPadding(0,dp(4),0,0); names.addView(sub); top.addView(names,new LinearLayout.LayoutParams(0,-2,1));
-        TextView ver=tv("V0.7.3",12,CYAN,true); ver.setPadding(dp(12),dp(8),dp(12),dp(8)); ver.setGravity(Gravity.CENTER); ver.setBackground(rounded(Color.rgb(11,43,66),18)); top.addView(ver); root.addView(top);
+        TextView ver=tv("V0.7.4",12,CYAN,true); ver.setPadding(dp(12),dp(8),dp(12),dp(8)); ver.setGravity(Gravity.CENTER); ver.setBackground(rounded(Color.rgb(11,43,66),18)); top.addView(ver); root.addView(top);
         LinearLayout status=new LinearLayout(this); status.setPadding(0,dp(16),0,dp(18)); status.addView(chip("พร้อมใช้งาน",true)); status.addView(chip("NAS Import",true)); status.addView(chip("Overlay",Settings.canDrawOverlays(this))); root.addView(status);
         LinearLayout hero=new LinearLayout(this); hero.setOrientation(LinearLayout.VERTICAL); hero.setPadding(dp(18),dp(17),dp(18),dp(17)); hero.setBackground(rounded(CARD2,24));
         hero.addView(tv("QUICK OVERLAY",12,CYAN,true)); TextView ht=tv("เรียกเครื่องมือของเราโดยไม่ปิดการนำทาง",19,TEXT,true); ht.setPadding(0,dp(7),0,dp(5)); hero.addView(ht); hero.addView(tv("บนโทรศัพท์ใช้ Overlay ได้ตามเดิม • จอ BYD บางรุ่นไม่อนุญาต ให้ใช้เมนูปกติแทน",13.5f,MUTED,false));
@@ -118,13 +118,18 @@ public class BydPhoneSpaceActivity extends Activity {
         LinearLayout.LayoutParams np=new LinearLayout.LayoutParams(-1,dp(126));
         np.setMargins(0,dp(10),0,0);
         root.addView(nativeGpack,np);
+        LinearLayout assistedGpack=card("⌖","GPack ใส่จุดหมายโดยตรง",
+            "Input Bridge • แป้นพิมพ์เฉพาะกิจ + Accessibility (เลือกใช้เอง)",
+            v->startActivity(new Intent(this,GpackInputBridgeActivity.class)));
+        LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(-1,dp(126));
+        ap.setMargins(0,dp(10),0,0);root.addView(assistedGpack,ap);
         LinearLayout voiceGpack=card("🎤","Gboard / ค้นหาด้วยเสียง","ตรวจ Gboard บนรถและภายใน GPack • ทดสอบเสียงภาษาไทย",
             v->startActivity(new Intent(this,GpackVoiceKeyboardActivity.class)));
         LinearLayout.LayoutParams vp=new LinearLayout.LayoutParams(-1,dp(126));
         vp.setMargins(0,dp(10),0,0);
         root.addView(voiceGpack,vp);
 
-        TextView foot=tv("V0.7.3 นำทาง GPack + Gboard/เสียงไทย • ทดสอบใน APK เดียว • NAS/รูปเดิม",12.5f,Color.rgb(112,135,158),false); foot.setGravity(Gravity.CENTER); foot.setPadding(dp(10),dp(14),dp(10),0); root.addView(foot);
+        TextView foot=tv("V0.7.4 เพิ่ม Input Bridge สำหรับ GPack • Gboard/เสียงไทย • NAS/รูปเดิม",12.5f,Color.rgb(112,135,158),false); foot.setGravity(Gravity.CENTER); foot.setPadding(dp(10),dp(14),dp(10),0); root.addView(foot);
         setContentView(sv);
     }
 
