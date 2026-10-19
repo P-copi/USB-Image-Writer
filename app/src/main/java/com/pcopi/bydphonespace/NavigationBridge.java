@@ -33,6 +33,7 @@ public final class NavigationBridge {
     public static final String GPACK_SHARE_TEXT = "gpack_share_text";
     public static final String GPACK_SHARE_MAPS_URL = "gpack_share_maps_url";
     public static final String GPACK_PACKAGE="com.gpack.agent";
+    public static final String GPACK_INPUT_ASSIST="gpack_input_assist";
     // Exact AndroidManifest actions found in installed GPack 2.20260321.01.
     // Intent payloads remain experimental until validated on the car.
     public static final String GPACK_NATIVE_NAV="gpack_native_nav";
@@ -60,7 +61,7 @@ public final class NavigationBridge {
     }
 
     private static boolean isValid(String mode){
-        return GpackUnifiedRoutes.isMode(mode)||DIRECT.equals(mode)||GEO.equals(mode)||NAV.equals(mode)
+        return GPACK_INPUT_ASSIST.equals(mode)||GpackUnifiedRoutes.isMode(mode)||DIRECT.equals(mode)||GEO.equals(mode)||NAV.equals(mode)
                 ||WEB_DIR.equals(mode)||WEB_SEARCH.equals(mode)||GPACK_CLIP.equals(mode)
                 ||GPACK_GEO.equals(mode)||GPACK_WEB.equals(mode)
                 ||GPACK_SEARCH_VIEW.equals(mode)||GPACK_SHARE_TEXT.equals(mode)
@@ -71,6 +72,7 @@ public final class NavigationBridge {
     }
 
     public static String label(String mode){
+        if(GPACK_INPUT_ASSIST.equals(mode))return "ใช้ตัวช่วยใส่จุดหมายในช่อง Maps ภายใน GPack";
         if(GpackUnifiedRoutes.isMode(mode))return GpackUnifiedRoutes.title(GpackUnifiedRoutes.index(mode));
         if(GPACK_NATIVE_NAV.equals(mode))return "GPack NAV action + google.navigation: พิกัด";
         if(GPACK_NATIVE_GEO.equals(mode))return "GPack NAV action + geo: พิกัด";
@@ -183,6 +185,17 @@ public final class NavigationBridge {
             Toast.makeText(context,"ยังไม่ได้เลือกจุดหมาย",Toast.LENGTH_SHORT).show();
             return false;
         }
+        GpackInputBridge.remember(context,destination);
+        if(GPACK_INPUT_ASSIST.equals(mode)){
+            ClipboardManager clipboard=(ClipboardManager)context.getSystemService(Context.CLIPBOARD_SERVICE);
+            if(clipboard!=null)clipboard.setPrimaryClip(
+                ClipData.newPlainText("BYD Phone Space destination",destination.trim()));
+            GpackInputBridge.arm(context,destination);
+            boolean opened=openGpack(context);
+            if(!opened)GpackInputBridge.stop(context,"ไม่สามารถเปิด GPack");
+            else Toast.makeText(context,"เปิด GPack แล้ว • รอใส่จุดหมายใน Maps หากตัวช่วยไม่พร้อมให้แตะค้นหาและวางข้อความ",Toast.LENGTH_LONG).show();
+            return opened;
+        }
         if(GPACK_SHORTCUT_CLIP.equals(mode)){
             ClipboardManager clipboard=(ClipboardManager)context.getSystemService(Context.CLIPBOARD_SERVICE);
             if(clipboard!=null)clipboard.setPrimaryClip(
@@ -222,6 +235,7 @@ public final class NavigationBridge {
             Toast.makeText(context,"ยังไม่ได้เลือกจุดหมาย",Toast.LENGTH_SHORT).show();
             return false;
         }
+        GpackInputBridge.remember(context,destination);
         String mode=selected(context);
         if(!AUTO.equals(mode))return launchUsing(context,mode,destination);
         // GPack Maps is not installed as host Maps, so do not accidentally route to
