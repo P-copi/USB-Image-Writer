@@ -71,7 +71,7 @@ class DashboardActivity : Activity() {
         root.addView(ToolkitUi.text(this, "USB TOOLKIT", 12f, ToolkitUi.BLUE, true))
         root.addView(ToolkitUi.text(this, "USB Image Writer", 29f, ToolkitUi.INK, true), ToolkitUi.margin(this, 3))
         root.addView(ToolkitUi.text(this, "จัดการ Flash Drive ได้จากมือถือเครื่องเดียว", 14f, ToolkitUi.SUB))
-        val version = ToolkitUi.text(this, "v0.2.5  •  Flash Drive Manager", 12f, ToolkitUi.SUB)
+        val version = ToolkitUi.text(this, "v0.2.6  •  Flash Drive Manager", 12f, ToolkitUi.SUB)
         root.addView(version, ToolkitUi.margin(this, 5, 20))
 
         val status = ToolkitUi.card(this)
