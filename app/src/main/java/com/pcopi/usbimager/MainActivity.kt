@@ -167,8 +167,8 @@ class MainActivity : Activity() {
             setPadding(0, dp(4), 0, dp(18))
         })
 
-        root.addView(sectionTitle("1. เลือกไฟล์ Image"))
-        chooseImageButton = actionButton("เลือกไฟล์ .img", primary) { chooseImage() }
+        root.addView(sectionTitle("1. เลือกไฟล์ Image (.img หรือ .img.gz)"))
+        chooseImageButton = actionButton("เลือกไฟล์ .img / .img.gz", primary) { chooseImage() }
         root.addView(chooseImageButton)
         imageInfo = infoText("ยังไม่ได้เลือกไฟล์")
         root.addView(imageInfo)
@@ -253,8 +253,8 @@ class MainActivity : Activity() {
         }
 
         val meta = queryImageMeta(uri)
-        if (!meta.first.lowercase().endsWith(".img")) {
-            showMessage("ไฟล์ไม่ใช่ .img", "V1 รองรับไฟล์ .img แบบ raw image ก่อน")
+        if (!meta.first.lowercase().endsWith(".img") && !CompressedImage.isCompressed(meta.first)) {
+            showMessage("ไฟล์ไม่รองรับ", "เลือกไฟล์ .img หรือ .img.gz เท่านั้น")
             return
         }
         if (meta.second <= 0L) {
@@ -265,7 +265,8 @@ class MainActivity : Activity() {
         imageUri = uri
         imageName = meta.first
         imageSize = meta.second
-        imageInfo.text = "$imageName\nขนาด ${FormatUtils.bytes(imageSize)}"
+         imageInfo.text = "$imageName\nขนาดไฟล์ ${FormatUtils.bytes(imageSize)}" +
+            (if (CompressedImage.isCompressed(imageName)) "\nจะตรวจสอบขนาดหลังคลายบีบอัดก่อนเขียนจริง" else "")
         resultText.text = ""
     }
 
@@ -349,7 +350,7 @@ class MainActivity : Activity() {
     private fun confirmWriteStep1() {
         if (controlsLocked()) return
         val uri = imageUri ?: run {
-            toast("กรุณาเลือกไฟล์ .img ก่อน")
+            toast("กรุณาเลือกไฟล์ .img หรือ .img.gz ก่อน")
             return
         }
         val device = selectedUsb ?: run {
@@ -360,7 +361,7 @@ class MainActivity : Activity() {
             toast("กรุณากด “ตรวจสอบ USB” ก่อน")
             return
         }
-        if (imageSize > inspectedCapacity) {
+        if (!CompressedImage.isCompressed(imageName) && imageSize > inspectedCapacity) {
             showMessage("ความจุไม่พอ", "Image ${FormatUtils.bytes(imageSize)} ใหญ่กว่า Flash Drive ${FormatUtils.bytes(inspectedCapacity)}")
             return
         }
@@ -369,7 +370,8 @@ class MainActivity : Activity() {
             .setTitle("ตรวจสอบก่อนเขียน")
             .setMessage(
                 "ไฟล์: $imageName\n" +
-                    "ขนาด: ${FormatUtils.bytes(imageSize)}\n\n" +
+                    "ขนาดไฟล์: ${FormatUtils.bytes(imageSize)}\n" +
+                    (if (CompressedImage.isCompressed(imageName)) "จะตรวจขนาดจริงและความถูกต้องของ .img.gz ก่อนเริ่มเขียน\n" else "") + "\n" +
                     "ปลายทาง: ${usbIdentity(device)}\n" +
                     "ความจุ: ${FormatUtils.bytes(inspectedCapacity)}\n\n" +
                     "ข้อมูลเดิมใน Flash Drive จะถูกลบทั้งหมด"
@@ -403,6 +405,7 @@ class MainActivity : Activity() {
                 putExtra(UsbOperationService.EXTRA_IMAGE_URI, uri.toString())
                 putExtra(UsbOperationService.EXTRA_IMAGE_NAME, imageName)
                 putExtra(UsbOperationService.EXTRA_IMAGE_SIZE, imageSize)
+                putExtra(UsbOperationService.EXTRA_USB_CAPACITY, inspectedCapacity)
                 putExtra(UsbOperationService.EXTRA_USB_DEVICE, device)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
