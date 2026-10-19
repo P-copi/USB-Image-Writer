@@ -11,12 +11,32 @@ android {
         applicationId = "com.pcopi.usbimager"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "0.2.0"
+        versionCode = 11
+        versionName = "0.2.1"
+    }
+
+
+    // A single permanent signing identity, unlocked only via GitHub Actions secret.
+    // Never commit plain .p12 files or the secret to this public repository.
+    val signingPass = System.getenv("USB_SIGNING_PASSPHRASE")
+    val keyFilePath = System.getenv("USB_KEYSTORE_PATH")
+    if (!signingPass.isNullOrBlank() && !keyFilePath.isNullOrBlank()) {
+        signingConfigs {
+            create("stableRelease") {
+                storeFile = file(keyFilePath)
+                storePassword = signingPass
+                keyAlias = "usb-image-writer"
+                keyPassword = signingPass
+                storeType = "pkcs12"
+            }
+        }
     }
 
     buildTypes {
         release {
+            if (!signingPass.isNullOrBlank() && !keyFilePath.isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("stableRelease")
+            }
             isMinifyEnabled = false
         }
     }
