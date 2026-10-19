@@ -71,7 +71,7 @@ class DashboardActivity : Activity() {
         root.addView(ToolkitUi.text(this, "USB TOOLKIT", 12f, ToolkitUi.BLUE, true))
         root.addView(ToolkitUi.text(this, "USB Image Writer", 29f, ToolkitUi.INK, true), ToolkitUi.margin(this, 3))
         root.addView(ToolkitUi.text(this, "จัดการ Flash Drive ได้จากมือถือเครื่องเดียว", 14f, ToolkitUi.SUB))
-        val version = ToolkitUi.text(this, "v0.2.4  •  Flash Drive Manager", 12f, ToolkitUi.SUB)
+        val version = ToolkitUi.text(this, "v0.2.5  •  Flash Drive Manager", 12f, ToolkitUi.SUB)
         root.addView(version, ToolkitUi.margin(this, 5, 20))
 
         val status = ToolkitUi.card(this)
@@ -99,8 +99,8 @@ class DashboardActivity : Activity() {
         addTile(secondRow, "⇄", "โคลน USB", "USB → USB\nเตรียมใน v0.3", ToolkitUi.VIOLET, true) {
             comingSoon("โคลน Flash Drive", "เตรียมรองรับ USB Hub และเลือกต้นทาง/ปลายทางพร้อม Verify ใน v0.3.0")
         }
-        addTile(secondRow, "✚", "ตรวจสอบและซ่อม", "ตรวจความผิดปกติ\nเตรียมใน v0.5", ToolkitUi.AMBER, true) {
-            comingSoon("ตรวจสอบและซ่อม USB", "จะเริ่มจากการอ่านตรวจสภาพแบบไม่ลบข้อมูลก่อน และเพิ่มเครื่องมือซ่อมที่รองรับในเวอร์ชันถัดไป")
+        addTile(secondRow, "⊞", "สำรวจ USB Boot", "ดูไฟล์ / Arc Loader\nไม่ต้อง Format", ToolkitUi.AMBER, false) {
+            startActivity(Intent(this, BootExplorerActivity::class.java))
         }
         root.addView(secondRow)
 
