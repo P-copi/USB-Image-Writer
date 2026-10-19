@@ -64,6 +64,7 @@
         android:theme="@style/AppTheme">
 
         <activity android:name=".GpackInstallerActivity" android:exported="false" />
+        <activity android:name=".GpackVoiceKeyboardActivity" android:exported="false" />
         <activity android:name=".GpackUnifiedNavigationActivity" android:exported="false" />
         <activity android:name=".GpackNativeNavigationActivity" android:exported="false" />
         <activity android:name=".NavigationBridgeActivity" android:exported="false" />
