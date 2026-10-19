@@ -89,7 +89,7 @@ object ExtRebuildInspector {
             }
             val notes=mutableListOf<String>()
             try {
-                val sb=whole.read(first,1024L,1024L,1024)
+                val sb=whole.read(first,1024L,count*bs.toLong(),1024)
                 if(u16(sb,56)!=0xef53){
                     val vbr=whole.read(first,0L,bs.toLong(),512)
                     val fileSystem=when{
