@@ -4,6 +4,7 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.ComponentName;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.widget.Toast;
@@ -32,6 +33,14 @@ public final class NavigationBridge {
     public static final String GPACK_SHARE_TEXT = "gpack_share_text";
     public static final String GPACK_SHARE_MAPS_URL = "gpack_share_maps_url";
     public static final String GPACK_PACKAGE="com.gpack.agent";
+    // Exact AndroidManifest actions found in installed GPack 2.20260321.01.
+    // Intent payloads remain experimental until validated on the car.
+    public static final String GPACK_NATIVE_NAV="gpack_native_nav";
+    public static final String GPACK_NATIVE_GEO="gpack_native_geo";
+    public static final String GPACK_NATIVE_LAUNCH="gpack_native_launch";
+    public static final String GPACK_NAV_ACTIVITY="com.bratwzi.auto.gpack.activity.LaunchAppActivity";
+    public static final String GPACK_NAV_ACTION="com.intent.ACTION_SUPPORT_MAP_NAVIGATION";
+    public static final String GPACK_LAUNCH_ACTION="com.gpack.launch";
 
     private static final String PREFS = "byd_navigation_bridge";
     private static final String KEY_MODE = "confirmed_mode";
@@ -57,10 +66,14 @@ public final class NavigationBridge {
                 ||GPACK_SEARCH_VIEW.equals(mode)||GPACK_SHARE_TEXT.equals(mode)
                 ||GPACK_SHARE_MAPS_URL.equals(mode)
                 ||GPACK_CLIP_URL.equals(mode)||NEUSOFT_GEO.equals(mode)
-                ||GPACK_SHORTCUT_CLIP.equals(mode);
+                ||GPACK_SHORTCUT_CLIP.equals(mode)
+                ||GPACK_NATIVE_NAV.equals(mode)||GPACK_NATIVE_GEO.equals(mode)||GPACK_NATIVE_LAUNCH.equals(mode);
     }
 
     public static String label(String mode){
+        if(GPACK_NATIVE_NAV.equals(mode))return "GPack NAV action + google.navigation: พิกัด";
+        if(GPACK_NATIVE_GEO.equals(mode))return "GPack NAV action + geo: พิกัด";
+        if(GPACK_NATIVE_LAUNCH.equals(mode))return "GPack launch action + Google Maps";
         if(GPACK_SHORTCUT_CLIP.equals(mode))return "ทางลัด Maps ของ GPack + คัดลอกจุดหมาย";
         if(GPACK_CLIP.equals(mode))return "ใช้ได้แล้ว: คัดลอกจุดหมาย + เปิด GPack";
         if(GPACK_CLIP_URL.equals(mode))return "ลองลิงก์เส้นทาง Maps ผ่าน Chrome ใน GPack";
@@ -85,6 +98,21 @@ public final class NavigationBridge {
 
     public static Intent intentFor(String mode,String destination){
         String q=destination==null?"":destination.trim();
+        if(GPACK_NATIVE_NAV.equals(mode)||GPACK_NATIVE_GEO.equals(mode)||GPACK_NATIVE_LAUNCH.equals(mode)){
+            Intent remote=new Intent(GPACK_NATIVE_LAUNCH.equals(mode)?GPACK_LAUNCH_ACTION:GPACK_NAV_ACTION);
+            remote.setComponent(new ComponentName(GPACK_PACKAGE,GPACK_NAV_ACTIVITY));
+            String navUri="google.navigation:q="+Uri.encode(q)+"&mode=d";
+            String geoUri="geo:0,0?q="+Uri.encode(q);
+            remote.setData(Uri.parse(GPACK_NATIVE_GEO.equals(mode)?geoUri:navUri));
+            // Standard public string inputs. GPack-specific extra names are only
+            // compatibility hints, not confirmed proprietary API contracts.
+            remote.putExtra(Intent.EXTRA_TEXT,q);
+            remote.putExtra("destination",q);
+            remote.putExtra("query",q);
+            remote.putExtra("packageName","com.google.android.apps.maps");
+            remote.putExtra("pkgName","com.google.android.apps.maps");
+            return remote;
+        }
         if(GPACK_CLIP.equals(mode)||GPACK_CLIP_URL.equals(mode)||GPACK_SHORTCUT_CLIP.equals(mode))
             return new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(GPACK_PACKAGE);
         if(NEUSOFT_GEO.equals(mode))
