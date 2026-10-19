@@ -38,6 +38,7 @@ class UsbOperationService : Service() {
         const val EXTRA_IMAGE_URI = "image_uri"
         const val EXTRA_IMAGE_NAME = "image_name"
         const val EXTRA_IMAGE_SIZE = "image_size"
+        const val EXTRA_USB_CAPACITY = "usb_capacity"
         const val EXTRA_USB_DEVICE = "usb_device"
 
         const val PREFS = "usb_operation_state"
@@ -86,9 +87,10 @@ class UsbOperationService : Service() {
         val uri = intent.getStringExtra(EXTRA_IMAGE_URI)?.let(Uri::parse)
         val imageName = intent.getStringExtra(EXTRA_IMAGE_NAME).orEmpty()
         val imageSize = intent.getLongExtra(EXTRA_IMAGE_SIZE, 0L)
+        val usbCapacity = intent.getLongExtra(EXTRA_USB_CAPACITY, 0L)
         val device = getUsbDevice(intent)
 
-        if (uri == null || imageSize <= 0L || device == null) {
+        if (uri == null || imageSize <= 0L || usbCapacity <= 0L || device == null) {
             finishWithError("ข้อมูลสำหรับเริ่มงานไม่ครบ")
             return START_NOT_STICKY
         }
@@ -112,6 +114,8 @@ class UsbOperationService : Service() {
                     resolver = contentResolver,
                     imageUri = uri,
                     imageSize = imageSize,
+                    imageName = imageName,
+                    maxUsbBytes = usbCapacity,
                     usbManager = usbManager,
                     usbDevice = device,
                     onProgress = { p -> updateProgress(imageName, p) },
@@ -163,6 +167,7 @@ class UsbOperationService : Service() {
 
     private fun updateProgress(imageName: String, p: ImageWriter.Progress) {
         val stageText = when (p.stage) {
+            ImageWriter.Stage.PREPARE -> "กำลังตรวจสอบไฟล์ .img.gz ก่อนเขียน USB..."
             ImageWriter.Stage.WRITE -> "กำลังเขียน Image..."
             ImageWriter.Stage.VERIFY -> "กำลัง Verify หลังเขียน..."
         }
@@ -187,6 +192,7 @@ class UsbOperationService : Service() {
 
     private fun updateRecovery(imageName: String, r: ImageWriter.Recovery) {
         val phase = when (r.stage) {
+            ImageWriter.Stage.PREPARE -> "ตรวจสอบ"
             ImageWriter.Stage.WRITE -> "เขียน"
             ImageWriter.Stage.VERIFY -> "Verify"
         }
