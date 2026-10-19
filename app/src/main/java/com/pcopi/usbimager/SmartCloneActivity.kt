@@ -140,12 +140,17 @@ class SmartCloneActivity : Activity() {
     private fun startInspection(){
         if(busy||UsbBackupService.snapshot.running||UsbOperationService.snapshot.running)return
         val source=devices.getOrNull(sourceSpinner.selectedItemPosition)
-            ?:return AlertDialog.Builder(this).setMessage("ยังไม่พบ USB ต้นฉบับ")
+        if(source==null) {
+            AlertDialog.Builder(this).setMessage("ยังไม่พบ USB ต้นฉบับ")
                 .setPositiveButton("ตกลง",null).show()
+            return
+        }
         val target=devices.getOrNull(targetSpinner.selectedItemPosition-1)
-        if(target!=null && target.deviceId==source.deviceId)
-            return AlertDialog.Builder(this).setMessage("ต้นฉบับและปลายทางต้องเป็น USB คนละลูก")
+        if(target!=null && target.deviceId==source.deviceId) {
+            AlertDialog.Builder(this).setMessage("ต้นฉบับและปลายทางต้องเป็น USB คนละลูก")
                 .setPositiveButton("ตกลง",null).show()
+            return
+        }
         permission(source){
             if(target!=null)permission(target){inspect(source,target)}
             else inspect(source,null)
