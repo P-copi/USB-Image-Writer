@@ -161,7 +161,7 @@ class MainActivity : Activity() {
             setTextColor(Color.rgb(17, 24, 39))
         })
         root.addView(TextView(this).apply {
-            text = "v0.1.2 • Background Safe Writer"
+            text = "v0.2.0 • Image Writer"
             textSize = 14f
             setTextColor(Color.DKGRAY)
             setPadding(0, dp(4), 0, dp(18))
@@ -226,7 +226,11 @@ class MainActivity : Activity() {
             setPadding(0, dp(22), 0, dp(10))
         })
 
-        val scroll = ScrollView(this).apply { addView(root) }
+        val scroll = ScrollView(this).apply {
+            addView(root)
+            clipToPadding = false
+        }
+        ToolkitUi.applySafeInsets(scroll, this, side = 0, top = 0, bottom = 0)
         setContentView(scroll)
     }
 
@@ -474,7 +478,7 @@ class MainActivity : Activity() {
 
     private fun controlsLocked(): Boolean = localBusy || operationRunning() || serviceStartRequested
 
-    private fun operationRunning(): Boolean = UsbOperationService.snapshot.running
+    private fun operationRunning(): Boolean = UsbOperationService.snapshot.running || UsbBackupService.snapshot.running
 
     private fun updateControls() {
         val locked = controlsLocked()
