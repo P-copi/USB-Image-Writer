@@ -13,7 +13,7 @@ import kotlin.math.min
 
 object ImageWriter {
 
-    enum class Stage { WRITE, VERIFY }
+    enum class Stage { PREPARE, WRITE, VERIFY }
 
     data class Progress(
         val stage: Stage,
@@ -46,6 +46,8 @@ object ImageWriter {
         resolver: ContentResolver,
         imageUri: Uri,
         imageSize: Long,
+        imageName: String,
+        maxUsbBytes: Long,
         usbManager: UsbManager,
         usbDevice: UsbDevice,
         onProgress: (Progress) -> Unit,
@@ -53,6 +55,18 @@ object ImageWriter {
         isCancelled: () -> Boolean
     ): Result {
         if (imageSize <= 0L) throw IOException("ไม่ทราบขนาดไฟล์ Image")
+        val compressed = CompressedImage.isCompressed(imageName)
+        val prepareStart = System.nanoTime()
+        // For GZIP, verify the complete compressed stream, including checksum and
+        // real 64-bit output length, before opening or modifying any USB blocks.
+        val inspected = if (compressed) {
+            CompressedImage.inspect(
+                resolver, imageUri, maxUsbBytes, isCancelled
+            ) { readBytes ->
+                onProgress(Progress(Stage.PREPARE, readBytes, maxUsbBytes, averageSpeed(readBytes, prepareStart)))
+            }
+        } else null
+        val rawImageSize = inspected?.rawBytes ?: imageSize
 
         var raw: UsbRawDevice? = null
 
@@ -98,7 +112,7 @@ object ImageWriter {
                         Recovery(
                             stage = Stage.WRITE,
                             completedBytes = completedBeforeChunk,
-                            totalBytes = imageSize,
+                            totalBytes = rawImageSize,
                             attempt = tryIndex + 1,
                             maxAttempts = MAX_PERSISTENT_RECOVERY_ATTEMPTS,
                             reason = e.message ?: e.javaClass.simpleName
@@ -128,7 +142,7 @@ object ImageWriter {
                         Recovery(
                             stage = Stage.VERIFY,
                             completedBytes = completedBeforeChunk,
-                            totalBytes = imageSize,
+                            totalBytes = rawImageSize,
                             attempt = tryIndex + 1,
                             maxAttempts = MAX_PERSISTENT_RECOVERY_ATTEMPTS,
                             reason = e.message ?: e.javaClass.simpleName
@@ -147,10 +161,10 @@ object ImageWriter {
             val first = ensureRaw()
             val blockSize = first.blockSize
             if (blockSize <= 0) throw IOException("USB block size ไม่ถูกต้อง")
-            if (imageSize > first.capacityBytes) {
+            if (rawImageSize > first.capacityBytes) {
                 throw IOException("Flash Drive เล็กกว่าไฟล์ Image")
             }
-            if (imageSize % blockSize != 0L) {
+            if (rawImageSize % blockSize != 0L) {
                 throw IOException("ขนาดไฟล์ Image ต้องหารด้วย USB block size ($blockSize) ลงตัว")
             }
 
@@ -158,16 +172,15 @@ object ImageWriter {
             val sourceDigest = MessageDigest.getInstance("SHA-256")
             val writeBuffer = ByteArray(chunkSize)
 
-            val input = resolver.openInputStream(imageUri)
-                ?: throw IOException("เปิดไฟล์ Image ไม่สำเร็จ")
+            val input = CompressedImage.open(resolver, imageUri, compressed)
 
             var written = 0L
             var writeChunks = 0L
             val writeStart = System.nanoTime()
             input.use { stream ->
-                while (written < imageSize) {
+                while (written < rawImageSize) {
                     checkCancelled(isCancelled)
-                    val wanted = min(chunkSize.toLong(), imageSize - written).toInt()
+                    val wanted = min(chunkSize.toLong(), rawImageSize - written).toInt()
                     val count = readExact(stream, writeBuffer, wanted)
                     if (count != wanted) throw EOFException("ไฟล์ Image จบก่อนขนาดที่รายงาน")
                     if (count % blockSize != 0) throw IOException("ข้อมูลไม่ตรงแนว block size")
@@ -182,7 +195,7 @@ object ImageWriter {
                         Progress(
                             Stage.WRITE,
                             written,
-                            imageSize,
+                            rawImageSize,
                             averageSpeed(written, writeStart)
                         )
                     )
@@ -191,10 +204,15 @@ object ImageWriter {
                         Thread.sleep(2L)
                     }
                 }
+                // Drain gzip to its end and validate trailer; no unexpected extra raw bytes.
+                if (stream.read() != -1)
+                    throw IOException("ไฟล์ Image มีข้อมูลหลังขนาดที่ตรวจสอบแล้ว")
             }
 
             val writeDurationNanos = (System.nanoTime() - writeStart).coerceAtLeast(1L)
             val sourceHash = sourceDigest.digest().toHex()
+            if (inspected != null && !sourceHash.equals(inspected.sha256, ignoreCase = true))
+                throw IOException("ไฟล์ .img.gz เปลี่ยนแปลงหลังตรวจสอบ • หยุดงานเพราะ SHA-256 ไม่ตรง")
 
             // Keep the same USB interface claimed across the phase boundary.
             // Only give the flash controller a short settle window before read-back.
@@ -205,9 +223,9 @@ object ImageWriter {
             var verified = 0L
             val verifyStart = System.nanoTime()
 
-            while (verified < imageSize) {
+            while (verified < rawImageSize) {
                 checkCancelled(isCancelled)
-                val count = min(chunkSize.toLong(), imageSize - verified).toInt()
+                val count = min(chunkSize.toLong(), rawImageSize - verified).toInt()
                 val lba = verified / blockSize
                 readChunk(lba, verifyBuffer, count, verified)
                 verifyDigest.update(verifyBuffer, 0, count)
@@ -217,7 +235,7 @@ object ImageWriter {
                     Progress(
                         Stage.VERIFY,
                         verified,
-                        imageSize,
+                        rawImageSize,
                         averageSpeed(verified, verifyStart)
                     )
                 )
