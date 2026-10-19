@@ -66,7 +66,7 @@ public final class MainActivity extends Activity {
         root.setPadding(dp(22),dp(20),dp(22),dp(30));sc.addView(root);
         TextView heading=label("BYD NAV COMPANION",23,WHITE);
         heading.setTypeface(Typeface.DEFAULT_BOLD);root.addView(heading);
-        TextView sub=label("GPack internal Google Maps compatibility test • V0.1.4",13,MUTED);
+        TextView sub=label("GPack internal Google Maps compatibility test • V0.1.5",13,MUTED);
         sub.setPadding(0,dp(6),0,dp(15));root.addView(sub);
         destination=new EditText(this);destination.setSingleLine(false);destination.setMinLines(2);
         destination.setTextColor(WHITE);destination.setTextSize(17);
@@ -109,6 +109,15 @@ public final class MainActivity extends Activity {
         Button audit=button("7. ตรวจ GPack ละเอียด: วงเหลือง / ติดตั้ง / เปิดแอป",true);
         audit.setOnClickListener(v->startActivity(new Intent(this,GpackAppStateActivity.class)));
         addButton(root,audit);
+        TextView directTitle=label("ทดสอบคำสั่ง Maps ที่พบจาก GPack รุ่นจริง",20,WHITE);
+        directTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        directTitle.setPadding(0,dp(23),0,dp(9));root.addView(directTitle);
+        Button directButton=button("เปิด GPack Direct Maps Bridge (คำสั่งรุ่นจริง)",true);
+        directButton.setOnClickListener(v->startActivity(new Intent(this,GpackDirectBridgeActivity.class)));
+        addButton(root,directButton);
+        TextView directNote=label("ตรวจ ACTION_SUPPORT_MAP_NAVIGATION / com.gpack.launch "
+            +"โดยอ่านสิทธิ์จาก Android ของรถก่อน • หากถูกปิดไว้ไม่ฝืนเรียก",13,MUTED);
+        directNote.setPadding(0,dp(8),0,dp(10));root.addView(directNote);
         TextView exportHeading=label("วิเคราะห์ GPack รุ่นที่ติดตั้งจริง",20,WHITE);
         exportHeading.setTypeface(Typeface.DEFAULT_BOLD);
         exportHeading.setPadding(0,dp(23),0,dp(9));root.addView(exportHeading);
