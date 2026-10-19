@@ -33,7 +33,7 @@ object ExtRebuildInspector {
         val groups: Long?,
         val highAllocatedBlock: Long?,
         val notes: List<String>
-    }
+    )
 
     data class Report(
         val usbBytes: Long,
