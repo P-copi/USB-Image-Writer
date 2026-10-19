@@ -104,7 +104,7 @@ jobs:
       - name: Upload stable-signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: BYDPhoneSpace-V0.7.2-and-NavCompanion-V0.1.6
+          name: BYDPhoneSpace-V0.7.3-GboardVoice-and-NavCompanion-V0.1.6
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             navcompanion/build/outputs/apk/debug/navcompanion-debug.apk
