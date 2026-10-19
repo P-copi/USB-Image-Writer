@@ -175,7 +175,7 @@ class BackupActivity : Activity() {
         root.addView(stateCard, ToolkitUi.margin(this, 15))
         root.addView(ToolkitUi.text(
             this,
-            "ระหว่าง Backup ห้ามถอด Flash Drive • สามารถกลับหน้าแรกได้ โดยงานจะทำต่อผ่านการแจ้งเตือน • ถ้าสำรองไม่ครบ ห้ามนำ Image ที่ค้างไปเขียน USB",
+            "ระหว่าง Backup ห้ามถอด USB • ทดสอบครั้งแรกควรเปิดแอปค้างบนจอ • ถ้าอ่านสะดุด แอปจะลองอ่าน Block ที่เล็กลง • ถ้าสำรองไม่ครบ ห้ามนำ Image ที่ค้างไปใช้",
             13f, ToolkitUi.SUB
         ), ToolkitUi.margin(this, 16))
         setContentView(scroll)
