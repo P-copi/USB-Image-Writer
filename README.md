@@ -1,4 +1,4 @@
-# USB Image Writer v0.2.0 — Flash Drive Manager
+# USB Image Writer v0.2.1 — Flash Drive Manager
 
 Android USB Toolkit for Samsung Galaxy S22 Ultra and other USB Host phones. No root or PC required at runtime.
 
@@ -36,6 +36,12 @@ Full RAW images are approximately as large as the entire **USB capacity**, not j
 - The destination picker must not be pointed at the source USB drive.
 - Arc Loader source media with unreadable sectors may fail and require recovery outside this app.
 - Debug APK signing may vary across GitHub Actions runs. You may need to uninstall a previous debug build before installing.
+
+## Permanent APK signing
+
+v0.2.1 introduces a new adaptive USB icon and a permanent signing identity for release APKs. The signing key is only committed in encrypted form and unlocked by GitHub Actions secret `USB_SIGNING_PASSPHRASE`. Setup details: [SIGNING-SETUP.md](SIGNING-SETUP.md).
+
+The previously distributed CI Debug APKs cannot be upgraded to this new signer in place unless their original debug keystore can be recovered. One uninstall is required when switching to the first Release-signed APK. Later versions can update normally if signed with the same permanent key.
 
 ## Build
 GitHub Actions: \`.github/workflows/build-apk.yml\`. Builds patched libaums, then app Debug APK. Artifact is \`USB-Image-Writer-v0.2.0-debug\`. The main source repository is public; never commit signing keys or passwords.
