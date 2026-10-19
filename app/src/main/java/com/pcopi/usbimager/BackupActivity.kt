@@ -57,6 +57,8 @@ class BackupActivity : Activity() {
     private lateinit var result: TextView
     private lateinit var refreshButton: android.widget.Button
     private lateinit var inspectButton: android.widget.Button
+    private lateinit var modeSpinner: Spinner
+    private var pendingCompressed = true
     private lateinit var backupButton: android.widget.Button
     private lateinit var cancelButton: android.widget.Button
 
@@ -152,11 +154,20 @@ class BackupActivity : Activity() {
 
         val backupCard = ToolkitUi.card(this)
         backupCard.addView(ToolkitUi.text(this, "2   เลือกที่เก็บไฟล์ Image", 17f, ToolkitUi.INK, true))
+        backupCard.addView(ToolkitUi.text(this, "เลือกชนิดไฟล์สำรอง", 14f, ToolkitUi.INK, true),
+            ToolkitUi.margin(this, 10, 3))
+        modeSpinner = Spinner(this)
+        modeSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+            listOf("บีบอัดเต็มลูก (.img.gz) — แนะนำ", "ไม่บีบอัด (.img) — Full Raw"))
+        backupCard.addView(modeSpinner)
         backupCard.addView(ToolkitUi.text(
-            this, "Full Raw Backup จะสร้างไฟล์เท่าความจุจริงของ USB เช่น USB 16 GB จะได้ Image ประมาณ 16 GB กรุณาเลือกพื้นที่โทรศัพท์ที่ว่างเพียงพอ ไม่ใช่ USB ต้นฉบับ",
+            this,
+            "โหมดบีบอัดเก็บทุก Sector รวมพาร์ทิชันบูตเหมือนเดิม " +
+            "ไฟล์อาจเล็กลงมากถ้าพื้นที่ว่างเป็นศูนย์ แต่ไม่ได้รับประกันว่าจะใกล้ 2–3 GB " +
+            "เมื่อคืนค่าจะต้องใช้ USB ความจุจริงไม่น้อยกว่าต้นฉบับ",
             13f, ToolkitUi.SUB
         ), ToolkitUi.margin(this, 8, 12))
-        backupButton = ToolkitUi.button(this, "สร้างไฟล์ .img", ToolkitUi.GREEN) { confirmBackup() }
+        backupButton = ToolkitUi.button(this, "สร้าง Image จาก Flash Drive", ToolkitUi.GREEN) { confirmBackup() }
         backupCard.addView(backupButton)
         cancelButton = ToolkitUi.button(this, "ยกเลิกงานสำรอง", ToolkitUi.AMBER) { cancelBackup() }
         backupCard.addView(cancelButton, ToolkitUi.margin(this, 8))
@@ -240,18 +251,22 @@ class BackupActivity : Activity() {
     private fun confirmBackup() {
         if (locked()) return
         if (selected == null || capacity <= 0) return toast("กรุณาตรวจสอบ Flash Drive ก่อน")
+        val compressed = modeSpinner.selectedItemPosition == 0
         AlertDialog.Builder(this)
-            .setTitle("ยืนยันสร้าง Full Raw Image")
+            .setTitle(if (compressed) "ยืนยันสร้าง Image แบบบีบอัด" else "ยืนยันสร้าง Full Raw Image")
             .setMessage(
                 "USB ต้นฉบับ: " + FormatUtils.bytes(capacity) +
-                    "\nไฟล์ .img จะมีขนาดใกล้เคียงกันแม้ใช้พื้นที่จริงน้อย\n\n" +
-                    "ต้องมีพื้นที่ปลายทางว่างเพียงพอ และไม่ควรบันทึกลง USB ต้นฉบับ\n\n" +
-                    "การสำรองนี้อ่านอย่างเดียว ไม่ฟอร์แมตต้นฉบับ"
+                    (if (compressed) "\nไฟล์ .img.gz บีบอัดข้อมูลทุก Sector แบบไม่สูญเสีย • ขนาดจริงขึ้นกับข้อมูลบน USB\n\n"
+                        else "\nไฟล์ .img จะมีขนาดเท่าความจุ USB ทั้งลูก\n\n") +
+                    "เลือกหน่วยความจำภายในมือถือที่ว่างเพียงพอ ห้ามเก็บไฟล์ใน USB ต้นฉบับ\n\n" +
+                    "งานนี้อ่านต้นฉบับอย่างเดียว ไม่ฟอร์แมต"
             )
             .setNegativeButton("ยกเลิก", null)
             .setPositiveButton("เลือกตำแหน่งบันทึก") { _, _ ->
+                pendingCompressed = compressed
                 val name = "flash_backup_" +
-                    SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date()) + ".img"
+                    SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date()) +
+                    (if (compressed) ".img.gz" else ".img")
                 val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                     addCategory(Intent.CATEGORY_OPENABLE)
                     type = "application/octet-stream"
@@ -279,7 +294,7 @@ class BackupActivity : Activity() {
             )
         }
         val device = selected ?: return
-        withUsbPermission(device) { startBackup(uri, device) }
+        withUsbPermission(device) { startBackup(uri, device, pendingCompressed) }
     }
 
     private fun isRemovableOutput(uri: Uri): Boolean {
@@ -288,7 +303,7 @@ class BackupActivity : Activity() {
         return !(documentId.startsWith("primary:", true) || documentId.startsWith("home:", true))
     }
 
-    private fun startBackup(uri: Uri, device: UsbDevice) {
+    private fun startBackup(uri: Uri, device: UsbDevice, compressed: Boolean) {
         if (locked()) return
         startRequested = true
         status.text = "กำลังเริ่มบริการสำรองข้อมูล..."
@@ -298,6 +313,7 @@ class BackupActivity : Activity() {
             action = UsbBackupService.ACTION_START
             putExtra(UsbBackupService.EXTRA_OUTPUT_URI, uri.toString())
             putExtra(UsbBackupService.EXTRA_USB, device)
+            putExtra(UsbBackupService.EXTRA_COMPRESSED, compressed)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         }
         try {
@@ -344,7 +360,12 @@ class BackupActivity : Activity() {
             snap.result?.let {
                 progress.progress = 1000
                 progressText.text = "100% • " + FormatUtils.bytes(it.bytes)
-                result.text = "บันทึก Image สำเร็จ\n\nSHA-256\n" + it.sha256 +
+                result.text = "บันทึก Image สำเร็จ" +
+                    (if (it.compressed) " • .img.gz" else " • .img") +
+                    "\nข้อมูลต้นฉบับ: " + FormatUtils.bytes(it.bytes) +
+                    "\nขนาดไฟล์ที่บันทึก: " +
+                    (if (it.storedBytes >= 0L) FormatUtils.bytes(it.storedBytes) else "โปรดตรวจใน My Files") +
+                    "\n\nSHA-256 (ข้อมูลหลังคลายบีบอัด)\n" + it.sha256 +
                     "\n\nเวลาอ่าน USB: " + FormatUtils.duration(it.readMillis) +
                     "\nเวลาตรวจสอบไฟล์: " + FormatUtils.duration(it.verifyMillis) +
                     "\n\nVerify ผ่าน: ไฟล์ที่บันทึกตรงกับข้อมูลที่อ่านจาก USB"
@@ -363,6 +384,7 @@ class BackupActivity : Activity() {
         refreshButton.isEnabled = !lock
         inspectButton.isEnabled = !lock
         backupButton.isEnabled = !lock
+        modeSpinner.isEnabled = !lock
         cancelButton.isEnabled = UsbBackupService.snapshot.running
     }
 
