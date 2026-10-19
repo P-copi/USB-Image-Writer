@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Light cyan disk platter -->
+    <path android:fillColor="#1AD9FA" android:pathData="M74,44 A26,26 0,1 1,48 70 A26,26 0,0 1,74 44 Z" />
+    <path android:fillColor="#0676C9" android:strokeColor="#FFFFFF"
+          android:strokeWidth="2.8" android:pathData="M74,51 A19,19 0,1 1,55 70 A19,19 0,0 1,74 51 Z" />
+    <path android:fillColor="#DDF8FF" android:pathData="M74,63 A7,7 0,1 1,67 70 A7,7 0,0 1,74 63 Z" />
+    <path android:fillColor="#1566DA" android:strokeColor="#FFFFFF"
+          android:strokeWidth="3.5" android:strokeLineJoin="round"
+          android:pathData="M38,83 L22,70 Q18,67 21,62 L49,27 Q52,23 56,26 L71,39 Q75,42 72,46 L43,81 Q41,84 38,83 Z"/>
+    <!-- Connector -->
+    <path android:fillColor="#FFFFFF" android:pathData="M50,29 L55,21 Q57,19 59,21 L77,35 Q79,37 77,39 L70,47 Z" />
+    <path android:fillColor="#1458C5" android:pathData="M57,26 L60,28 L57,32 L54,30 Z M64,31 L67,34 L64,37 L61,34 Z"/>
+    <path android:fillColor="#90F4FF" android:pathData="M31,67 L53,40 L59,45 L37,72 Z"/>
+    <path android:fillColor="#DDF7FF" android:pathData="M42,40 L48,33 L53,37 L47,44 Z"/>
+</vector>
