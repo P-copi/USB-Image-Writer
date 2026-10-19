@@ -64,6 +64,27 @@
         android:theme="@style/AppTheme">
 
         <activity android:name=".GpackInstallerActivity" android:exported="false" />
+        <activity android:name=".GpackInputBridgeActivity" android:exported="false" />
+        <service android:name=".GpackNavKeyboardService"
+            android:label="BYD Nav Keyboard"
+            android:permission="android.permission.BIND_INPUT_METHOD"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data android:name="android.view.im"
+                android:resource="@xml/gpack_nav_input_method" />
+        </service>
+        <service android:name=".GpackNavAssistService"
+            android:label="GPack Nav Assist"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data android:name="android.accessibilityservice"
+                android:resource="@xml/gpack_nav_accessibility" />
+        </service>
         <activity android:name=".GpackVoiceKeyboardActivity" android:exported="false" />
         <activity android:name=".GpackUnifiedNavigationActivity" android:exported="false" />
         <activity android:name=".GpackNativeNavigationActivity" android:exported="false" />
