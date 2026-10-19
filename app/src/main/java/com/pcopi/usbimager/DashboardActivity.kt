@@ -96,8 +96,8 @@ class DashboardActivity : Activity() {
         root.addView(firstRow, ToolkitUi.margin(this, 0, 12))
 
         val secondRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        addTile(secondRow, "⇄", "โคลน USB", "USB → USB\nเตรียมใน v0.3", ToolkitUi.VIOLET, true) {
-            comingSoon("โคลน Flash Drive", "เตรียมรองรับ USB Hub และเลือกต้นทาง/ปลายทางพร้อม Verify ใน v0.3.0")
+        addTile(secondRow, "⇄", "Smart Rebuild", "ตรวจ EXT4\nเตรียม USB 14 GB", ToolkitUi.VIOLET, false) {
+            startActivity(Intent(this, SmartRebuildActivity::class.java))
         }
         addTile(secondRow, "⊞", "สำรวจ USB Boot", "ดูไฟล์ / Arc Loader\nไม่ต้อง Format", ToolkitUi.AMBER, false) {
             startActivity(Intent(this, BootExplorerActivity::class.java))
