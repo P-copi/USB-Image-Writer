@@ -32,6 +32,12 @@
         </intent>
         <package android:name="com.google.android.apps.maps" />
         <package android:name="com.gpack.agent" />
+        <intent>
+            <action android:name="com.intent.ACTION_SUPPORT_MAP_NAVIGATION" />
+        </intent>
+        <intent>
+            <action android:name="com.gpack.launch" />
+        </intent>
         <package android:name="com.neusoft.na.navigation" />
         <package android:name="com.google.android.gms" />
         <package android:name="com.android.vending" />
@@ -58,6 +64,7 @@
         android:theme="@style/AppTheme">
 
         <activity android:name=".GpackInstallerActivity" android:exported="false" />
+        <activity android:name=".GpackUnifiedNavigationActivity" android:exported="false" />
         <activity android:name=".GpackNativeNavigationActivity" android:exported="false" />
         <activity android:name=".NavigationBridgeActivity" android:exported="false" />
         <activity android:name=".AppManagerActivity" android:exported="false" />
