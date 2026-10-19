@@ -26,6 +26,7 @@
             android:authorities="com.pcopi.gpacknavcompanion.selfapk"
             android:exported="false"
             android:grantUriPermissions="true"/>
+        <activity android:name=".GpackDirectBridgeActivity" android:exported="false"/>
         <activity android:name=".GpackAppStateActivity" android:exported="false"/>
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
