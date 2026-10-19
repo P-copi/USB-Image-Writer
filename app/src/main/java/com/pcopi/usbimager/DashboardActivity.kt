@@ -62,7 +62,7 @@ class DashboardActivity : Activity() {
         val scroll = ScrollView(this).apply {
             setBackgroundColor(ToolkitUi.BG)
             clipToPadding = false
-            fillViewport = true
+            isFillViewport = true
         }
         ToolkitUi.applySafeInsets(scroll, this)
         val root = ToolkitUi.column(this)
