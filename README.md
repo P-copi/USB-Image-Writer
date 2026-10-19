@@ -1,4 +1,4 @@
-# USB Image Writer v0.2.1 — Flash Drive Manager
+# USB Image Writer v0.2.4 — Smart Clone Preflight
 
 Android USB Toolkit for Samsung Galaxy S22 Ultra and other USB Host phones. No root or PC required at runtime.
 
@@ -48,3 +48,15 @@ GitHub Actions: \`.github/workflows/build-apk.yml\`. Builds patched libaums, the
 
 ## Testing
 See \`TEST-PLAN.md\`. First establish full raw USB backup and file verification on a spare USB; next restore that IMG to a *different* USB and confirm matching SHA-256. Test hub-based direct cloning only in a later release.
+
+
+## v0.2.4 — Smart Clone 30 GB -> 14 GB preparation
+
+The Smart Clone tile now opens a **read-only** disk-layout inspector. It supports comparing two different USB drives connected through an Android-compatible hub. It reads the original drive's MBR or GPT partition table, checks GPT CRC32 where applicable, detects some FAT/exFAT/EXT signatures, and reports whether the existing partition extents could fit on the exact destination disk geometry.
+
+**It does not shrink EXT/FAT/exFAT partitions, rewrite the partition table, or copy data yet.** A last partition expanded by Arc Loader to use the entire 30 GB cannot be copied safely to 14 GB by truncating a raw image. Only a filesystem-aware shrink/reconstruction after analyzing real source layout can support that case. Never use this version to destroy a working Arc Loader boot drive.
+
+1. Connect the 30 GB original to USB-C OTG, or both original and destination through a powered USB-C hub.
+2. Open Smart Clone on the dashboard. Choose distinct source/target drives when both are present.
+3. Tap the read-only partition analysis button and share the output. Do not format either drive.
+4. With the actual filesystem detected, select a supported migration path for the next implementation.
