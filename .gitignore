@@ -17,3 +17,10 @@ Thumbs.db
 # APK / bundles
 *.apk
 *.aab
+
+# Never publish unencrypted signing identity
+*.p12
+*.jks
+*.keystore
+secret.txt
+**/usb-release-keystore.p12
