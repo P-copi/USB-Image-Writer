@@ -17,8 +17,8 @@ android {
         applicationId = "com.pcopi.bydphonespace"
         minSdk = 26
         targetSdk = 35
-        versionCode = 27
-        versionName = "0.7.3"
+        versionCode = 28
+        versionName = "0.7.4"
     }
 
     signingConfigs {
