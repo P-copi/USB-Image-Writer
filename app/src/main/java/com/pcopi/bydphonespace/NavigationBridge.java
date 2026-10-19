@@ -60,7 +60,7 @@ public final class NavigationBridge {
     }
 
     private static boolean isValid(String mode){
-        return DIRECT.equals(mode)||GEO.equals(mode)||NAV.equals(mode)
+        return GpackUnifiedRoutes.isMode(mode)||DIRECT.equals(mode)||GEO.equals(mode)||NAV.equals(mode)
                 ||WEB_DIR.equals(mode)||WEB_SEARCH.equals(mode)||GPACK_CLIP.equals(mode)
                 ||GPACK_GEO.equals(mode)||GPACK_WEB.equals(mode)
                 ||GPACK_SEARCH_VIEW.equals(mode)||GPACK_SHARE_TEXT.equals(mode)
@@ -71,6 +71,7 @@ public final class NavigationBridge {
     }
 
     public static String label(String mode){
+        if(GpackUnifiedRoutes.isMode(mode))return GpackUnifiedRoutes.title(GpackUnifiedRoutes.index(mode));
         if(GPACK_NATIVE_NAV.equals(mode))return "GPack NAV action + google.navigation: พิกัด";
         if(GPACK_NATIVE_GEO.equals(mode))return "GPack NAV action + geo: พิกัด";
         if(GPACK_NATIVE_LAUNCH.equals(mode))return "GPack launch action + Google Maps";
@@ -98,6 +99,7 @@ public final class NavigationBridge {
 
     public static Intent intentFor(String mode,String destination){
         String q=destination==null?"":destination.trim();
+        if(GpackUnifiedRoutes.isMode(mode))return GpackUnifiedRoutes.build(GpackUnifiedRoutes.index(mode),q);
         if(GPACK_NATIVE_NAV.equals(mode)||GPACK_NATIVE_GEO.equals(mode)||GPACK_NATIVE_LAUNCH.equals(mode)){
             Intent remote=new Intent(GPACK_NATIVE_LAUNCH.equals(mode)?GPACK_LAUNCH_ACTION:GPACK_NAV_ACTION);
             remote.setComponent(new ComponentName(GPACK_PACKAGE,GPACK_NAV_ACTIVITY));
