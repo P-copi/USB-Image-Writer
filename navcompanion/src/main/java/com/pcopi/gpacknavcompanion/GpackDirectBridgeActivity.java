@@ -35,6 +35,8 @@ public final class GpackDirectBridgeActivity extends Activity {
     private EditText destination;
     private TextView result;
     private String activeProbe;
+    private boolean launchedProbe=false;
+    private static final String RESULTS="direct_bridge_results_016";
     private int dp(float x){return (int)(getResources().getDisplayMetrics().density*x+.5f);}
     private GradientDrawable bg(int color){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(13));return d;}
     private TextView text(String s,int sz,int color){
@@ -59,10 +61,10 @@ public final class GpackDirectBridgeActivity extends Activity {
         TextView title=text("GPack Direct Maps Bridge",22,WHITE);
         title.setTypeface(Typeface.DEFAULT_BOLD);title.setPadding(0,dp(18),0,dp(8));root.addView(title);
         TextView note=text(
-            "V0.1.5 • คำสั่งข้างล่างพบใน AndroidManifest ของ GPack 2.20260321.01 จริง\n"
-            +"อย่างไรก็ตาม Manifest ของไฟล์ที่สำรองระบุ exported=false ใน LaunchAppActivity "
-            +"จึงอาจไม่อนุญาตให้ Companion เรียกจาก Android หลัก\n"
-            +"ทดสอบเมื่อรถจอดเท่านั้น และบันทึกเฉพาะผลที่เห็นบนจอจริง",13,MUTED);
+            "V0.1.6 • แก้ปัญหา Android หา Activity ไม่พบจากรอบก่อน\n"
+            +"Manifest ของ GPack มี Action ทั้งสอง แต่ไม่ประกาศรับ geo: URI จึงต้องทดลองโดยไม่แนบ data ก่อน\n"
+            +"ผลตรวจจากรถ: LaunchAppActivity exported=true และไม่ต้องขอ permission\n"
+            +"ทดสอบขณะรถจอดเท่านั้น • ยังไม่ยืนยันคำสั่งนำทางอัตโนมัติ",13,MUTED);
         note.setPadding(dp(10),dp(10),dp(10),dp(10));note.setBackground(bg(CARD));root.addView(note);
         TextView label=text("จุดหมายสำหรับทดสอบ",15,WHITE);
         label.setPadding(0,dp(18),0,dp(6));root.addView(label);
@@ -75,13 +77,17 @@ public final class GpackDirectBridgeActivity extends Activity {
 
         Button report=button("1. ตรวจสิทธิ์และช่องรับคำสั่งของ GPack",false);
         report.setOnClickListener(v->showReport());addButton(root,report);
-        Button testMap=button("2. ทดลอง ACTION_SUPPORT_MAP_NAVIGATION",true);
-        testMap.setOnClickListener(v->tryAction(ACTION_MAP));addButton(root,testMap);
-        Button testLaunch=button("3. ทดลอง com.gpack.launch",false);
-        testLaunch.setOnClickListener(v->tryAction(ACTION_LAUNCH));addButton(root,testLaunch);
-        Button fallback=button("4. ทางสำรอง: คัดลอกจุดหมาย + เปิด GPack",false);
+        Button testMap=button("2. เปิดด้วย ACTION_SUPPORT_MAP_NAVIGATION (ไม่แนบ URI)",true);
+        testMap.setOnClickListener(v->tryAction(ACTION_MAP,0));addButton(root,testMap);
+        Button testLaunch=button("3. เปิดด้วย com.gpack.launch (ไม่แนบ URI)",true);
+        testLaunch.setOnClickListener(v->tryAction(ACTION_LAUNCH,0));addButton(root,testLaunch);
+        Button testExtras=button("4. ส่งจุดหมายเป็นข้อความ Extra (ไม่แนบ URI)",false);
+        testExtras.setOnClickListener(v->tryAction(ACTION_MAP,1));addButton(root,testExtras);
+        Button testExplicit=button("5. เรียก LaunchAppActivity ตรง + จุดหมาย",false);
+        testExplicit.setOnClickListener(v->tryAction(ACTION_MAP,2));addButton(root,testExplicit);
+        Button fallback=button("6. ทางสำรอง: คัดลอกจุดหมาย + เปิด GPack",false);
         fallback.setOnClickListener(v->openFallback());addButton(root,fallback);
-        Button review=button("5. ดู/คัดลอกรายงานผลทดสอบ",false);
+        Button review=button("7. ดู/คัดลอกรายงานผลทดสอบ",false);
         review.setOnClickListener(v->showReport());addButton(root,review);
         result=text("ยังไม่ได้ทดลอง",13,MUTED);
         result.setTextIsSelectable(true);result.setPadding(dp(6),dp(20),dp(6),dp(10));root.addView(result);
@@ -91,7 +97,7 @@ public final class GpackDirectBridgeActivity extends Activity {
 
     private String destination(){return destination.getText().toString().trim();}
     private String capability(){
-        StringBuilder out=new StringBuilder("GPack 2.20260321.01 direct bridge / Companion V0.1.5\n");
+        StringBuilder out=new StringBuilder("GPack 2.20260321.01 direct bridge / Companion V0.1.6\n");
         PackageManager pm=getPackageManager();
         try{
             ActivityInfo a=pm.getActivityInfo(new ComponentName(GPACK,LAUNCH_ACTIVITY),0);
@@ -99,66 +105,96 @@ public final class GpackDirectBridgeActivity extends Activity {
                 .append(" / permission: ").append(a.permission==null?"none":a.permission).append('\n');
         }catch(Exception e){out.append("LaunchAppActivity not accessible: ").append(e.getClass().getSimpleName()).append('\n');}
         for(String action:new String[]{ACTION_MAP,ACTION_LAUNCH}){
-            Intent query=new Intent(action).addCategory(Intent.CATEGORY_DEFAULT).setPackage(GPACK);
+            Intent plain=new Intent(action).addCategory(Intent.CATEGORY_DEFAULT).setPackage(GPACK);
+            Intent withGeo=new Intent(action).addCategory(Intent.CATEGORY_DEFAULT).setPackage(GPACK)
+                .setData(Uri.parse("geo:0,0?q=example"));
             try{
-                List<ResolveInfo> handlers=pm.queryIntentActivities(query,0);
-                out.append(action).append(" handlers: ").append(handlers.size()).append('\n');
-                for(ResolveInfo r:handlers)if(r.activityInfo!=null)
+                List<ResolveInfo> valid=pm.queryIntentActivities(plain,0);
+                List<ResolveInfo> geo=pm.queryIntentActivities(withGeo,0);
+                out.append(action).append(" • NO data matches: ").append(valid.size())
+                    .append(" • WITH geo: matches: ").append(geo.size()).append('\n');
+                for(ResolveInfo r:valid)if(r.activityInfo!=null)
                     out.append("  ").append(r.activityInfo.packageName).append("/")
                         .append(r.activityInfo.name).append(" exported=").append(r.activityInfo.exported).append('\n');
             }catch(Exception e){out.append(action).append(" inspect error: ").append(e.getClass().getSimpleName()).append('\n');}
         }
-        out.append("Important: exported=false blocks calls from a different Android UID.\n");
+        out.append("Expected: GPack action filters do not declare geo URI data.\n");
         return out.toString();
     }
-    private void tryAction(String action){
+    private String methodKey(String action,int variant){
+        return action+"#"+variant;
+    }
+    private void tryAction(String action,int variant){
         String q=destination();
-        if(q.isEmpty()){destination.setError("กรุณาเลือกจุดหมาย");return;}
+        if(q.isEmpty()){destination.setError("กรุณาระบุจุดหมาย");return;}
+        String key=methodKey(action,variant);
         boolean accessible=false;
         try{
-            ActivityInfo info=getPackageManager().getActivityInfo(new ComponentName(GPACK,LAUNCH_ACTIVITY),0);
-            accessible=info.exported;
+            ActivityInfo info=getPackageManager().getActivityInfo(
+                new ComponentName(GPACK,LAUNCH_ACTIVITY),0);
+            accessible=info.exported
+                &&(info.permission==null||info.permission.isEmpty());
         }catch(Exception ignored){}
         if(!accessible){
-            record(action,"Android host: LaunchAppActivity not exported or not visible — did not attempt launch");
-            new AlertDialog.Builder(this).setTitle("GPack ปิดช่องทางนี้ไว้")
-                .setMessage("Manifest และระบบที่อ่านได้ไม่เปิด LaunchAppActivity ให้แอปอื่นเรียก "
-                    +"จึงไม่พยายามข้ามสิทธิ์ Android\n"
-                    +"ใช้วิธีสำรองระหว่างที่หาช่องทางรองรับจริง")
+            record(key,"GPack LaunchAppActivity not exported/visible or needs permission");
+            new AlertDialog.Builder(this).setTitle("ไม่สามารถเรียกจากแอปภายนอก")
+                .setMessage("Android ไม่อนุญาตให้เรียก LaunchAppActivity ในเครื่องนี้ "
+                    +"จึงไม่พยายามข้ามสิทธิ์")
                 .setPositiveButton("ตกลง",null).show();
             return;
         }
-        // Action names are confirmed by the supplied APK. The optional extras
-        // are compatibility probes, NOT a confirmed or documented GPack API.
-        Intent intent=new Intent(action).addCategory(Intent.CATEGORY_DEFAULT).setPackage(GPACK);
-        intent.setData(Uri.parse("geo:0,0?q="+Uri.encode(q)));
-        intent.putExtra(Intent.EXTRA_TEXT,q);
-        intent.putExtra("destination",q);
-        intent.putExtra("query",q);
-        intent.putExtra("packageName","com.google.android.apps.maps");
-        intent.putExtra("package_name","com.google.android.apps.maps");
-        intent.putExtra("pkgName","com.google.android.apps.maps");
-        new AlertDialog.Builder(this).setTitle("ทดลองช่องทาง GPack ที่พบจาก APK")
-            .setMessage(action+"\n\n"
-                +"ชื่อ action ยืนยันจาก Manifest แล้ว แต่รูปแบบ extra ที่ GPack รองรับยังไม่ทราบ\n"
-                +"ถ้าเปิดได้ ให้ตรวจว่า Maps และพิกัดตรงจริงหรือไม่")
+
+        // The v0.1.5 failure came from adding a geo: URI although the
+        // GPack action filters did not declare a matching data scheme.
+        // Extras do NOT take part in Android intent-filter resolution.
+        Intent intent=new Intent(action).addCategory(Intent.CATEGORY_DEFAULT);
+        if(variant==2)intent.setComponent(new ComponentName(GPACK,LAUNCH_ACTIVITY));
+        else intent.setPackage(GPACK);
+        // Keep URI/data unset for ALL probes.
+        if(variant!=0){
+            intent.putExtra(Intent.EXTRA_TEXT,q);
+            intent.putExtra("packageName","com.google.android.apps.maps");
+        }
+        boolean matches;
+        try{
+            matches=intent.resolveActivity(getPackageManager())!=null;
+        }catch(Exception e){matches=false;}
+        final boolean resolved=matches;
+        new AlertDialog.Builder(this).setTitle("ทดสอบ GPack โดยไม่แนบ geo URI")
+            .setMessage("Action: "+action+"\nวิธี: "+(
+                variant==0?"Action อย่างเดียว ไม่มีจุดหมายแนบ":
+                variant==1?"Action + ชื่อจุดหมายใน Extra (รูปแบบยังไม่ยืนยัน)":
+                "ระบุ LaunchAppActivity ตรง + Extra")+" \n"
+                +"Android resolveActivity: "+resolved+"\n\n"
+                +"หากเปิดสำเร็จ ต้องดูอีกครั้งว่าเป็น Google Maps และจุดหมายตรงจริงหรือไม่")
             .setNegativeButton("ยกเลิก",null)
             .setPositiveButton("ทดลองเปิด",(d,w)->{
+                if(!resolved&&variant!=2){
+                    record(key,"Android did not resolve a receiver for action without data");
+                    new AlertDialog.Builder(this).setTitle("ไม่มีตัวรับสำหรับคำสั่งนี้")
+                        .setMessage("ระบบตรวจไม่พบตัวรับ Action แบบไม่มี URI")
+                        .setPositiveButton("ตกลง",null).show();
+                    return;
+                }
                 try{
+                    activeProbe=key;
+                    launchedProbe=false;
                     startActivity(intent);
-                    activeProbe=action;
-                    record(action,"Android accepted startActivity; Maps/destination not yet verified");
+                    launchedProbe=true;
+                    record(key,"startActivity succeeded • NOT yet verified inside GPack or Maps");
                 }catch(Exception e){
                     activeProbe=null;
-                    record(action,"Rejected: "+e.getClass().getSimpleName()
+                    launchedProbe=false;
+                    record(key,"Rejected: "+e.getClass().getSimpleName()
                         +(e.getMessage()==null?"":" / "+e.getMessage()));
-                    new AlertDialog.Builder(this).setTitle("Android ปฏิเสธ")
+                    new AlertDialog.Builder(this).setTitle("Android ปฏิเสธคำสั่ง")
                         .setMessage(e.getClass().getSimpleName()+"\n"
                             +(e.getMessage()==null?"":e.getMessage()))
                         .setPositiveButton("ตกลง",null).show();
                 }
             }).show();
     }
+
     private void openFallback(){
         String q=destination();if(q.isEmpty()){destination.setError("กรุณาใส่จุดหมาย");return;}
         ClipboardManager cm=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
@@ -173,7 +209,7 @@ public final class GpackDirectBridgeActivity extends Activity {
         }catch(Exception e){record("fallback","Cannot open GPack: "+e.getClass().getSimpleName());}
     }
     private void record(String method,String text){
-        getSharedPreferences("direct_bridge_results_015",MODE_PRIVATE)
+        getSharedPreferences(RESULTS,MODE_PRIVATE)
             .edit().putString(method,text).apply();refresh();
     }
     private void refresh(){
@@ -181,11 +217,15 @@ public final class GpackDirectBridgeActivity extends Activity {
     }
     private String fullReport(){
         StringBuilder b=new StringBuilder(capability());
-        for(String a:new String[]{ACTION_MAP,ACTION_LAUNCH,"fallback"}){
+        for(String a:new String[]{methodKey(ACTION_MAP,0),methodKey(ACTION_LAUNCH,0),
+                methodKey(ACTION_MAP,1),methodKey(ACTION_MAP,2),"fallback"}){
             b.append("\n").append(a).append(": ")
-                .append(getSharedPreferences("direct_bridge_results_015",MODE_PRIVATE)
+                .append(getSharedPreferences(RESULTS,MODE_PRIVATE)
                     .getString(a,"not tested")).append('\n');
         }
+        b.append("\nPrevious v0.1.5 geo: failure: ")
+            .append(getSharedPreferences("direct_bridge_results_015",MODE_PRIVATE)
+                .getString(ACTION_MAP,"not recorded")).append('\n');
         return b.toString();
     }
     private void showReport(){
@@ -199,8 +239,8 @@ public final class GpackDirectBridgeActivity extends Activity {
     }
     @Override protected void onResume(){
         super.onResume();
-        if(activeProbe==null)return;
-        final String probe=activeProbe;activeProbe=null;
+        if(activeProbe==null||!launchedProbe)return;
+        final String probe=activeProbe;activeProbe=null;launchedProbe=false;
         new AlertDialog.Builder(this).setTitle("ผลที่คุณเห็นจริงหลังทดลอง")
             .setMessage("คำสั่ง "+probe+" เปิด Google Maps ภายใน GPack พร้อมจุดหมายที่ถูกต้องหรือไม่?")
             .setPositiveButton("ใช่ • จุดหมายตรง",(d,w)->record(probe,"User verified Google Maps + matching destination"))
