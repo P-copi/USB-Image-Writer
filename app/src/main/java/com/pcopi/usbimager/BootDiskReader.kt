@@ -9,9 +9,9 @@ import java.nio.ByteBuffer
 import java.util.Locale
 
 /**
- * Read-only FAT16/FAT32 boot-volume explorer over Android USB Host. This does
+ * Read-only FAT16/FAT32 and EXT2/3/4 boot-volume explorer over Android USB Host. This does
  * not mount USB through Android and NEVER invokes blockDevice.write().
- * ext4/exFAT/NTFS are shown by type but not exposed as files in this version.
+ * exFAT/NTFS are shown by type but their files are not opened in this version.
  */
 class BootDiskReader private constructor(private val raw: UsbRawDevice) : Closeable {
     data class Entry(
@@ -24,7 +24,10 @@ class BootDiskReader private constructor(private val raw: UsbRawDevice) : Closea
         val number: Int, val startLba: Long, val endLba: Long,
         val fileSystem: String, val isReadable: Boolean,
         val label: String,
-        val warning: String = ""
+        val warning: String = "",
+        val fsBytes: Long? = null,
+        val usedBytes: Long? = null,
+        val freeBytes: Long? = null
     )
     data class Identity(
         val title: String,
@@ -54,6 +57,7 @@ class BootDiskReader private constructor(private val raw: UsbRawDevice) : Closea
     private val blockSize = raw.blockSize
     private val totalBlocks = raw.blockDevice.blocks
     private val fatCache = mutableMapOf<Int, Fat>()
+    private val extCache = mutableMapOf<Int, ExtVolumeReader>()
     private val devices = mutableListOf<Volume>()
     private var scheme: String = "ไม่ทราบ"
     private val notes = mutableListOf<String>()
@@ -78,6 +82,7 @@ class BootDiskReader private constructor(private val raw: UsbRawDevice) : Closea
         devices.clear()
         notes.clear()
         fatCache.clear()
+        extCache.clear()
         cache.clear()
         if (blockSize !in listOf(512, 4096))
             throw IOException("รองรับ USB Block Size 512/4096 B ในรุ่นนี้")
@@ -187,12 +192,19 @@ class BootDiskReader private constructor(private val raw: UsbRawDevice) : Closea
         }
         if (devices.isEmpty()) notes.add("ไม่พบพาร์ทิชันที่อ่านโครงสร้างได้")
         if (devices.none { it.isReadable })
-            notes.add("ยังไม่รองรับการเปิดรายการไฟล์ exFAT/NTFS/EXT ในรุ่นนี้")
+            notes.add("ยังไม่รองรับการเปิดรายการไฟล์บางระบบ เช่น exFAT/NTFS หรือ EXT ที่มี feature พิเศษ")
         return Scan(scheme,totalBlocks*blockSize.toLong(),devices.toList(),status,notes.toList())
     }
 
     /** null directory = volume root, otherwise directory cluster Entry. */
     fun list(volumeNumber:Int,directory:Entry?):List<Entry> {
+        val ext=extCache[volumeNumber]
+        if(ext!=null) {
+            if(directory!=null && !directory.directory)throw IOException("ไม่ใช่โฟลเดอร์")
+            return ext.list(directory?.cluster ?: 2L).map {
+                Entry(it.name,it.directory,it.inode,it.size)
+            }
+        }
         val fat=fatCache[volumeNumber]
             ?:throw IOException("พาร์ทิชันนี้ไม่ใช่ FAT16/FAT32 ที่รองรับ")
         if(directory!=null && !directory.directory)throw IOException("ไม่ใช่โฟลเดอร์")
@@ -244,6 +256,8 @@ class BootDiskReader private constructor(private val raw: UsbRawDevice) : Closea
 
     fun readText(volumeNumber:Int,file:Entry,limit:Int=8192):String {
         if(file.directory)throw IOException("เลือกไฟล์ข้อความ ไม่ใช่โฟลเดอร์")
+        val ext=extCache[volumeNumber]
+        if(ext!=null)return ext.readText(file.cluster,limit)
         if(file.size>128L*1024L && limit>128*1024)throw IOException("ไฟล์ใหญ่เกินขอบเขตพรีวิว")
         val fat=fatCache[volumeNumber]?:throw IOException("ระบบไฟล์ไม่รองรับ")
         if(file.size==0L)return ""
@@ -310,8 +324,22 @@ class BootDiskReader private constructor(private val raw: UsbRawDevice) : Closea
                 return
             }
         }
-        devices.add(Volume(number,start,end,name,false,label,
-            if(name.startsWith("FAT")) "FAT boot sector ไม่สมบูรณ์" else "อ่านชื่อระบบไฟล์ได้ แต่ยังเปิดไฟล์ไม่ได้"))
+        if(name=="EXT2/3/4") {
+            try {
+                val ext=ExtVolumeReader(raw,start,end)
+                val v=ext.usage
+                extCache[number]=ext
+                devices.add(Volume(number,start,end,v.fs,true,v.label,v.warning,
+                    v.sizeBytes,v.usedBytes,v.freeBytes))
+            }catch(e:Exception) {
+                devices.add(Volume(number,start,end,"EXT2/3/4",false,label,
+                    "ไม่สามารถอ่าน EXT metadata: "+(e.message?:e.javaClass.simpleName)))
+            }
+        } else {
+            devices.add(Volume(number,start,end,name,false,label,
+                if(name.startsWith("FAT")) "FAT boot sector ไม่สมบูรณ์" else
+                    "อ่านชื่อระบบไฟล์ได้ แต่ยังเปิดไฟล์ไม่ได้"))
+        }
     }
 
     private fun readChain(fat:Fat,first:Long,limitBytes:Int):ByteArray {
