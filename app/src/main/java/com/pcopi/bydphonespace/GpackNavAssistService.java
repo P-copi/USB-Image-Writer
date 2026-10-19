@@ -40,7 +40,6 @@ public final class GpackNavAssistService extends AccessibilityService {
             if(query.isEmpty())return;
             ArrayDeque<AccessibilityNodeInfo> queue=new ArrayDeque<>();
             queue.add(root);
-            AccessibilityNodeInfo focused=null;
             AccessibilityNodeInfo searchLike=null;
             AccessibilityNodeInfo mapsIcon=null;
             int scanned=0;
@@ -51,15 +50,22 @@ public final class GpackNavAssistService extends AccessibilityService {
                 if(!"com.gpack.agent".equals(nodePackage)
                         &&!"com.google.android.apps.maps".equals(nodePackage))continue;
                 if(n.isEditable()&&!n.isPassword()){
-                    if(n.isFocused())focused=n;
                     String content=normalized(n.getContentDescription());
                     String text=normalized(n.getText());
                     String viewId=normalized(n.getViewIdResourceName());
                     String hint=android.os.Build.VERSION.SDK_INT>=26?normalized(n.getHintText()):"";
-                    if(hint.contains("search")||hint.contains("ค้นหา")||
-                        content.contains("search")||content.contains("ค้นหา")||
-                        viewId.contains("search")||text.contains("search here")||
-                        text.contains("ค้นหาที่นี่")){
+                    // Prevent accidentally inserting the destination into GPack's
+                    // app search, Chrome address bar, or an unrelated guest app.
+                    boolean mapsLabel=hint.contains("search here")
+                        ||hint.contains("search maps")||hint.contains("google maps")
+                        ||hint.contains("ค้นหาที่นี่")||hint.contains("ค้นหาสถานที่")
+                        ||content.contains("search here")||content.contains("search maps")
+                        ||content.contains("ค้นหาที่นี่")
+                        ||text.contains("search here")||text.contains("ค้นหาที่นี่");
+                    boolean mapsViewId=viewId.contains("search_omnibox_text_box")
+                        ||viewId.contains("search_omnibox_textbox");
+                    if(mapsLabel||mapsViewId
+                        ||("com.google.android.apps.maps".equals(nodePackage)&&n.isFocused())){
                         searchLike=n;
                     }
                 }
@@ -76,7 +82,7 @@ public final class GpackNavAssistService extends AccessibilityService {
                     if(child!=null)queue.addLast(child);
                 }
             }
-            AccessibilityNodeInfo target=focused!=null?focused:searchLike;
+            AccessibilityNodeInfo target=searchLike;
             if(target!=null){
                 Bundle data=new Bundle();
                 data.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,query);
