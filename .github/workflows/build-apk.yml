@@ -88,7 +88,7 @@ jobs:
         if: env.USB_SIGNING_PASSPHRASE != ''
         uses: actions/upload-artifact@v4
         with:
-          name: USB-Image-Writer-v0.2.3-SIGNED
+          name: USB-Image-Writer-v0.2.4-SIGNED
           path: app/build/outputs/apk/release/app-release.apk
           retention-days: 14
 
@@ -110,6 +110,6 @@ jobs:
         if: env.USB_SIGNING_PASSPHRASE == ''
         uses: actions/upload-artifact@v4
         with:
-          name: USB-Image-Writer-v0.2.3-DEBUG-UNSIGNED-IDENTITY
+          name: USB-Image-Writer-v0.2.4-DEBUG-UNSIGNED-IDENTITY
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 3
