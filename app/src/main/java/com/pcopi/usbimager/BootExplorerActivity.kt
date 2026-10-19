@@ -129,8 +129,9 @@ class BootExplorerActivity : Activity() {
         safety.addView(ToolkitUi.text(this,
             "หาก Samsung เสนอให้ฟอร์แมต USB ให้กด “ยกเลิก”\n"+
             "เมนูนี้อ่านอย่างเดียว ไม่เปลี่ยนข้อมูลต้นฉบับ\n"+
-            "รุ่นแรกเปิดไฟล์ FAT16/FAT32 ได้ ส่วน EXT2/EXT4, NTFS และ exFAT "+
-            "จะแสดงเพียงชนิดพาร์ทิชัน ยังเปิดโฟลเดอร์ภายในไม่ได้",
+            "รุ่นนี้เปิดไฟล์ FAT16/FAT32 และ EXT2/EXT4 ที่รองรับได้\n"+
+            "ส่วน NTFS/exFAT ยังแสดงได้เพียงชนิดระบบไฟล์\n"+
+            "อย่าส่งภาพเนื้อหา user-config.yml หรือข้อมูล Serial/Token",
             13f,ToolkitUi.SUB),ToolkitUi.margin(this,9))
         root.addView(safety,ToolkitUi.margin(this,14))
         setContentView(scroll)
@@ -223,7 +224,7 @@ class BootExplorerActivity : Activity() {
         if(!v.isReadable){
             files.removeAllViews()
             files.addView(ToolkitUi.text(this,
-                "พบ "+v.fileSystem+" แต่ยังไม่รองรับการเปิดไฟล์ในรุ่นนี้",
+                "พบ "+v.fileSystem+" แต่ยังไม่รองรับการเปิดไฟล์ในรุ่นนี้\n"+v.warning,
                 14f,ToolkitUi.SUB))
             return
         }
@@ -262,6 +263,17 @@ class BootExplorerActivity : Activity() {
         }
     }
     private fun preview(file:BootDiskReader.Entry){
+        val sensitive=Regex("(?i)(user-config|serial|token|credential|password|secret|\\.key|\\.pem)")
+            .containsMatchIn(file.name)
+        if(sensitive){
+            AlertDialog.Builder(this).setTitle("ไฟล์ตั้งค่าอาจมีข้อมูลลับ")
+                .setMessage("โปรดอย่าส่งภาพเนื้อหาไฟล์นี้ หากต้องการอ่านเฉพาะบนมือถือให้กดดูไฟล์")
+                .setNegativeButton("ยกเลิก",null)
+                .setPositiveButton("ดูไฟล์"){_,_->showPreview(file)}
+                .show()
+        }else showPreview(file)
+    }
+    private fun showPreview(file:BootDiskReader.Entry){
         val active=reader?:return
         val vol=currentVolume
         busy=true;updateButtons();status.text="กำลังอ่าน "+file.name
@@ -284,9 +296,19 @@ class BootExplorerActivity : Activity() {
         r.identity.evidence.forEach{s.append("✓ ").append(it).append('\n')}
         s.append("\nดิสก์: ").append(r.style).append(" • ")
             .append(FormatUtils.bytes(r.totalBytes)).append('\n')
-        r.volumes.forEach{s.append("พาร์ทิชัน ").append(it.number).append(": ")
-            .append(it.fileSystem).append(if(it.isReadable)" • อ่านไฟล์ได้" else " • ยังไม่รองรับ")
-            .append("\nLBA ").append(it.startLba).append("–").append(it.endLba).append('\n')}
+        r.volumes.forEach { v ->
+            s.append("พาร์ทิชัน ").append(v.number).append(": ")
+                .append(v.fileSystem).append(if(v.isReadable)" • อ่านไฟล์ได้" else " • ยังไม่รองรับ")
+                .append("\nLBA ").append(v.startLba).append("–").append(v.endLba).append('\n')
+            if(v.fsBytes!=null && v.usedBytes!=null && v.freeBytes!=null) {
+                s.append("พื้นที่จัดสรร (ไฟล์ + Metadata): ").append(FormatUtils.bytes(v.usedBytes))
+                    .append('\n')
+                    .append("พื้นที่ว่างตาม EXT Superblock: ").append(FormatUtils.bytes(v.freeBytes))
+                    .append('\n')
+                    .append("ขนาด EXT Filesystem: ").append(FormatUtils.bytes(v.fsBytes)).append('\n')
+            }
+            if(v.warning.isNotBlank())s.append("หมายเหตุ: ").append(v.warning).append('\n')
+        }
         r.notes.forEach{s.append("• ").append(it).append('\n')}
         return s.toString()
     }
