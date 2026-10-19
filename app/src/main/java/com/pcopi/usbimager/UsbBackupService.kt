@@ -139,9 +139,14 @@ class UsbBackupService : Service() {
     }
 
     private fun updateProgress(p: FlashBackup.Progress) {
-        val name = if (p.stage == FlashBackup.Stage.READ_USB) "กำลังอ่าน USB เพื่อสร้าง Image..." else "กำลัง Verify ไฟล์ Image..."
+        val name = when (p.stage) {
+            FlashBackup.Stage.READ_USB -> "กำลังอ่าน USB เพื่อสร้าง Image..."
+            FlashBackup.Stage.RECOVER_USB -> "USB สะดุด • กำลังลองอ่านใหม่..."
+            FlashBackup.Stage.VERIFY_FILE -> "กำลัง Verify ไฟล์ Image..."
+        }
         snapshot = Snapshot(
-            running = true, stage = name, completed = p.completed, total = p.total,
+            running = true, stage = if (p.detail.isNotBlank()) name + "\n" + p.detail else name,
+            completed = p.completed, total = p.total,
             bytesPerSecond = p.speed
         )
         val now = System.currentTimeMillis()
@@ -150,7 +155,9 @@ class UsbBackupService : Service() {
             val percent = if (p.total > 0) (p.completed * 100 / p.total).toInt().coerceIn(0, 100) else 0
             notifications.notify(
                 NOTIFICATION_ID,
-                notification(name + " " + percent + "% • " + FormatUtils.speed(p.speed), percent, true)
+                notification(name + " " + percent + "% • " +
+                    (if (p.detail.isNotBlank()) p.detail.take(65) else FormatUtils.speed(p.speed)),
+                    percent, true)
             )
         }
     }
