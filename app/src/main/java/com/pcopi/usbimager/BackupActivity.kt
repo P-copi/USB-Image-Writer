@@ -122,7 +122,7 @@ class BackupActivity : Activity() {
 
     private fun buildUi() {
         val scroll = ScrollView(this).apply {
-            fillViewport = true
+            isFillViewport = true
             setBackgroundColor(ToolkitUi.BG)
             clipToPadding = false
         }
