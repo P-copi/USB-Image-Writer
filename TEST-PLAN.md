@@ -1,42 +1,40 @@
-# Test Plan — v0.1.1
+# USB Image Writer v0.2.0 — Test Plan
 
-## A. USB discovery
-- [x] เสียบ Flash Drive ผ่าน USB-C OTG แล้วรายการขึ้น
-- [x] กดรีเฟรชแล้วรายการถูกต้อง
-- [x] Android ขอสิทธิ์ USB และแอปทำงานต่อหลังอนุญาต
-- [ ] ถอดแล้วรายการหายและแอปไม่ค้าง
+Use expendable test media. Do NOT overwrite your only working Arc Loader boot drive.
 
-## B. Capacity
-- [x] แสดงความจุ USB ใกล้เคียงค่าจริง
-- [x] แสดง block size ตามอุปกรณ์
-- [ ] Image ใหญ่กว่า USB ต้องห้ามเขียน
+## A. Dashboard and basic navigation
+1. Install Debug APK; uninstall previous debug build if signing conflict appears.
+2. Open the app. Check that the new dashboard fits under system status/navigation bars.
+3. Verify four main tiles: Write Image, Create Image, Clone USB (coming soon), Diagnose/Repair (coming soon).
+4. Open each enabled screen; navigate back; make sure the app remains responsive.
+5. Without USB inserted, confirm the app handles "no supported device" normally.
 
-## C. Write
-- [x] เลือก .img ได้
-- [x] มีคำเตือน 2 ชั้น
-- [x] Progress 0-100%
-- [x] แสดง MB/s
-- [x] หน้าจอไม่ดับระหว่างทำงาน
-- [ ] ถอด USB ระหว่างทำงานแล้วหยุดพร้อมแจ้ง error
-- [ ] ตรวจเวลาที่เหลือโดยประมาณใน v0.1.1
+## B. Existing Write Image regression
+1. Use a spare USB at least as large as the chosen raw \`.img\`.
+2. Inspect USB capacity and block size.
+3. Confirm both destructive warnings and write to the spare USB.
+4. Observe Write 100%, Verify 100%, matching SHA-256.
+5. Remove/reinsert and test boot separately where appropriate.
+6. Background app switching is still an open compatibility test for certain Samsung OTG combinations.
 
-## D. Verify
-- [x] หลังเขียนเสร็จเข้า Verify อัตโนมัติ
-- [x] SHA-256 Image == SHA-256 USB
-- [x] แสดง “Verify ผ่าน” เฉพาะเมื่อ hash ตรงกัน
-- [ ] ตรวจเวลาและความเร็วเฉลี่ย Write/Verify ในหน้าสรุป v0.1.1
+## C. New Full Raw Backup
+1. Insert a **spare, readable** Flash Drive, ideally small (2–8 GB).
+2. Open "สร้าง Image" and inspect the source capacity; note the reported bytes.
+3. Confirm **internal phone storage has enough free space for full USB capacity plus headroom**.
+4. Tap "สร้างไฟล์ .img" and choose a folder in internal phone storage.
+5. Leave Backup in the foreground for the first test. Observe USB-read progress to 100%.
+6. Then observe file-Verify progress to 100%, and success message with SHA-256.
+7. In My Files, confirm the IMG exists and has approximately exactly the source USB's full capacity.
+8. For an end-to-end restore test, write that IMG to a **different expendable USB** with sufficient actual capacity, Verify, and test the partition structure/boot if applicable.
 
-## E. Arc Loader
-- [x] เขียน arc.img 2.00 GB สำเร็จและ Verify ผ่าน
-- [x] Samsung อาจแจ้งให้ฟอร์แมตหลังเขียน boot image; ต้องกด “ยกเลิก” และห้ามฟอร์แมต
-- [ ] Flash Drive บูต Arc Loader ได้
-- [ ] Partition/ไฟล์ภายในตรงกับต้นฉบับ
-- [ ] ทดสอบบน Flash Drive ลูกใหม่ที่ความจุ >= Image
+## D. Backup cancellation / reliability
+1. On a spare source, start Backup and cancel while progress is underway.
+2. Confirm the original USB remains readable and unchanged.
+3. Confirm a partial output is not used. The app attempts to delete it; manually remove it if still present.
+4. Repeat on low free storage and USB detach scenarios, always using noncritical test media.
+5. Background test: only after a successful foreground test, switch apps briefly, return and check progress. Report error text, percent and USB model if it stops.
 
-## F. Roadmap Backup / Clone
-- [ ] v0.2.0: อ่าน Flash Drive แบบ raw แล้วบันทึกเป็น .img ผ่าน Storage Access Framework
-- [ ] ตรวจพื้นที่ว่าง/ขนาดปลายทางก่อน Backup
-- [ ] แสดง Progress / MB/s / ETA ระหว่าง Backup
-- [ ] สร้าง SHA-256 ของไฟล์ Backup
-- [ ] ใช้ Backup Image เขียนกลับไป Flash Drive ลูกใหม่และ Verify
-- [ ] ภายหลัง: Direct USB → USB Clone ผ่าน USB-C hub/powered hub
+## Not implemented in v0.2.0
+- Direct USB-to-USB clone with hub.
+- Smart/compact image.
+- Filesystem repair, full-media destructive test, or NAND repair.
