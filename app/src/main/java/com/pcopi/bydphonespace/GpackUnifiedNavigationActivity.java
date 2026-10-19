@@ -31,6 +31,7 @@ public final class GpackUnifiedNavigationActivity extends Activity {
     private static final int BG=0xff07101b, CARD=0xff111f2f, WHITE=0xfff2f7fc,
         MUTED=0xff9db1c5, CYAN=0xff4dc4ff, GREEN=0xff5ddba8;
     private static final String PREF="gpack_unified_results_072";
+    private static final int REQUEST_VOICE_DESTINATION=7392;
     // Prioritise ways that can actually carry a destination.
     private static final int[] ORDER={2,4,6,3,5,8,7,9,0,1};
     private EditText destinationInput;
@@ -107,7 +108,7 @@ public final class GpackUnifiedNavigationActivity extends Activity {
         Button back=button("‹ กลับหน้าหลัก",false);back.setOnClickListener(v->finish());addButton(root,back);
         TextView heading=text("GPack • ตรวจครั้งเดียว",23,WHITE);heading.setTypeface(Typeface.DEFAULT_BOLD);
         heading.setPadding(0,dp(15),0,dp(5));root.addView(heading);
-        root.addView(text("BYD Phone Space V0.7.2 — รวมผล APK GPack จริง + Companion V0.1.6",13,GREEN));
+        root.addView(text("BYD Phone Space V0.7.3 — รวมผล APK GPack จริง + Companion V0.1.6",13,GREEN));
         LinearLayout intro=panel(root);
         intro.addView(text("ตรวจจาก GPack 2.20260321.01: พบ Action สำหรับการนำทางและเปิดแอป "
             +"แต่ยังไม่ทราบรูปแบบ Extra/URI ที่อ่านจริง\n"
@@ -123,6 +124,14 @@ public final class GpackUnifiedNavigationActivity extends Activity {
         destinationInput.setSingleLine(false);destinationInput.setMinLines(2);
         destinationInput.setBackground(bg(CARD));destinationInput.setPadding(dp(13),dp(10),dp(13),dp(10));
         root.addView(destinationInput,new LinearLayout.LayoutParams(-1,dp(88)));
+        Button voice=button("🎤 ทดลอง Gboard / เสียงภาษาไทย / รับจุดหมายด้วยเสียง",false);
+        voice.setOnClickListener(v->{
+            Intent ask=new Intent(this,GpackVoiceKeyboardActivity.class);
+            ask.putExtra("fromNavigation",true);
+            ask.putExtra("destination",destinationInput.getText().toString());
+            startActivityForResult(ask,REQUEST_VOICE_DESTINATION);
+        });
+        addButton(root,voice);
 
         Button next=button(nextIndex()<0?"ทดสอบครบทุกวิธีแล้ว":"ทดสอบวิธีที่ควรลองถัดไป",true);
         next.setEnabled(nextIndex()>=0);
@@ -167,6 +176,21 @@ public final class GpackUnifiedNavigationActivity extends Activity {
             Toast.makeText(this,"คัดลอกรายงานผลแล้ว",Toast.LENGTH_SHORT).show();
         });addButton(root,copy);
         setContentView(scroll);
+    }
+    @Override protected void onActivityResult(int request,int resultCode,Intent data){
+        super.onActivityResult(request,resultCode,data);
+        if(request==REQUEST_VOICE_DESTINATION&&resultCode==RESULT_OK&&data!=null){
+            String recognized=data.getStringExtra("destination");
+            if(recognized!=null&&!recognized.trim().isEmpty()&&recognized.length()<=480){
+                destination=recognized.trim();
+                if(destinationInput!=null){
+                    destinationInput.setText(destination);
+                    destinationInput.setSelection(destination.length());
+                }
+                if(reportView!=null)reportView.setText(fullReport());
+                Toast.makeText(this,"ใช้จุดหมายจากเสียง/คีย์บอร์ดแล้ว • ตรวจข้อความก่อนกดทดสอบ Maps",Toast.LENGTH_LONG).show();
+            }
+        }
     }
     private String query(){
         String q=destinationInput.getText().toString().trim();
@@ -270,7 +294,7 @@ public final class GpackUnifiedNavigationActivity extends Activity {
             }).setNegativeButton("ไว้ก่อน",null).show();
     }
     private String fullReport(){
-        StringBuilder b=new StringBuilder("BYD Phone Space V0.7.2 • GPack 2.20260321.01 static manifest probes\n");
+        StringBuilder b=new StringBuilder("BYD Phone Space V0.7.3 • GPack 2.20260321.01 static manifest probes\n");
         b.append("Tested destination: ").append(destination).append('\n');
         b.append(capabilities());
         for(int index:ORDER)b.append(GpackUnifiedRoutes.title(index)).append(" = ")
