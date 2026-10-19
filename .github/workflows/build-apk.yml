@@ -11,6 +11,7 @@ jobs:
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      USB_SIGNING_PASSPHRASE: ${{ secrets.USB_SIGNING_PASSPHRASE }}
     steps:
       - name: Checkout app
         uses: actions/checkout@v5
@@ -66,12 +67,40 @@ jobs:
         with:
           gradle-version: "8.9"
 
+      - name: Unlock permanent signing identity
+        if: env.USB_SIGNING_PASSPHRASE != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d scripts/usb-release-keystore.enc.b64 > "$RUNNER_TEMP/usb-release-key.enc"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 250000 \
+            -in "$RUNNER_TEMP/usb-release-key.enc" \
+            -out "$RUNNER_TEMP/usb-release-keystore.p12" \
+            -pass env:USB_SIGNING_PASSPHRASE
+          chmod 600 "$RUNNER_TEMP/usb-release-keystore.p12"
+          echo "USB_KEYSTORE_PATH=$RUNNER_TEMP/usb-release-keystore.p12" >> "$GITHUB_ENV"
+
+      - name: Build stable signed release APK
+        if: env.USB_SIGNING_PASSPHRASE != ''
+        run: gradle :app:assembleRelease --stacktrace
+
+      - name: Upload stable signed APK
+        if: env.USB_SIGNING_PASSPHRASE != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: USB-Image-Writer-v0.2.1-SIGNED
+          path: app/build/outputs/apk/release/app-release.apk
+          retention-days: 14
+
+      # Development fallback only. Debug signatures vary across GitHub runners.
+      # Do not distribute Debug builds as update-in-place installation packages.
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
 
-      - name: Upload APK
+      - name: Upload Debug APK (not upgradeable)
+        if: env.USB_SIGNING_PASSPHRASE == ''
         uses: actions/upload-artifact@v4
         with:
-          name: USB-Image-Writer-v0.2.0-debug
+          name: USB-Image-Writer-v0.2.1-DEBUG-UNSIGNED-IDENTITY
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 3
