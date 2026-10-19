@@ -1,71 +1,44 @@
-# USB Image Writer v0.1.1
+# USB Image Writer v0.2.0 — Flash Drive Manager
 
-Android app สำหรับเขียน raw disk image (`.img`) ลง USB Flash Drive ผ่าน USB-C OTG โดยไม่ Root
+Android USB Toolkit for Samsung Galaxy S22 Ultra and other USB Host phones. No root or PC required at runtime.
 
-## เป้าหมาย V1
+## Available in v0.2.0
 
-- เลือกไฟล์ `.img` ผ่าน Android Storage Access Framework
-- ตรวจหา USB Mass Storage แบบ SCSI Transparent / Bulk-Only Transport
-- ขอ USB permission ตามระบบ Android
-- อ่านความจุจริงและ block size ของ Flash Drive
-- ป้องกันการเขียนเมื่อ Image ใหญ่กว่า USB
-- ยืนยันก่อนลบข้อมูล 2 ชั้น
-- Raw write ตั้งแต่ LBA 0
-- แสดง Progress / จำนวนข้อมูล / ความเร็วเฉลี่ย / เวลาที่เหลือโดยประมาณ / เวลาที่เหลือโดยประมาณ
-- Verify หลังเขียนด้วย SHA-256 โดยอ่านข้อมูลกลับจาก USB
-- ไม่ต้อง Root และไม่ต้องใช้คอมพิวเตอร์ในการใช้งาน APK
+### 1. Write Image (IMG → USB)
+- Pick an uncompressed raw \`.img\` using Android's document picker.
+- Choose a USB mass-storage device, check capacity and block size.
+- Confirm destructive write; raw write starts at LBA 0.
+- Display progress, transfer speed, ETA and verify SHA-256 by reading the USB back.
+- Connected-device foreground service, wake lock and patched libaums recovery inherited from v0.1.8.
+- Warning: never accept Android/Samsung's format prompt for a bootable Arc Loader USB.
 
-## ข้อจำกัด V1
+### 2. Create Image (USB → IMG)
+- Open **สร้าง Image** from the new dashboard.
+- Inspect the source USB and check its actual size.
+- Choose a destination with Android \`ACTION_CREATE_DOCUMENT\`, preferably phone internal storage.
+- Full-device backup: read every raw sector from LBA 0, never write to source USB.
+- Foreground notification, progress, throughput, ETA and user cancellation.
+- SHA-256 calculated while copying, then independently re-read the saved IMG to verify its stored content.
+- On a recoverable failure/cancellation, attempt to delete the incomplete output document. If the process is killed, partial output might remain; do not use it.
 
-- รองรับไฟล์ `.img` แบบไม่บีบอัดก่อน (`.img.gz` ยังไม่รองรับ)
-- รองรับ USB Mass Storage ที่ใช้ Bulk-Only Transport (BOT). UAS/SSD enclosure บางรุ่นยังไม่รองรับ
-- ขนาดไฟล์ Image ต้องตรงแนว block size ของ USB (โดยทั่วไป 512 หรือ 4096 ไบต์)
-- ระหว่างเขียนห้ามถอด USB
-- ยังไม่มี Backup USB -> Image ใน v0.1.1; ฟีเจอร์นี้วางไว้สำหรับ v0.2.0
+Full RAW images are approximately as large as the entire **USB capacity**, not just used files. A 16 GB flash drive needs about 16 GB of free storage plus overhead.
 
-## Build บน GitHub Actions
+### Coming later (visible but clearly marked unavailable)
+- Direct USB → USB clone with a compatible powered hub and clear source/target confirmation.
+- Compact/smart images (filesystem-specific partition analysis and compression).
+- USB diagnostic and non-destructive testing; no claims of repairing damaged NAND chips.
 
-โปรเจกต์มี `.github/workflows/build-apk.yml` แล้ว เมื่อ push ขึ้น repo ใหม่ GitHub จะ build APK อัตโนมัติ
+## Limitations / safety
+- USB mass storage using SCSI transparent subclass with Bulk-Only Transport (BOT); UAS devices may not work.
+- Background USB stability depends on Android firmware/OTG hardware. First test with the app on screen.
+- No concurrent raw write and backup operations.
+- Verify for IMG creation checks the saved file against the data read on the first pass; it is not a hardware-health test or an independent re-scan of all source sectors.
+- The destination picker must not be pointed at the source USB drive.
+- Arc Loader source media with unreadable sectors may fail and require recovery outside this app.
+- Debug APK signing may vary across GitHub Actions runs. You may need to uninstall a previous debug build before installing.
 
-Artifact: `USB-Image-Writer-v0.1.1-debug`
+## Build
+GitHub Actions: \`.github/workflows/build-apk.yml\`. Builds patched libaums, then app Debug APK. Artifact is \`USB-Image-Writer-v0.2.0-debug\`. The main source repository is public; never commit signing keys or passwords.
 
-APK: `app-debug.apk`
-
-## การทดสอบครั้งแรกที่แนะนำ
-
-1. ใช้ Flash Drive สำรองที่ไม่มีข้อมูลสำคัญ
-2. ใช้ Image ขนาดเล็กก่อน เช่น 64-256 MB เพื่อวัดความเสถียร
-3. ตรวจให้ Verify ผ่าน
-4. นำ Flash Drive ไปเสียบเครื่องอื่นและตรวจ partition/boot data
-5. จากนั้นจึงทดสอบกับ Arc Loader image จริง
-
-## เทคโนโลยี
-
-- Kotlin
-- Android USB Host API
-- libaums core 0.10.0 (Apache 2.0)
-- SCSI raw block access ผ่าน USB Mass Storage Bulk-Only Transport
-- SHA-256 verification
-
-## สิ่งที่เพิ่มใน v0.1.1
-
-- แสดงเวลาเขียนและเวลา Verify หลังทำงานเสร็จ
-- แสดงความเร็วเฉลี่ยของการเขียนและ Verify
-- แสดงเวลาที่เหลือโดยประมาณระหว่างทำงาน
-- เพิ่มคำเตือนกรณี Arc Loader/boot image ที่ Android อาจเสนอให้ฟอร์แมต USB หลังเขียนสำเร็จ
-- ย้ำให้กด **ยกเลิก** และห้ามฟอร์แมตเมื่อ Verify ผ่านแล้ว
-
-## Roadmap v0.2.0 — Backup / Clone
-
-ทำได้โดยไม่ Root เช่นเดียวกัน เพราะแอปสามารถอ่าน raw block จาก Flash Drive ผ่าน USB Host ได้อยู่แล้ว
-
-แนวทางที่ปลอดภัยที่สุดบนมือถือที่มี USB-C เพียงพอร์ตเดียวคือ:
-
-1. **Flash Drive → Image**: อ่าน raw block จาก USB แล้วบันทึกเป็น `.img` ลงหน่วยความจำโทรศัพท์ผ่าน Storage Access Framework
-2. **Image → Flash Drive**: ใช้ฟังก์ชัน Write + Verify ที่มีอยู่เพื่อเขียนกลับลง Flash Drive ลูกใหม่
-3. กระบวนการสองขั้นนี้เท่ากับการ **Clone Flash Drive** โดยไม่ต้องต่อ USB สองลูกพร้อมกัน
-
-ภายหลังสามารถเพิ่ม **USB → USB Direct Clone** สำหรับผู้ใช้ที่มี USB-C hub (แนะนำ powered hub) และเสียบ Flash Drive ต้นทาง/ปลายทางสองลูกพร้อมกันได้
-
-หมายเหตุ: Full Device Backup จะมีขนาดใกล้เคียงความจุจริงของ Flash Drive เช่น USB 32 GB จะได้ Image ใกล้เคียง 32 GB แม้ข้อมูลใช้งานจริงน้อยกว่า จึงควรเริ่มจาก Full Backup ที่แม่นยำก่อน แล้วค่อยพัฒนา Compact/Smart Backup ภายหลัง
-
+## Testing
+See \`TEST-PLAN.md\`. First establish full raw USB backup and file verification on a spare USB; next restore that IMG to a *different* USB and confirm matching SHA-256. Test hub-based direct cloning only in a later release.
