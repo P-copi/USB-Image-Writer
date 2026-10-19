@@ -106,6 +106,22 @@ public final class GpackInputBridgeActivity extends Activity {
                 NavigationBridge.openGpack(this);
             }
         });add(root,normal);
+        Button confirm=button("ยืนยันว่าค้นหาใน Maps ได้จริง → ตั้งเป็นวิธีนำทางหลัก",true);
+        confirm.setOnClickListener(v->{
+            if(!remember())return;
+            new AlertDialog.Builder(this).setTitle("ยืนยันการส่งจุดหมาย")
+                .setMessage("เฉพาะกรณีที่คุณเห็น Maps ใน GPack แสดงจุดหมายที่ตรงจริงเท่านั้น\n\n"
+                    +"เมื่อกดนำทางจากรูป BYD Phone Space จะเก็บชื่อ/พิกัด "
+                    +"แล้วเปิด GPack ให้ตัวช่วยใส่ลงช่องค้นหา แต่คุณยังต้องตรวจจุดหมายและกดเริ่มนำทางเอง\n\n"
+                    +"ถ้าไม่ได้เปิด Accessibility ต้องใช้ BYD Nav Keyboard หรือวางข้อความแทน")
+                .setNegativeButton("ยังไม่ผ่าน",null)
+                .setPositiveButton("ผ่านจริง • ตั้งเป็นหลัก",(d,w)->{
+                    NavigationBridge.saveConfirmed(this,NavigationBridge.GPACK_INPUT_ASSIST);
+                    toast("บันทึกวิธีส่งจุดหมายแบบ Input Bridge แล้ว");
+                    if(status!=null)status.setText(report());
+                }).show();
+        });
+        add(root,confirm);
         Button check=button("ตรวจสถานะช่องทางป้อนข้อความบนรถ",false);
         check.setOnClickListener(v->{if(status!=null)status.setText(report());});add(root,check);
         Button clear=button("ยกเลิกตัวช่วยและล้างจุดหมายที่เก็บไว้",false);
