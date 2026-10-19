@@ -92,9 +92,18 @@ jobs:
           path: app/build/outputs/apk/release/app-release.apk
           retention-days: 14
 
+      - name: Validate signed release APK
+        if: env.USB_SIGNING_PASSPHRASE != ''
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/release/app-release.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          sha256sum "$APK"
+
       # Development fallback only. Debug signatures vary across GitHub runners.
       # Do not distribute Debug builds as update-in-place installation packages.
       - name: Build debug APK
+        if: env.USB_SIGNING_PASSPHRASE == ''
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Upload Debug APK (not upgradeable)
