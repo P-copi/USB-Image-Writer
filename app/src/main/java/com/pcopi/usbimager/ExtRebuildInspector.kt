@@ -33,8 +33,6 @@ object ExtRebuildInspector {
         val groups: Long?,
         val highAllocatedBlock: Long?,
         val notes: List<String>
-    ) {
-        val partitionBytes: Long get() = (endLba - startLba + 1L) * 512L
     }
 
     data class Report(
