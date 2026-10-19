@@ -25,7 +25,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".MainActivity" android:exported="false" android:screenOrientation="portrait" />
-        <activity android:name=".BackupActivity" android:exported="false" />
+        <activity android:name=".BackupActivity" android:exported="false" />\n        <activity android:name=".SmartCloneActivity" android:exported="false" />
 
         <service
             android:name=".UsbOperationService"
