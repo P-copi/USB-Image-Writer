@@ -135,6 +135,9 @@ object ExtRebuildInspector {
                 }
                 if(!clean)notes.add("EXT filesystem ไม่ได้อยู่ในสถานะ clean")
                 if(needsRecovery)notes.add("EXT journal ต้อง replay บนสำเนาก่อนพิจารณาย่อ")
+                if((incompat and 0x80L)!=0L)notes.add("64-bit EXT descriptors: verify metadata placement before shrink")
+                if((incompat and 0x200L)!=0L)notes.add("flex_bg: metadata may be outside its nominal group")
+                if((ro and 0x1L)!=0L)notes.add("sparse_super: preserve backup superblocks")
                 if((ro and 0x400L)!=0L)
                     notes.add("ใช้ metadata checksums ซึ่งแอปยังไม่ได้ตรวจสอบ CRC ทั้งหมด")
                 if((incompat and 0x10L)!=0L)
