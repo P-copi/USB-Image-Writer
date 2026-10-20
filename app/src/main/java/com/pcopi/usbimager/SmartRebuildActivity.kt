@@ -97,16 +97,16 @@ class SmartRebuildActivity : Activity() {
         root.addView(cards)
         val controls=ToolkitUi.card(this)
         controls.addView(ToolkitUi.button(this,"รีเฟรช Flash Drive",ToolkitUi.BLUE){refresh()})
-        checkButton=ToolkitUi.button(this,"ตรวจ EXT และความพร้อมย้าย (อ่านอย่างเดียว)",
+        checkButton=ToolkitUi.button(this,"ตรวจทั้งหมดครั้งเดียว (FAT / EXT / Journal / MBR)",
             ToolkitUi.GREEN){requestInspection()}
         controls.addView(checkButton,ToolkitUi.margin(this,8))
         state=ToolkitUi.text(this,"รอการตรวจสอบ",14f,ToolkitUi.SUB)
         controls.addView(state,ToolkitUi.margin(this,9))
         root.addView(controls,ToolkitUi.margin(this,12))
         val out=ToolkitUi.card(this)
-        out.addView(ToolkitUi.text(this,"รายงานเตรียม Smart Rebuild",17f,ToolkitUi.INK,true))
+        out.addView(ToolkitUi.text(this,"รายงานตรวจครบชุด Smart Rebuild",17f,ToolkitUi.INK,true))
         result=ToolkitUi.text(this,
-            "จะแสดง UUID, ความจุ, สถานะ Journal, ชนิด EXT, บล็อกที่จัดสรรล่าสุด และคำเตือน",
+            "ตรวจ FAT, EXT, MBR, UUID, Feature flags, Journal และคำเตือนในครั้งเดียว",
             13f,ToolkitUi.INK)
         result.setTextIsSelectable(true)
         out.addView(result,ToolkitUi.margin(this,9))
