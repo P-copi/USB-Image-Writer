@@ -191,7 +191,7 @@ class SmartRebuildActivity : Activity() {
                     onProgress={message -> runOnUiThread{if(!isFinishing)state.text=message}},
                     cancelled={Thread.currentThread().isInterrupted}
                 )
-                val text=formatReport(data)+inspectBootFiles(src)
+                val text=formatReport(data)+formatRebuildGate(data)+inspectBootFiles(src)
                 runOnUiThread {
                     reportText=text
                     result.text=text
@@ -258,6 +258,71 @@ class SmartRebuildActivity : Activity() {
             for(issue in data.issues)b.append("• ").append(issue).append('\n')
         }
         b.append("\nหมายเหตุ: ยังไม่ได้ย่อ หรือโคลนข้อมูลใด ๆ\n")
+        return b.toString()
+    }
+
+    /**
+     * Strict fail-closed direct-USB rebuild gate. This is a feasibility report,
+     * NOT a filesystem resizer. No write operation is enabled here.
+     */
+    private fun formatRebuildGate(data:ExtRebuildInspector.Report):String {
+        val b=StringBuilder("\n=== Direct USB Rebuild • Safety Gate ===\n")
+        b.append("โหมด: เขียน Flash Drive โดยตรง | Verify: เปิด | IMG compression: ปิด\n")
+        b.append("USB ต้นฉบับ: READ-ONLY • ไม่ซ่อม/ฟอร์แมต/ย่อ\n")
+        val target=data.targetBytes
+        if(target==null) {
+            b.append("BLOCKED: ยังไม่ได้เลือก USB ปลายทาง\n")
+            return b.toString()
+        }
+        if(data.layout!="MBR" || data.partitions.size!=3 ||
+            data.partitions.map{it.number}!=listOf(1,2,3)) {
+            b.append("BLOCKED: รูปแบบพาร์ทิชันไม่ตรงกับ Arc Loader 3 partitions ที่ตรวจสอบ\n")
+            return b.toString()
+        }
+        val p1=data.partitions[0]
+        val p2=data.partitions[1]
+        val p3=data.partitions[2]
+        val expected=p1.filesystem=="FAT32" && p2.filesystem=="EXT2" &&
+            p3.filesystem=="EXT4" && p1.startLba==2048L &&
+            p2.startLba==p1.endLba+1L && p3.startLba==p2.endLba+1L
+        if(!expected) {
+            b.append("BLOCKED: ระบบไฟล์หรือขอบเขตพาร์ทิชันไม่ตรงกับรูปแบบที่รองรับ\n")
+            return b.toString()
+        }
+        val sector=data.sectorBytes.toLong()
+        val targetSectors=target/sector
+        val p3Available=targetSectors-p3.startLba
+        b.append("ความจุปลายทาง: ").append(FormatUtils.bytes(target)).append('\n')
+        b.append("ตำแหน่งเริ่ม ARC3 ที่ต้องรักษา: LBA ").append(p3.startLba).append('\n')
+        if(target<=0 || target%sector!=0L || p3Available<=0L) {
+            b.append("BLOCKED: USB ปลายทางไม่พอสำหรับโครงสร้างพาร์ทิชัน\n")
+            return b.toString()
+        }
+        b.append("พื้นที่ ARC3 สูงสุดตามขนาดปลายทาง (ก่อนเผื่อพื้นที่): ")
+            .append(FormatUtils.bytes(p3Available*sector)).append('\n')
+        val reserve=64L*1024L*1024L
+        val availableAfterReserve=p3Available*sector-reserve
+        b.append("เผื่อท้ายดิสก์เบื้องต้น: ").append(FormatUtils.bytes(reserve)).append('\n')
+        if(availableAfterReserve<=0L ||
+            (p3.allocatedBytes ?: Long.MAX_VALUE)>=availableAfterReserve) {
+            b.append("BLOCKED: พื้นที่ ARC3 หลังสำรองไม่เพียงพอตามข้อมูลที่ตรวจได้\n")
+            return b.toString()
+        }
+        b.append("ความจุมีแนวโน้มเพียงพอ แต่ยังไม่ใช่ขนาดย่อขั้นต่ำที่ยืนยันแล้ว\n")
+        val reasons=mutableListOf<String>()
+        if(p2.cleanState!=true)reasons.add("ARC2 ไม่อยู่ในสถานะ Clean")
+        if(p3.cleanState!=true)reasons.add("ARC3 ไม่อยู่ในสถานะ Clean")
+        if(p2.journalRecoveryRequired==true || p3.journalRecoveryRequired==true)
+            reasons.add("มี EXT Journal ที่ต้อง Recovery บนสำเนา")
+        if(p3.highAllocatedBlock==null)
+            reasons.add("ยังไม่ยืนยันตำแหน่ง Metadata/Block ที่ต้องย้าย")
+        if((p3.notes.any{it.contains("checksums",ignoreCase=true)}))
+            reasons.add("ยังไม่ได้ Verify EXT4 metadata CRC32C")
+        reasons.add("ยังไม่มี EXT4 filesystem-aware rebuild และการรักษา boot metadata ที่ผ่านการทดสอบ")
+        reasons.add("ยังไม่มี Direct Write + Read-back Verify ที่ผ่านการทดสอบบน USB ปลายทาง")
+        b.append("สถานะ: BLOCKED — ยังไม่อนุญาตให้เขียน\n")
+        for(reason in reasons)b.append("• ").append(reason).append('\n')
+        b.append("การตรวจนี้ไม่ได้เปลี่ยนแปลง USB ทั้งสองลูก\n")
         return b.toString()
     }
 
