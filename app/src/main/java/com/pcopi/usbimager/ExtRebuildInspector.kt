@@ -95,15 +95,12 @@ object ExtRebuildInspector {
                 val sb=whole.read(first,1024L,count*bs.toLong(),1024)
                 if(u16(sb,56)!=0xef53){
                     val vbr=whole.read(first,0L,bs.toLong(),512)
-                    val fileSystem=when{
-                        String(vbr,82,8,Charsets.US_ASCII).startsWith("FAT32")->"FAT32"
-                        String(vbr,54,8,Charsets.US_ASCII).startsWith("FAT16")->"FAT16"
-                        String(vbr,3,8,Charsets.US_ASCII)=="EXFAT   "->"exFAT"
-                        else->"Unknown"
-                    }
+                    val fileSystem=detectFat(vbr, count, bs)
+                    if(typeCode==0x83 && fileSystem.startsWith("FAT"))
+                        notes.add("MBR type 0x83 คือ Linux แต่ boot sector ระบุ $fileSystem")
                     found.add(Partition(number,first,end,code,fileSystem,null,null,
                         null,null,null,null,null,null,null,null,
-                        listOf("พาร์ทิชันนี้ไม่ใช่ EXT; ยังไม่สแกนบล็อกที่จัดสรร")))
+                        notes + "พาร์ทิชันนี้ไม่ใช่ EXT; ยังไม่สแกนบล็อกที่จัดสรร"))
                     continue
                 }
                 val log=u32(sb,24)
@@ -263,6 +260,32 @@ object ExtRebuildInspector {
                 }
             }
             throw IOException("อ่าน USB LBA $lba ไม่สำเร็จ",failure)
+        }
+    }
+
+    /** Determine FAT variant from cluster count, not an untrusted label. */
+    private fun detectFat(b:ByteArray, partitionSectors:Long, sectorBytes:Int):String {
+        if(String(b,3,8,Charsets.US_ASCII)=="EXFAT   ")return "exFAT (ยังไม่ตรวจ geometry)"
+        if(u16(b,510)!=0xaa55)return "Unknown"
+        val bps=u16(b,11)
+        val spc=u8(b,13)
+        val reserved=u16(b,14)
+        val fats=u8(b,16)
+        val roots=u16(b,17)
+        val total=if(u16(b,19)!=0)u16(b,19).toLong() else u32(b,32)
+        val fatSize=if(u16(b,22)!=0)u16(b,22).toLong() else u32(b,36)
+        if(bps!=sectorBytes || spc==0 || (spc and (spc-1))!=0 ||
+            reserved==0 || fats !in 1..2 || total==0L ||
+            total>partitionSectors || fatSize==0L)return "Unknown"
+        val rootSectors=(roots*32L+bps-1)/bps
+        val overhead=reserved.toLong()+fats.toLong()*fatSize+rootSectors
+        if(overhead>=total)return "Unknown"
+        val clusters=(total-overhead)/spc
+        return when {
+            clusters<4085L -> "FAT12"
+            clusters<65525L -> "FAT16"
+            roots!=0 || u32(b,44)<2L -> "Unknown"
+            else -> "FAT32"
         }
     }
 
