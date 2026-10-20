@@ -1,0 +1,4 @@
+plugins { id 'com.android.application' }
+android { namespace 'com.pcopi.byd.webbridge'; compileSdk 35
+ defaultConfig { applicationId 'com.pcopi.byd.webbridge.v024'; minSdk 26; targetSdk 34; versionCode 1; versionName '0.2.4-webbridge' }
+ compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 } }

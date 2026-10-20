@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="th">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BYD Web Bridge</title>
+<style>
+body{font-family:system-ui,"Noto Sans Thai",sans-serif;background:#f1f5f9;color:#183148;margin:0}
+main{max-width:780px;margin:auto;padding:16px}h1{font-size:25px;margin:6px 0}h2{font-size:19px}
+.card{background:white;border:1px solid #dbe4eb;border-radius:15px;padding:16px;margin:14px 0;box-shadow:0 2px 8px #0001}
+button,a.btn{display:block;width:100%;box-sizing:border-box;border:0;border-radius:12px;padding:16px;margin:11px 0;text-align:center;text-decoration:none;font-size:18px;font-weight:650;cursor:pointer;background:#155c9d;color:white}
+a.green{background:#16744d}a.gray{background:#475569}
+.small{font-size:14px;color:#475569} .ok{color:#07723f;font-weight:750}.bad{color:#b91c1c;font-weight:750}
+code{overflow-wrap:anywhere} #destination{overflow-wrap:anywhere;font-size:18px;font-weight:650}
+</style></head>
+<body><main>
+<h1>BYD Web Bridge <small>V0.2.4</small></h1>
+<div class="card"><div id="state">กำลังเชื่อมแอปสะพาน…</div>
+<p class="small">ที่อยู่เซิร์ฟเวอร์: 127.0.0.1:8765 • เปิดหน้านี้จาก Browser ภายใน GPack</p>
+<p>จุดหมายล่าสุด:</p><div id="destination">13.7563310,100.5017650</div><p id="label" class="small">ทดสอบ</p>
+</div>
+<div class="card">
+<h2>ทดลองเปิด Google Maps จากใน GPack</h2>
+<a id="pin" class="btn" href="https://www.google.com/maps/search/?api=1&amp;query=13.7563310%2C100.5017650">1. เปิดหมุดพิกัดใน Google Maps</a>
+<a id="route" class="btn green" href="https://www.google.com/maps/dir/?api=1&amp;destination=13.7563310%2C100.5017650&amp;travelmode=driving&amp;dir_action=navigate">2. เปิดเส้นทางไปยังพิกัด</a>
+<a id="geo" class="btn gray" href="geo:0,0?q=13.7563310%2C100.5017650">3. ทดลอง geo URI</a>
+<a id="nav" class="btn gray" href="google.navigation:q=13.7563310%2C100.5017650&amp;mode=d">4. ทดลอง navigation URI</a>
+<p class="small">Google Maps อาจเปิดใน Browser หรือส่งต่อไปยังแอป Maps ภายใน GPack ทั้งสองแบบต้องดูหมุดบนจอจริง</p>
+</div>
+<div class="card"><h2>วิธีทดสอบ</h2>
+<p>1. เมื่อเห็น "เชื่อมต่อสำเร็จ" หมายถึง Browser ติดต่อแอปสะพาน Android ได้</p>
+<p>2. กดปุ่มเปิดหมุด แล้วตรวจว่า Google Maps แสดงหมุดตรงพิกัดหรือไม่</p>
+<p>3. กดย้อนกลับมาหน้านี้ แล้วทดลองเปิดเส้นทาง</p>
+<p>4. กลับแอป Web Bridge เพื่อกดยืนยันผลและคัดลอกรายงาน</p>
+<button id="retry" type="button">ตรวจการเชื่อมต่อใหม่</button>
+<p class="small" id="detail"></p>
+</div>
+<script src="/bridge.js"></script></main></body></html>
