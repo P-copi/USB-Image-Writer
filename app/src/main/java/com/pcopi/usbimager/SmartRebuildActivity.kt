@@ -191,7 +191,7 @@ class SmartRebuildActivity : Activity() {
                     onProgress={message -> runOnUiThread{if(!isFinishing)state.text=message}},
                     cancelled={Thread.currentThread().isInterrupted}
                 )
-                val text=formatReport(data)
+                val text=formatReport(data)+inspectBootFiles(src)
                 runOnUiThread {
                     reportText=text
                     result.text=text
@@ -259,6 +259,58 @@ class SmartRebuildActivity : Activity() {
         }
         b.append("\nหมายเหตุ: ยังไม่ได้ย่อ หรือโคลนข้อมูลใด ๆ\n")
         return b.toString()
+    }
+
+    /** Bounded read-only file inventory using the existing FAT/EXT explorer. */
+    private fun inspectBootFiles(device:UsbDevice):String {
+        val out=StringBuilder("\n=== รายการไฟล์และโฟลเดอร์ (Read-only) ===\n")
+        try {
+            BootDiskReader.open(usb,device).use { reader ->
+                val scan=reader.scan()
+                out.append("รูปแบบดิสก์: ").append(scan.style).append('\n')
+                for(volume in scan.volumes) {
+                    out.append("\nPartition ").append(volume.number)
+                        .append(" [").append(volume.fileSystem).append("]\n")
+                    if(!volume.isReadable) {
+                        out.append("ยังอ่านรายการไฟล์ไม่ได้: ").append(volume.warning).append('\n')
+                        continue
+                    }
+                    try {
+                        val root=reader.list(volume.number,null)
+                        out.append("Root entries: ").append(root.size)
+                            .append(" (แสดงสูงสุด 80)\n")
+                        for(entry in root.take(80)) {
+                            out.append(if(entry.directory)"[DIR] " else "[FILE] ")
+                                .append(entry.name).append(" (")
+                                .append(entry.size).append(" B)\n")
+                        }
+                        if(root.size>80)out.append("... รายการอื่นไม่ได้แสดง\n")
+                        for(folder in root.filter{it.directory &&
+                            it.name.lowercase() in setOf("boot","efi","grub","arc","config","loader")
+                        }.take(5)) {
+                            try {
+                                val children=reader.list(volume.number,folder)
+                                out.append("  /").append(folder.name).append(":\n")
+                                for(child in children.take(25))
+                                    out.append("    ").append(if(child.directory)"[DIR] " else "[FILE] ")
+                                        .append(child.name).append('\n')
+                            }catch(e:Exception){
+                                out.append("  /").append(folder.name).append(": ")
+                                    .append(e.message ?: "อ่านไม่ได้").append('\n')
+                            }
+                        }
+                    }catch(e:Exception){
+                        out.append("อ่าน Root ไม่สำเร็จ: ")
+                            .append(e.message ?: e.javaClass.simpleName).append('\n')
+                    }
+                }
+            }
+        }catch(e:Exception) {
+            out.append("ตรวจรายการไฟล์ไม่สำเร็จ: ")
+                .append(e.message ?: e.javaClass.simpleName).append('\n')
+        }
+        out.append("ไม่มีการแก้ไขไฟล์หรือเขียนลง USB\n")
+        return out.toString()
     }
 
     private fun copyReport() {
