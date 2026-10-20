@@ -123,6 +123,8 @@ object ExtRebuildInspector {
                 if(groupsBlocks<=0 || firstData>=totalBlocks)
                     throw IOException("EXT group geometry ผิดปกติ")
                 val groups=(totalBlocks-firstData+groupsBlocks-1)/groupsBlocks
+                notes.add("EXT features: compat=0x"+compat.toString(16)+", incompat=0x"+incompat.toString(16)+", ro=0x"+ro.toString(16))
+                notes.add("EXT total blocks=$totalBlocks, free blocks=$freeBlocks, first data block=$firstData")
                 val state=u16(sb,58)
                 val clean=(state and 1)==1
                 val needsRecovery=(incompat and 4L)!=0L
