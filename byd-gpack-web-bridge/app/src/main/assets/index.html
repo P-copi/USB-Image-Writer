@@ -12,22 +12,25 @@ a.green{background:#16744d}a.gray{background:#475569}
 code{overflow-wrap:anywhere} #destination{overflow-wrap:anywhere;font-size:18px;font-weight:650}
 </style></head>
 <body><main>
-<h1>BYD Web Bridge <small>V0.2.4</small></h1>
+<h1>BYD Web Bridge <small>V0.2.5</small></h1>
 <div class="card"><div id="state">กำลังเชื่อมแอปสะพาน…</div>
 <p class="small">ที่อยู่เซิร์ฟเวอร์: 127.0.0.1:8765 • เปิดหน้านี้จาก Browser ภายใน GPack</p>
 <p>จุดหมายล่าสุด:</p><div id="destination">13.7563310,100.5017650</div><p id="label" class="small">ทดสอบ</p>
 </div>
 <div class="card">
-<h2>ทดลองเปิด Google Maps จากใน GPack</h2>
+<h2>นำทางไปยังจุดหมายล่าสุด</h2>
+<button id="autoToggle" type="button" style="background:#7c3aed">เปิดโหมดนำทางอัตโนมัติ (ทดลอง)</button>
+<p id="autoStatus" class="small">ปิดอยู่ — กรุณากดเปิดก่อนทดลองจุดหมายใหม่</p>
 <a id="pin" class="btn" href="https://www.google.com/maps/search/?api=1&amp;query=13.7563310%2C100.5017650">1. เปิดหมุดพิกัดใน Google Maps</a>
-<a id="route" class="btn green" href="https://www.google.com/maps/dir/?api=1&amp;destination=13.7563310%2C100.5017650&amp;travelmode=driving&amp;dir_action=navigate">2. เปิดเส้นทางไปยังพิกัด</a>
+<a id="route" class="btn green" href="https://www.google.com/maps/dir/?api=1&amp;destination=13.7563310%2C100.5017650&amp;travelmode=driving&amp;dir_action=navigate">2. เริ่มนำทางไปยังจุดหมาย</a>
 <a id="geo" class="btn gray" href="geo:0,0?q=13.7563310%2C100.5017650">3. ทดลอง geo URI</a>
 <a id="nav" class="btn gray" href="google.navigation:q=13.7563310%2C100.5017650&amp;mode=d">4. ทดลอง navigation URI</a>
-<p class="small">Google Maps อาจเปิดใน Browser หรือส่งต่อไปยังแอป Maps ภายใน GPack ทั้งสองแบบต้องดูหมุดบนจอจริง</p>
+<p class="small">โหมดอัตโนมัติจะทดลองเปิดเส้นทางเมื่อข้อมูลใหม่มาถึงและหน้า Browser พร้อมทำงาน หากถูกจำกัดให้กดปุ่มสีเขียวเอง</p>
+<p class="small">ไม่สั่งนำทางซ้ำเมื่อย้อนกลับจาก Maps จุดหมายใหม่เท่านั้นจะกระตุ้นอีกครั้ง</p>
 </div>
 <div class="card"><h2>วิธีทดสอบ</h2>
 <p>1. เมื่อเห็น "เชื่อมต่อสำเร็จ" หมายถึง Browser ติดต่อแอปสะพาน Android ได้</p>
-<p>2. กดปุ่มเปิดหมุด แล้วตรวจว่า Google Maps แสดงหมุดตรงพิกัดหรือไม่</p>
+<p>2. กดเปิดโหมดอัตโนมัติ แล้วใช้แอปฝั่ง Android ส่ง GPS ใหม่จากรูปภาพจริง</p>
 <p>3. กดย้อนกลับมาหน้านี้ แล้วทดลองเปิดเส้นทาง</p>
 <p>4. กลับแอป Web Bridge เพื่อกดยืนยันผลและคัดลอกรายงาน</p>
 <button id="retry" type="button">ตรวจการเชื่อมต่อใหม่</button>

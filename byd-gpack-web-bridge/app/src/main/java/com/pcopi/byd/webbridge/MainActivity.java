@@ -5,6 +5,10 @@ import android.app.Activity;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.media.ExifInterface;
+import android.database.Cursor;
+import android.provider.OpenableColumns;
+import java.io.InputStream;
 import android.os.Build;
 import android.os.Bundle;
 import android.widget.*;
@@ -32,8 +36,8 @@ public class MainActivity extends Activity {
   private void layout(){
     ScrollView sc=new ScrollView(this);LinearLayout root=new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);root.setPadding(24,16,24,30);sc.addView(root);
-    header(root,"BYD Web Bridge V0.2.4",23);
-    header(root,"ทดสอบ Google Maps ผ่าน Browser ภายใน GPack\nสำหรับ Phone Space V0.7.4 • ทดลองขณะรถจอดสนิท",15);
+    header(root,"BYD Web Bridge V0.2.5",23);
+    header(root,"เลือกภาพจริง ส่ง GPS และทดสอบเปิดนำทางอัตโนมัติผ่าน Browser ภายใน GPack\nสำหรับ Phone Space V0.7.4 • ทดลองขณะรถจอดสนิท",15);
     header(root,"ขั้นที่ 1 — เปิดเซิร์ฟเวอร์สะพาน",19);
     button(root,"เริ่ม Web Bridge บนจอรถ",()->startBridge());
     button(root,"คัดลอกลิงก์ Browser: "+URL,()->copy(URL));
@@ -44,8 +48,10 @@ public class MainActivity extends Activity {
       }catch(Exception e){message("เปิด GPack ไม่สำเร็จ: "+e.getMessage());}
     });
     header(root,"ขั้นที่ 2 — เปิด Browser ภายใน GPack",19);
-    header(root,"ครั้งแรกเปิด Browser ใน GPack แล้ววาง/พิมพ์: "+URL+"\nเมื่อเข้าได้ควรเห็นข้อความ 'เชื่อมต่อ Web Bridge สำเร็จ' และปุ่มเปิด Google Maps\nบันทึกเว็บไซต์ไว้ใน Bookmark เพื่อใช้ครั้งถัดไป",16);
-    header(root,"ขั้นที่ 3 — ส่งพิกัด (ไม่ต้องเลือกรูป)",19);
+    header(root,"ใน Browser ภายใน GPack เปิด Bookmark เดิม: "+URL+"\nเมื่อเข้าได้ควรเห็นข้อความ 'เชื่อมต่อ Web Bridge สำเร็จ' และปุ่มเปิด Google Maps\nบันทึกเว็บไซต์ไว้ใน Bookmark เพื่อใช้ครั้งถัดไป",16);
+    header(root,"ขั้นที่ 3 — เลือกภาพ GPS หรือส่งพิกัด",19);
+    button(root,"เลือกภาพถ่ายจริงจากจอ BYD → อ่าน GPS → ส่งไปนำทาง",()->choosePhoto());
+    header(root,"ถ้าเปิดรูปจาก Phone Space แล้วแชร์ภาพให้เลือก 'BYD Web Bridge Test 0.2.5' ได้ (ถ้าระบบมีปุ่มแชร์)",14);
     input=new EditText(this);input.setText(BANGKOK);input.setSingleLine(false);
     input.setHint("ชื่อสถานที่ / พิกัด GPS / ลิงก์ Maps");input.setTextSize(17);root.addView(input);
     button(root,"ส่งพิกัดตัวอย่างจากภาพ GPS → Browser",()->send(BANGKOK,"พิกัดตัวอย่างจากภาพ GPS"));
@@ -66,7 +72,7 @@ public class MainActivity extends Activity {
     button(root,"หยุด Web Bridge หลังทดสอบ",()->{
       stopService(new Intent(this,BridgeService.class));prefs.edit().putString("server","สั่งหยุดบริการแล้ว").apply();refresh();
     });
-    header(root,"หมายเหตุ: เราไม่ติดตั้งอะไรใน GPack และไม่แก้ระบบรถ จุดหมายจะปรากฏก็ต่อเมื่อ Browser ใน GPack เปิดลิงก์ Maps ได้จริง",14);
+    header(root,"โหมดอัตโนมัติ: เปิดสวิตช์ที่หน้า Web Bridge ใน Browser ก่อน เมื่อมีจุดหมายใหม่และหน้า Browser กลับมาทำงาน จะทดลองเปิดเส้นทางอัตโนมัติ (อาจถูก Browser บล็อก)\nสำคัญ: จอดรถก่อนทดสอบ • ไม่รูท ไม่แก้ GPack • หากยังใช้ V0.2.4 ให้หยุดบริการตัวเก่าก่อน",14);
     setContentView(sc);refresh();
   }
   private void header(LinearLayout box,String s,int size){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setPadding(4,12,4,12);box.addView(t);}
@@ -87,11 +93,68 @@ public class MainActivity extends Activity {
     refresh();
   }
   private void handleShare(Intent in){
+    if(in!=null && Intent.ACTION_SEND.equals(in.getAction()) && in.getType()!=null
+       && in.getType().startsWith("image/")){
+      Uri uri=null;
+      if(Build.VERSION.SDK_INT>=33)uri=in.getParcelableExtra(Intent.EXTRA_STREAM,Uri.class);
+      else uri=(Uri)in.getParcelableExtra(Intent.EXTRA_STREAM);
+      if(uri!=null)readPhotoGps(uri);
+      return;
+    }
     if(in!=null && Intent.ACTION_SEND.equals(in.getAction())&&"text/plain".equals(in.getType())){
       String s=in.getStringExtra(Intent.EXTRA_TEXT);
       if(s!=null&&!s.trim().isEmpty() && input!=null){
         input.setText(s.trim());send(s.trim(),"ข้อความที่แชร์มาจากแอปอื่น");
       }
+    }
+  }
+  private static final int PICK_IMAGE_GPS=452;
+  private void choosePhoto(){
+    try{
+      Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+      i.setType("image/*");
+      i.addCategory(Intent.CATEGORY_OPENABLE);
+      startActivityForResult(i,PICK_IMAGE_GPS);
+    }catch(Exception e){message("เปิดตัวเลือกภาพไม่สำเร็จ: "+e.getMessage());}
+  }
+  @Override protected void onActivityResult(int request,int result,Intent data){
+    super.onActivityResult(request,result,data);
+    if(request==PICK_IMAGE_GPS && result==RESULT_OK && data!=null && data.getData()!=null){
+      readPhotoGps(data.getData());
+    }
+  }
+  private String photoName(Uri uri){
+    String fallback="รูปที่เลือก";
+    try(Cursor c=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){
+      if(c!=null && c.moveToFirst()){
+        int n=c.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+        if(n>=0)return c.getString(n);
+      }
+    }catch(Exception ignored){}
+    return fallback;
+  }
+  private void readPhotoGps(Uri uri){
+    try(InputStream stream=getContentResolver().openInputStream(uri)){
+      if(stream==null)throw new IllegalStateException("เปิดไฟล์ไม่ได้");
+      ExifInterface exif=new ExifInterface(stream);
+      float[] xy=new float[2];
+      if(!exif.getLatLong(xy)){
+        message("รูปนี้ไม่มี GPS ใน EXIF กรุณาเลือกรูปที่เปิดบันทึกพิกัดไว้");
+        prefs.edit().putString("photoStatus","ไม่มี GPS: "+photoName(uri)).apply();
+        refresh();return;
+      }
+      if(!Float.isFinite(xy[0]) || !Float.isFinite(xy[1])||
+          Math.abs(xy[0])>90||Math.abs(xy[1])>180){
+        message("พิกัดในรูปไม่ถูกต้อง");return;
+      }
+      String gps=String.format(Locale.US,"%.7f,%.7f",xy[0],xy[1]);
+      String label="GPS จากภาพ "+photoName(uri);
+      prefs.edit().putString("photoStatus",label+" → "+gps).apply();
+      if(input!=null)input.setText(gps);
+      send(gps,label);
+    }catch(Exception e){
+      prefs.edit().putString("photoStatus","อ่าน EXIF ไม่สำเร็จ: "+e.getClass().getSimpleName()+" "+e.getMessage()).apply();
+      refresh();message("อ่าน GPS ไม่สำเร็จ: "+e.getMessage());
     }
   }
   private void send(String s,String label){
@@ -103,7 +166,7 @@ public class MainActivity extends Activity {
       .putString("feedback","รอทดสอบใน Browser")
       .apply();
     feedback="รอทดสอบใน Browser";startBridge();refresh();
-    message("ส่งจุดหมายเข้าคิวแล้ว • กลับไป Browser ใน GPack");
+    message("ส่ง GPS แล้ว • กลับหน้า Web Bridge ใน GPack (อัตโนมัติถ้าเปิดไว้)");
   }
   private void record(String s){feedback=s;prefs.edit().putString("feedback",s).apply();refresh();message("บันทึกผลแล้ว");}
   private String report(){
@@ -116,6 +179,7 @@ public class MainActivity extends Activity {
       +"Last browser activity: "+prefs.getString("lastSeen","ยังไม่พบ")+"\n"
       +"Destination: "+prefs.getString("destination",BANGKOK)+"\n"
       +"Revision: "+prefs.getLong("revision",0)+"\n"
+      +"Image GPS: "+prefs.getString("photoStatus","ยังไม่ได้เลือกรูป") +"\n"
       +"Test result: "+prefs.getString("feedback",feedback)+"\n"
       +"เปิด Browser ภายใน GPack ไปที่ "+URL+"\n"
       +"หมายเหตุ: จำนวนครั้งเชื่อมต่อไม่ได้ยืนยันว่า Maps ได้รับพิกัด";

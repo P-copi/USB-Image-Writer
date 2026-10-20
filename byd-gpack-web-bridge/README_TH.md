@@ -1,22 +1,24 @@
-# BYD Web Bridge V0.2.4 — Test
-เวอร์ชันฐาน Phone Space V0.7.4 **ไม่ถูกแก้ไข** 
-แอปนี้เป็นตัวช่วยทดสอบเว็บสะพานไปยัง Browser ภายใน GPack โดยไม่ต้องติดตั้ง APK ภายใน GPack
+# BYD Web Bridge Test 0.2.5
+### Goal
+- Choose an actual local photo from BYD Android using ACTION_OPEN_DOCUMENT
+- Read GPS coordinates from image EXIF
+- Send lat/lon to the already confirmed loopback Web Bridge endpoint
+- In the GPack Browser, keep the successful manual start-navigation control
+- Add optional opt-in attempt to auto-launch Google Maps directions for NEW destinations only when Browser page is visible
 
-1. ติดตั้ง APK ใน Android หลักของ BYD
-2. เปิดแอป กด "เริ่ม Web Bridge" เมื่อรถจอดสนิท
-3. เปิด Browser ภายใน GPack แล้วเปิด http://127.0.0.1:8765 (อาจคัดลอก URL จากแอปหลักไปวาง)
-4. ถ้าเชื่อมสำเร็จจะเห็นสถานะ "เชื่อมต่อ Web Bridge สำเร็จ"
-5. กด "1. เปิดหมุด" และตรวจว่ามีหมุดอยู่ที่ 13.756331,100.501765 หรือไม่
-6. กดย้อนกลับ มาลอง "2. เปิดเส้นทาง"
-7. กลับไป BYD Web Bridge เพื่อกดบันทึกผล พร้อมคัดลอกข้อความรายงาน
+### Setup
+1. Install 0.2.5 as a separate app so previous 0.2.4 remains intact.
+2. STOP the old V0.2.4 Bridge service. Both use localhost port 8765, so only one should run at once.
+3. Open V0.2.5 and start the Bridge service.
+4. In GPack Browser revisit/bookmark http://127.0.0.1:8765.
+5. In the browser tap "เปิดโหมดนำทางอัตโนมัติ (ทดลอง)" once to arm; navigate only when NEW data arrives.
+6. In V0.2.5 tap "เลือกภาพถ่ายจริง ...", select a local image with EXIF GPS.
+7. Browser should update with its lat/lon. The browser will *attempt* to auto-open Google Maps directions if page is visible; if it doesn't, click green "เริ่มนำทาง".
+8. You may also share an image from Photo Space/Gallery to the "BYD Web Bridge Test 0.2.5" share target (if available).
 
-ในแอปมีปุ่มส่งข้อมูลทดลองจากภาพ GPS และชื่อสถานที่ อนุสรณ์ดอนเจดีย์ สุพรรณบุรี
-เปิดหน้า Browser เดิมค้างไว้ แล้วเปลี่ยนจุดหมายจากแอปได้โดยไม่ต้องป้อน URL ใหม่
-
-สำคัญ: 
-- หาก localhost เข้าไม่ได้ แสดงว่าการเชื่อมต่อข้าม GPack กับ Android หลักยังไม่ผ่าน **ไม่ได้พิสูจน์ว่า Google Maps ใช้ไม่ได้**
-- เปิดหน้า Browser ได้ ไม่ได้ยืนยันว่า Google Maps รับพิกัดแล้ว ต้องดูจริง
-- เซิร์ฟเวอร์ HTTP จำกัดเฉพาะ 127.0.0.1 และอ่านข้อมูลได้อย่างเดียว ไม่มีการรับคำสั่งเปลี่ยนสถานะจากเว็บ
-- เปิดใช้งานระหว่างทดสอบเท่านั้น เมื่อเสร็จให้กดหยุดบริการ
-- Android 15/16 อาจจำกัดเวลาของ dataSync foreground service; เปิดแอปเพื่อเริ่มใหม่หากเวลาหมด
-- ไม่มี root ไม่มีสิทธิ์ overlay ไม่แก้ GPack หรือแอประบบ
+### Important technical limitations
+- The actual V0.7.4 Phone Space APK source repository is not connected. This APK is a bridge companion, not a modified Phone Space build.
+- Browser/virtualization may forbid background tab redirects, auto launching Google Maps, or popup navigation without an explicit tap.
+- Every auto-navigation trial needs user observation of the exact destination and no assumptions of success from the Android startActivity result.
+- If image EXIF has no GPS, nothing is sent. No device GPS substitute; user privacy protected.
+- Do not test while driving. No root or modifications to GPack.
