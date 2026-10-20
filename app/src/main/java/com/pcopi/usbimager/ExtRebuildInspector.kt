@@ -71,6 +71,9 @@ object ExtRebuildInspector {
             return@use Report(size,bs,"GPT",emptyList(),issues,targetBytes)
         }
         if(entries.isEmpty()) issues.add("ไม่มี Partition ใน MBR")
+        val sortedRanges=entries.map { it.third.first to (it.third.first+it.third.second-1L) }.sortedBy { it.first }
+        if(sortedRanges.zipWithNext().any { it.first.second >= it.second.first })
+            issues.add("MBR partitions ซ้อนทับกัน • ไม่ปลอดภัยสำหรับการย่อ")
         val found=mutableListOf<Partition>()
         for ((number,typeCode,loc) in entries){
             if(cancelled())throw IOException("ยกเลิกการตรวจ")
