@@ -368,6 +368,7 @@ class SmartRebuildActivity : Activity() {
                         var bytes=root.filter{!it.directory}.sumOf{it.size.coerceAtLeast(0L)}
                         var walked=0
                         var errors=0
+                        val errorDetails=mutableListOf<String>()
                         var truncated=false
                         val maxDirs=200
                         val maxDepth=8
@@ -395,7 +396,14 @@ class SmartRebuildActivity : Activity() {
                                         bytes+=child.size.coerceAtLeast(0L)
                                     }
                                 }
-                            }catch(_:Exception){errors++}
+                            }catch(e:Exception){
+                                errors++
+                                if(errorDetails.size<12){
+                                    val message=(e.message ?: e.javaClass.simpleName)
+                                        .replace('\n',' ').replace('\r',' ').take(180)
+                                    errorDetails.add(location.take(180)+" : "+message)
+                                }
+                            }
                         }
                         out.append("Recursive inventory: ")
                             .append(files).append(" files, ")
@@ -407,6 +415,9 @@ class SmartRebuildActivity : Activity() {
                             out.append("INCOMPLETE: inventory limits reached; do not use for copying\n")
                         if(errors>0)
                             out.append("INCOMPLETE: some directories could not be read\n")
+                        for(detail in errorDetails)
+                            out.append("READ ERROR: ").append(detail).append('\n')
+
                         out.append("Metadata-only: permissions, links, hardlinks and CRC not verified\n")
 
                         for(folder in root.filter{it.directory &&
