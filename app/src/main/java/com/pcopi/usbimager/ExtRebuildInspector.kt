@@ -71,6 +71,9 @@ object ExtRebuildInspector {
             return@use Report(size,bs,"GPT",emptyList(),issues,targetBytes)
         }
         if(entries.isEmpty()) issues.add("ไม่มี Partition ใน MBR")
+        val sortedRanges=entries.map { it.third.first to (it.third.first+it.third.second-1L) }.sortedBy { it.first }
+        if(sortedRanges.zipWithNext().any { it.first.second >= it.second.first })
+            issues.add("MBR partitions ซ้อนทับกัน • ไม่ปลอดภัยสำหรับการย่อ")
         val found=mutableListOf<Partition>()
         for ((number,typeCode,loc) in entries){
             if(cancelled())throw IOException("ยกเลิกการตรวจ")
@@ -92,15 +95,12 @@ object ExtRebuildInspector {
                 val sb=whole.read(first,1024L,count*bs.toLong(),1024)
                 if(u16(sb,56)!=0xef53){
                     val vbr=whole.read(first,0L,bs.toLong(),512)
-                    val fileSystem=when{
-                        String(vbr,82,8,Charsets.US_ASCII).startsWith("FAT32")->"FAT32"
-                        String(vbr,54,8,Charsets.US_ASCII).startsWith("FAT16")->"FAT16"
-                        String(vbr,3,8,Charsets.US_ASCII)=="EXFAT   "->"exFAT"
-                        else->"Unknown"
-                    }
+                    val fileSystem=detectFat(vbr, count, bs)
+                    if(typeCode==0x83 && fileSystem.startsWith("FAT"))
+                        notes.add("MBR type 0x83 คือ Linux แต่ boot sector ระบุ $fileSystem")
                     found.add(Partition(number,first,end,code,fileSystem,null,null,
                         null,null,null,null,null,null,null,null,
-                        listOf("พาร์ทิชันนี้ไม่ใช่ EXT; ยังไม่สแกนบล็อกที่จัดสรร")))
+                        notes + "พาร์ทิชันนี้ไม่ใช่ EXT; ยังไม่สแกนบล็อกที่จัดสรร"))
                     continue
                 }
                 val log=u32(sb,24)
@@ -123,6 +123,8 @@ object ExtRebuildInspector {
                 if(groupsBlocks<=0 || firstData>=totalBlocks)
                     throw IOException("EXT group geometry ผิดปกติ")
                 val groups=(totalBlocks-firstData+groupsBlocks-1)/groupsBlocks
+                notes.add("EXT features: compat=0x"+compat.toString(16)+", incompat=0x"+incompat.toString(16)+", ro=0x"+ro.toString(16))
+                notes.add("EXT total blocks=$totalBlocks, free blocks=$freeBlocks, first data block=$firstData")
                 val state=u16(sb,58)
                 val clean=(state and 1)==1
                 val needsRecovery=(incompat and 4L)!=0L
@@ -135,6 +137,9 @@ object ExtRebuildInspector {
                 }
                 if(!clean)notes.add("EXT filesystem ไม่ได้อยู่ในสถานะ clean")
                 if(needsRecovery)notes.add("EXT journal ต้อง replay บนสำเนาก่อนพิจารณาย่อ")
+                if((incompat and 0x80L)!=0L)notes.add("64-bit EXT descriptors: verify metadata placement before shrink")
+                if((incompat and 0x200L)!=0L)notes.add("flex_bg: metadata may be outside its nominal group")
+                if((ro and 0x1L)!=0L)notes.add("sparse_super: preserve backup superblocks")
                 if((ro and 0x400L)!=0L)
                     notes.add("ใช้ metadata checksums ซึ่งแอปยังไม่ได้ตรวจสอบ CRC ทั้งหมด")
                 if((incompat and 0x10L)!=0L)
@@ -145,7 +150,7 @@ object ExtRebuildInspector {
                     notes.add("ใช้ inline_data; งดวิเคราะห์ Block Bitmap")
                 if(groups>512)
                     notes.add("จำนวนกลุ่มมากเกินขอบเขตสแกนที่ตั้งไว้")
-                val supportedBitmap=(incompat and (0x10L or 0x8000L))==0L &&
+                val supportedBitmap=clean && !needsRecovery && (ro and 0x400L)==0L && (incompat and (0x10L or 0x8000L))==0L &&
                     (ro and 0x200L)==0L && groups<=512L && blockSize>=bs &&
                     groupsBlocks<=blockSize.toLong()*8L
 
@@ -202,7 +207,7 @@ object ExtRebuildInspector {
                 partitionBytes,descriptorSize)
             val flags=u16(descriptor,18)
             if((flags and 0x2)!=0)
-                throw IOException("พบ Block Bitmap กลุ่ม $group ยังไม่ Initialize")
+                throw IOException("BLOCK_UNINIT กลุ่ม $group: ยังไม่รองรับการประเมิน reserved metadata")
             val bitmapBlock=u32(descriptor,0)+
                 (if(uses64 && descriptorSize>=64)u32(descriptor,32) shl 32 else 0L)
             if(bitmapBlock<=0 || bitmapBlock>=totalBlocks)
@@ -260,6 +265,32 @@ object ExtRebuildInspector {
                 }
             }
             throw IOException("อ่าน USB LBA $lba ไม่สำเร็จ",failure)
+        }
+    }
+
+    /** Determine FAT variant from cluster count, not an untrusted label. */
+    private fun detectFat(b:ByteArray, partitionSectors:Long, sectorBytes:Int):String {
+        if(String(b,3,8,Charsets.US_ASCII)=="EXFAT   ")return "exFAT (ยังไม่ตรวจ geometry)"
+        if(u16(b,510)!=0xaa55)return "Unknown"
+        val bps=u16(b,11)
+        val spc=u8(b,13)
+        val reserved=u16(b,14)
+        val fats=u8(b,16)
+        val roots=u16(b,17)
+        val total=if(u16(b,19)!=0)u16(b,19).toLong() else u32(b,32)
+        val fatSize=if(u16(b,22)!=0)u16(b,22).toLong() else u32(b,36)
+        if(bps!=sectorBytes || spc==0 || (spc and (spc-1))!=0 ||
+            reserved==0 || fats !in 1..2 || total==0L ||
+            total>partitionSectors || fatSize==0L)return "Unknown"
+        val rootSectors=(roots*32L+bps-1)/bps
+        val overhead=reserved.toLong()+fats.toLong()*fatSize+rootSectors
+        if(overhead>=total)return "Unknown"
+        val clusters=(total-overhead)/spc
+        return when {
+            clusters<4085L -> "FAT12"
+            clusters<65525L -> "FAT16"
+            roots!=0 || u32(b,44)<2L -> "Unknown"
+            else -> "FAT32"
         }
     }
 
