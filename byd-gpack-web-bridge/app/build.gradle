@@ -1,6 +1,6 @@
 plugins { id 'com.android.application' }
 android { namespace 'com.pcopi.byd.webbridge'; compileSdk 35
- defaultConfig { applicationId 'com.pcopi.byd.webbridge.v026'; minSdk 26; targetSdk 34; versionCode 3; versionName '0.2.6-exif-diagnostic' }
+ defaultConfig { applicationId 'com.pcopi.byd.webbridge.v027'; minSdk 26; targetSdk 34; versionCode 4; versionName '0.2.7-image-selection-confirmation' }
  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 } }
 
 dependencies { implementation 'androidx.exifinterface:exifinterface:1.3.7' }

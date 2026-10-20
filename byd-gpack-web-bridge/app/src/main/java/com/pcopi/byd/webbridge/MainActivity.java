@@ -9,6 +9,13 @@ import android.media.ExifInterface;
 import android.content.res.AssetFileDescriptor;
 
 import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
+import android.util.TypedValue;
+import java.security.MessageDigest;
+import java.io.IOException;
 import android.provider.OpenableColumns;
 import java.io.InputStream;
 import android.os.Build;
@@ -38,8 +45,8 @@ public class MainActivity extends Activity {
   private void layout(){
     ScrollView sc=new ScrollView(this);LinearLayout root=new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);root.setPadding(24,16,24,30);sc.addView(root);
-    header(root,"BYD Web Bridge V0.2.6",23);
-    header(root,"อ่าน EXIF จาก Flash Drive ด้วยตัวอ่านสองชุด • ป้องกัน GPS 0,0 • รับจุดหมายใหม่เมื่อกลับเข้า Browser ภายใน GPack\nสำหรับ Phone Space V0.7.4 • ทดลองขณะรถจอดสนิท",15);
+    header(root,"BYD Web Bridge V0.2.7",23);
+    header(root,"เลือกภาพพร้อมดูตัวอย่างและติ๊กยืนยัน • ตรวจ EXIF จาก USB สองวิธี • บันทึกรหัส SHA-256 • ไม่ส่ง GPS 0,0\nสำหรับ Phone Space V0.7.4 • ทดลองขณะรถจอดสนิท",15);
     header(root,"ขั้นที่ 1 — เปิดเซิร์ฟเวอร์สะพาน",19);
     button(root,"เริ่ม Web Bridge บนจอรถ",()->startBridge());
     button(root,"คัดลอกลิงก์ Browser: "+URL,()->copy(URL));
@@ -51,9 +58,10 @@ public class MainActivity extends Activity {
     });
     header(root,"ขั้นที่ 2 — เปิด Browser ภายใน GPack",19);
     header(root,"ใน Browser ภายใน GPack เปิด Bookmark เดิม: "+URL+"\nเมื่อเข้าได้ควรเห็นข้อความ 'เชื่อมต่อ Web Bridge สำเร็จ' และปุ่มเปิด Google Maps\nบันทึกเว็บไซต์ไว้ใน Bookmark เพื่อใช้ครั้งถัดไป",16);
-    header(root,"ขั้นที่ 3 — เลือกภาพ GPS หรือส่งพิกัด",19);
-    button(root,"เลือกภาพจาก Flash Drive → ตรวจ EXIF / GPS",()->choosePhoto());
-    header(root,"ถ้าเปิดรูปจาก Phone Space แล้วแชร์ภาพให้เลือก 'BYD Web Bridge Test 0.2.6' ได้ (ถ้าระบบมีปุ่มแชร์)",14);
+    header(root,"ขั้นที่ 3 — เลือกและยืนยันภาพก่อนตรวจ GPS",19);
+    button(root,"เลือกรูปจาก Flash Drive → ดูภาพและติ๊กยืนยัน",()->choosePhoto());
+    header(root,"เลือกภาพจากรายการแล้ว แอปจะแสดงรูปตัวอย่างและชื่อไฟล์ก่อน ไม่อ่าน GPS และไม่ส่งนำทางจนกว่าคุณจะติ๊กถูกและยืนยัน",14);
+    header(root,"ถ้าเปิดรูปจาก Phone Space แล้วแชร์ภาพให้เลือก 'BYD Web Bridge Test 0.2.7' ได้ (ถ้าระบบมีปุ่มแชร์)",14);
     input=new EditText(this);input.setText(BANGKOK);input.setSingleLine(false);
     input.setHint("ชื่อสถานที่ / พิกัด GPS / ลิงก์ Maps");input.setTextSize(17);root.addView(input);
     button(root,"ส่งพิกัดตัวอย่างจากภาพ GPS → Browser",()->send(BANGKOK,"พิกัดตัวอย่างจากภาพ GPS"));
@@ -100,7 +108,7 @@ public class MainActivity extends Activity {
       Uri uri=null;
       if(Build.VERSION.SDK_INT>=33)uri=in.getParcelableExtra(Intent.EXTRA_STREAM,Uri.class);
       else uri=(Uri)in.getParcelableExtra(Intent.EXTRA_STREAM);
-      if(uri!=null)readPhotoGps(uri);
+      if(uri!=null)showSelection(uri);
       return;
     }
     if(in!=null && Intent.ACTION_SEND.equals(in.getAction())&&"text/plain".equals(in.getType())){
@@ -122,7 +130,7 @@ public class MainActivity extends Activity {
   @Override protected void onActivityResult(int request,int result,Intent data){
     super.onActivityResult(request,result,data);
     if(request==PICK_IMAGE_GPS && result==RESULT_OK && data!=null && data.getData()!=null){
-      readPhotoGps(data.getData());
+      showSelection(data.getData());
     }
   }
   private String photoName(Uri uri){
@@ -134,6 +142,112 @@ public class MainActivity extends Activity {
       }
     }catch(Exception ignored){}
     return fallback;
+  }
+  private int dp(int value){
+    return (int)(getResources().getDisplayMetrics().density*value+0.5f);
+  }
+  private long fileLength(Uri uri){
+    try(Cursor c=getContentResolver().query(uri,new String[]{OpenableColumns.SIZE},null,null,null)){
+      if(c!=null && c.moveToFirst()){
+        int ix=c.getColumnIndex(OpenableColumns.SIZE);
+        if(ix>=0&&!c.isNull(ix))return c.getLong(ix);
+      }
+    }catch(Exception ignored){}
+    try(AssetFileDescriptor fd=getContentResolver().openAssetFileDescriptor(uri,"r")){
+      if(fd!=null)return fd.getLength();
+    }catch(Exception ignored){}
+    return -1;
+  }
+  private Bitmap imageThumbnail(Uri uri) throws IOException {
+    BitmapFactory.Options b=new BitmapFactory.Options();b.inJustDecodeBounds=true;
+    try(InputStream s=getContentResolver().openInputStream(uri)){
+      if(s==null)throw new IOException("เปิดรูปไม่ได้");
+      BitmapFactory.decodeStream(s,null,b);
+    }
+    if(b.outWidth<=0||b.outHeight<=0)throw new IOException("ไม่ใช่ภาพที่รองรับ");
+    int sample=1;
+    while(b.outWidth/sample>800||b.outHeight/sample>800)sample*=2;
+    BitmapFactory.Options opt=new BitmapFactory.Options();
+    opt.inSampleSize=sample;opt.inPreferredConfig=Bitmap.Config.RGB_565;
+    try(InputStream s=getContentResolver().openInputStream(uri)){
+      if(s==null)throw new IOException("เปิดรูปไม่ได้");
+      Bitmap result=BitmapFactory.decodeStream(s,null,opt);
+      if(result==null)throw new IOException("ไม่สามารถแสดงตัวอย่างรูปได้");
+      return result;
+    }
+  }
+  // The Android file picker returns a URI when a thumbnail is tapped.
+  // This is a valid single file selection, but our separate confirmation avoids silent submission.
+  private void showSelection(Uri uri){
+    if(uri==null){message("ไม่ได้เลือกรูป");return;}
+    LinearLayout panel=new LinearLayout(this);
+    panel.setOrientation(LinearLayout.VERTICAL);
+    panel.setPadding(dp(18),dp(8),dp(18),0);
+    TextView info=new TextView(this);
+    String name=photoName(uri);
+    long bytes=fileLength(uri);
+    info.setText("ไฟล์ที่กำลังเลือก:\n"+name+"\nขนาด: "+
+         (bytes>=0?String.format(Locale.US,"%,d bytes",bytes):"ไม่ทราบ")+
+         "\nประเภท: "+getContentResolver().getType(uri)+
+         "\nยังไม่อ่าน GPS และยังไม่ส่งนำทาง");
+    info.setTextSize(16);info.setTextIsSelectable(true);
+    panel.addView(info);
+    ImageView image=new ImageView(this);
+    image.setAdjustViewBounds(true);
+    image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+    image.setMinimumHeight(dp(160));
+    image.setMaxHeight(dp(280));
+    try{
+      image.setImageBitmap(imageThumbnail(uri));
+      panel.addView(image,new LinearLayout.LayoutParams(-1,dp(280)));
+    }catch(Exception e){
+      TextView warn=new TextView(this);
+      warn.setText("ไม่สามารถแสดงตัวอย่าง: "+e.getMessage()+
+                   "\nคุณยังสามารถตรวจ EXIF ของไฟล์ที่เลือกได้");
+      panel.addView(warn);
+    }
+    CheckBox confirm=new CheckBox(this);
+    confirm.setText("✓ ยืนยันว่าเลือกภาพนี้ถูกต้องแล้ว");
+    confirm.setTextSize(18);
+    confirm.setChecked(false);
+    panel.addView(confirm);
+    TextView tip=new TextView(this);
+    tip.setText("เมื่อติ๊กยืนยันจึงจะตรวจ GPS • พิกัด 0,0 จะไม่ถูกส่ง");
+    tip.setTextSize(14);panel.addView(tip);
+    ScrollView scroll=new ScrollView(this);
+    scroll.addView(panel);
+    android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(this)
+        .setTitle("ตรวจภาพก่อนอ่าน GPS")
+        .setView(scroll)
+        .setNegativeButton("ยกเลิก", (d,w)->{})
+        .setPositiveButton("ยืนยัน • ตรวจ GPS", (d,w)->{
+          prefs.edit().putString("selectedName",name)
+            .putString("selectionStatus","ผู้ใช้ยืนยันไฟล์จากตัวเลือกภาพ").apply();
+          readPhotoGps(uri);
+        }).create();
+    dialog.setOnShowListener(d->{
+      android.widget.Button positive=dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE);
+      positive.setEnabled(false);
+      confirm.setOnCheckedChangeListener((buttonView,checked)->positive.setEnabled(checked));
+    });
+    dialog.show();
+  }
+  private String checksum(Uri uri) throws Exception{
+    MessageDigest digest=MessageDigest.getInstance("SHA-256");
+    long bytes=0;
+    try(InputStream s=getContentResolver().openInputStream(uri)){
+      if(s==null)throw new IOException("เปิดไฟล์ไม่ได้");
+      byte[] buf=new byte[16*1024];
+      int n;
+      while((n=s.read(buf))!=-1){
+        if(n==0)continue;
+        digest.update(buf,0,n);bytes+=n;
+      }
+    }
+    byte[] hash=digest.digest();
+    StringBuilder text=new StringBuilder(hash.length*2);
+    for(byte b:hash)text.append(String.format(Locale.US,"%02x",b&255));
+    return text.toString()+" ("+bytes+" bytes)";
   }
   private static boolean isValidGps(double lat,double lon){
     return Double.isFinite(lat)&&Double.isFinite(lon)&&Math.abs(lat)<=90&&Math.abs(lon)<=180
@@ -165,6 +279,9 @@ public class MainActivity extends Activity {
     StringBuilder diag=new StringBuilder();
     String name=photoName(uri);
     diag.append("ไฟล์: ").append(name).append('\n');
+    diag.append("ยืนยันการเลือก: ")
+        .append(prefs.getString("selectionStatus","จาก Android picker")).append('\n');
+    diag.append("ชื่อไฟล์ที่ยืนยัน: ").append(prefs.getString("selectedName","(ไม่ได้บันทึก)")).append('\n');
     diag.append("รูปแบบ: ").append(getContentResolver().getType(uri))
         .append(" • URI: ").append(uri.getScheme()).append('\n');
     try{
@@ -172,6 +289,11 @@ public class MainActivity extends Activity {
       try(AssetFileDescriptor fd=getContentResolver().openAssetFileDescriptor(uri,"r")){
         if(fd!=null)diag.append("ความยาวจากผู้ให้บริการไฟล์: ").append(fd.getLength()).append(" bytes\n");
       }catch(Exception e){diag.append("ขนาดไฟล์: ตรวจไม่ได้\n");}
+      try{
+        diag.append("SHA-256 ของไฟล์ที่แอปได้รับ: ").append(checksum(uri)).append('\n');
+      }catch(Exception e){
+        diag.append("SHA-256 อ่านไม่ได้: ").append(e.getMessage()).append('\n');
+      }
       // Diagnostic EXIF from two independent parsers without changing original USB image.
       double[] stock=null, modern=null;
       try(InputStream s=getContentResolver().openInputStream(uri)){
@@ -251,7 +373,7 @@ public class MainActivity extends Activity {
   }
   private void record(String s){feedback=s;prefs.edit().putString("feedback",s).apply();refresh();message("บันทึกผลแล้ว");}
   private String report(){
-    return "BYD Web Bridge V0.2.6\n"
+    return "BYD Web Bridge V0.2.7\n"
       +"Phone Space baseline V0.7.4\n"
       +"Android "+Build.VERSION.SDK_INT+" / "+Build.MODEL+"\n"
       +"Service: "+prefs.getString("server","ยังไม่เริ่ม")+"\n"
