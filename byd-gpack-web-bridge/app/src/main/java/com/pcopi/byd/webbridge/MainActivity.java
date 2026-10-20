@@ -17,6 +17,8 @@ import android.util.TypedValue;
 import java.security.MessageDigest;
 import java.io.IOException;
 import android.provider.OpenableColumns;
+import android.provider.MediaStore;
+import android.content.pm.PackageManager;
 import java.io.InputStream;
 import android.os.Build;
 import android.os.Bundle;
@@ -32,6 +34,8 @@ public class MainActivity extends Activity {
   private TextView status;
   private String feedback="ยังไม่ได้รับผล";
   private boolean autoShare=false;
+  private Uri pendingExifUri;
+  private boolean lastPermissionGranted=false;
 
   @Override public void onCreate(Bundle b){
     super.onCreate(b);
@@ -45,8 +49,8 @@ public class MainActivity extends Activity {
   private void layout(){
     ScrollView sc=new ScrollView(this);LinearLayout root=new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);root.setPadding(24,16,24,30);sc.addView(root);
-    header(root,"BYD Web Bridge V0.2.7",23);
-    header(root,"เลือกภาพพร้อมดูตัวอย่างและติ๊กยืนยัน • ตรวจ EXIF จาก USB สองวิธี • บันทึกรหัส SHA-256 • ไม่ส่ง GPS 0,0\nสำหรับ Phone Space V0.7.4 • ทดลองขณะรถจอดสนิท",15);
+    header(root,"BYD Web Bridge V0.2.8",23);
+    header(root,"แสดงภาพก่อนเลือก • ขอสิทธิ์ ACCESS_MEDIA_LOCATION • เปรียบเทียบ EXIF ปกติกับข้อมูลต้นฉบับ • ป้องกัน GPS 0,0\nสำหรับ Phone Space V0.7.4 • ทดลองขณะรถจอดสนิท",15);
     header(root,"ขั้นที่ 1 — เปิดเซิร์ฟเวอร์สะพาน",19);
     button(root,"เริ่ม Web Bridge บนจอรถ",()->startBridge());
     button(root,"คัดลอกลิงก์ Browser: "+URL,()->copy(URL));
@@ -61,7 +65,7 @@ public class MainActivity extends Activity {
     header(root,"ขั้นที่ 3 — เลือกและยืนยันภาพก่อนตรวจ GPS",19);
     button(root,"เลือกรูปจาก Flash Drive → ดูภาพและติ๊กยืนยัน",()->choosePhoto());
     header(root,"เลือกภาพจากรายการแล้ว แอปจะแสดงรูปตัวอย่างและชื่อไฟล์ก่อน ไม่อ่าน GPS และไม่ส่งนำทางจนกว่าคุณจะติ๊กถูกและยืนยัน",14);
-    header(root,"ถ้าเปิดรูปจาก Phone Space แล้วแชร์ภาพให้เลือก 'BYD Web Bridge Test 0.2.7' ได้ (ถ้าระบบมีปุ่มแชร์)",14);
+    header(root,"ถ้าเปิดรูปจาก Phone Space แล้วแชร์ภาพให้เลือก 'BYD Web Bridge Test 0.2.8' ได้ (ถ้าระบบมีปุ่มแชร์)",14);
     input=new EditText(this);input.setText(BANGKOK);input.setSingleLine(false);
     input.setHint("ชื่อสถานที่ / พิกัด GPS / ลิงก์ Maps");input.setTextSize(17);root.addView(input);
     button(root,"ส่งพิกัดตัวอย่างจากภาพ GPS → Browser",()->send(BANGKOK,"พิกัดตัวอย่างจากภาพ GPS"));
@@ -223,7 +227,7 @@ public class MainActivity extends Activity {
         .setPositiveButton("ยืนยัน • ตรวจ GPS", (d,w)->{
           prefs.edit().putString("selectedName",name)
             .putString("selectionStatus","ผู้ใช้ยืนยันไฟล์จากตัวเลือกภาพ").apply();
-          readPhotoGps(uri);
+          requestGpsWithPermission(uri);
         }).create();
     dialog.setOnShowListener(d->{
       android.widget.Button positive=dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE);
@@ -231,6 +235,42 @@ public class MainActivity extends Activity {
       confirm.setOnCheckedChangeListener((buttonView,checked)->positive.setEnabled(checked));
     });
     dialog.show();
+  }
+  private void requestGpsWithPermission(Uri uri){
+    if(uri==null){message("ไม่มีไฟล์ที่เลือก");return;}
+    if(Build.VERSION.SDK_INT>=29 && checkSelfPermission(Manifest.permission.ACCESS_MEDIA_LOCATION)
+         !=PackageManager.PERMISSION_GRANTED){
+      pendingExifUri=uri;
+      prefs.edit().putString("photoStatus","กำลังรออนุญาตให้แอปเข้าถึง GPS EXIF ของภาพต้นฉบับ • ยังไม่ส่งนำทาง").apply();
+      refresh();
+      new android.app.AlertDialog.Builder(this)
+       .setTitle("ขอสิทธิ์อ่าน GPS จากภาพ")
+       .setMessage("ระบบ Android อาจซ่อนพิกัด GPS ของภาพ เมื่อกดอนุญาต แอปจะลองอ่านภาพต้นฉบับอีกครั้งจาก Flash Drive เพื่อใช้สำหรับนำทางเท่านั้น ไม่มีการส่งรูปไปอินเทอร์เน็ต")
+       .setPositiveButton("ขออนุญาต", (d,w)->{
+          requestPermissions(new String[]{Manifest.permission.ACCESS_MEDIA_LOCATION},928);
+       })
+       .setNegativeButton("ยกเลิก", (d,w)->{
+          pendingExifUri=null;
+          prefs.edit().putString("photoStatus","ผู้ใช้ยังไม่ได้อนุญาตเข้าถึง EXIF ต้นฉบับ").apply();
+          refresh();
+       }).show();
+    }else{
+      lastPermissionGranted=Build.VERSION.SDK_INT<29 ||
+         checkSelfPermission(Manifest.permission.ACCESS_MEDIA_LOCATION)==PackageManager.PERMISSION_GRANTED;
+      readPhotoGps(uri);
+    }
+  }
+  @Override public void onRequestPermissionsResult(int req,String[] permissions,int[] granted){
+    super.onRequestPermissionsResult(req,permissions,granted);
+    if(req!=928)return;
+    Uri uri=pendingExifUri;pendingExifUri=null;
+    boolean ok=granted.length>0&&granted[0]==PackageManager.PERMISSION_GRANTED;
+    lastPermissionGranted=ok;
+    if(ok && uri!=null){readPhotoGps(uri);}
+    else{
+      prefs.edit().putString("photoStatus","ระบบไม่ได้รับสิทธิ์ ACCESS_MEDIA_LOCATION • ไม่อ่าน GPS ที่ถูกซ่อน และไม่ส่งนำทาง").apply();
+      refresh();message("ยังไม่อนุญาตอ่าน GPS ต้นฉบับ จึงไม่ได้ส่งนำทาง");
+    }
   }
   private String checksum(Uri uri) throws Exception{
     MessageDigest digest=MessageDigest.getInstance("SHA-256");
@@ -279,6 +319,11 @@ public class MainActivity extends Activity {
     StringBuilder diag=new StringBuilder();
     String name=photoName(uri);
     diag.append("ไฟล์: ").append(name).append('\n');
+    diag.append("Android ACCESS_MEDIA_LOCATION: ")
+        .append(Build.VERSION.SDK_INT<29?"ไม่จำเป็น":(checkSelfPermission(Manifest.permission.ACCESS_MEDIA_LOCATION)
+         ==PackageManager.PERMISSION_GRANTED?"ได้รับอนุญาต":"ไม่ได้รับอนุญาต")).append('\n');
+    diag.append("URI authority: ").append(safe(uri.getAuthority())).append('\n');
+
     diag.append("ยืนยันการเลือก: ")
         .append(prefs.getString("selectionStatus","จาก Android picker")).append('\n');
     diag.append("ชื่อไฟล์ที่ยืนยัน: ").append(prefs.getString("selectedName","(ไม่ได้บันทึก)")).append('\n');
@@ -331,9 +376,63 @@ public class MainActivity extends Activity {
         }
       }catch(Exception e){diag.append("AndroidX reader error: ").append(e.getClass().getSimpleName())
                        .append(": ").append(e.getMessage()).append('\n');}
+      double[] originalGps=null;
+      String originalMethod="ไม่สามารถอ่านไฟล์ต้นฉบับ";
+      if(Build.VERSION.SDK_INT>=29){
+        Uri mediaUri=null;
+        try{
+          if("media".equals(uri.getAuthority())){
+            mediaUri=uri;
+            diag.append("URI source: MediaStore\n");
+          }else{
+            mediaUri=MediaStore.getMediaUri(this,uri);
+            diag.append("SAF → MediaStore: ").append(mediaUri!=null?"สำเร็จ":"ไม่มีรายการเทียบเคียง").append('\n');
+          }
+        }catch(Exception e){diag.append("SAF → MediaStore error: ")
+                            .append(e.getClass().getSimpleName()).append('\n');}
+        // First try a true MediaStore original URI, then original-only flag on SAF URI.
+        Uri[] candidates=mediaUri==null?new Uri[]{uri}:new Uri[]{mediaUri,uri};
+        for(int i=0;i<candidates.length;i++){
+          try{
+            Uri original=MediaStore.setRequireOriginal(candidates[i]);
+            try(InputStream s=getContentResolver().openInputStream(original)){
+              if(s==null)throw new IOException("Original stream unavailable");
+              androidx.exifinterface.media.ExifInterface x=
+                new androidx.exifinterface.media.ExifInterface(s);
+              double[] xy=x.getLatLong();
+              diag.append("Original URI ").append(i+1).append(" EXIF: ")
+                .append(xy==null?"(ไม่มี)":formatGps(xy[0],xy[1])).append('\n');
+              String lat=x.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_GPS_LATITUDE);
+              String lon=x.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_GPS_LONGITUDE);
+              String lr=x.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_GPS_LATITUDE_REF);
+              String lo=x.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_GPS_LONGITUDE_REF);
+              diag.append("Original raw Lat: ").append(safe(lat)).append(" / ").append(safe(lr)).append('\n');
+              diag.append("Original raw Lon: ").append(safe(lon)).append(" / ").append(safe(lo)).append('\n');
+              if(xy!=null&&isValidGps(xy[0],xy[1])){
+                originalGps=xy;originalMethod="ต้นฉบับ MediaStore/SAF";
+                break;
+              }
+              if(lat!=null&&lon!=null){
+                try{
+                  double a=dms(lat,lr),b=dms(lon,lo);
+                  if(isValidGps(a,b)){
+                    originalGps=new double[]{a,b};originalMethod="ต้นฉบับ DMS";
+                    break;
+                  }
+                }catch(Exception ignored){}
+              }
+            }
+          }catch(Exception e){
+            diag.append("Original URI ").append(i+1).append(" error: ")
+              .append(e.getClass().getSimpleName()).append(": ")
+              .append(safe(e.getMessage())).append('\n');
+          }
+        }
+      }
       double[] coordinates=null;
       String used="AndroidX";
-      if(modern!=null&&isValidGps(modern[0],modern[1]))coordinates=modern;
+      if(originalGps!=null){coordinates=originalGps;used=originalMethod;}
+      else if(modern!=null&&isValidGps(modern[0],modern[1]))coordinates=modern;
       else if(stock!=null&&isValidGps(stock[0],stock[1])){
         coordinates=stock;used="Android";
       }
@@ -341,7 +440,7 @@ public class MainActivity extends Activity {
         diag.append("ผล: ไม่ส่งพิกัด เนื่องจาก GPS ว่าง/0,0/อ่านไม่ได้\n");
         prefs.edit().putString("photoStatus",diag.toString()).apply();
         refresh();
-        message("ยังไม่ส่งนำทาง: GPS เป็น 0,0 หรืออ่านไม่ได้ — กรุณาคัดลอกรายงาน");
+        message("GPS ยังอ่านไม่ได้ กรุณาส่งภาพหน้ารายงาน • ไม่มีการนำทางไป 0,0");
         return;
       }
       String gps=formatGps(coordinates[0],coordinates[1]);
@@ -373,7 +472,7 @@ public class MainActivity extends Activity {
   }
   private void record(String s){feedback=s;prefs.edit().putString("feedback",s).apply();refresh();message("บันทึกผลแล้ว");}
   private String report(){
-    return "BYD Web Bridge V0.2.7\n"
+    return "BYD Web Bridge V0.2.8\n"
       +"Phone Space baseline V0.7.4\n"
       +"Android "+Build.VERSION.SDK_INT+" / "+Build.MODEL+"\n"
       +"Service: "+prefs.getString("server","ยังไม่เริ่ม")+"\n"
@@ -382,7 +481,7 @@ public class MainActivity extends Activity {
       +"Last browser activity: "+prefs.getString("lastSeen","ยังไม่พบ")+"\n"
       +"Destination: "+prefs.getString("destination",BANGKOK)+"\n"
       +"Revision: "+prefs.getLong("revision",0)+"\n"
-      +"ภาพจาก Flash Drive / EXIF diagnostic:\n"+prefs.getString("photoStatus","ยังไม่ได้เลือกรูป") +"\n"
+      +"ภาพจาก Flash Drive / Original EXIF diagnostic:\n"+prefs.getString("photoStatus","ยังไม่ได้เลือกรูป") +"\n"
       +"Test result: "+prefs.getString("feedback",feedback)+"\n"
       +"เปิด Browser ภายใน GPack ไปที่ "+URL+"\n"
       +"หมายเหตุ: จำนวนครั้งเชื่อมต่อไม่ได้ยืนยันว่า Maps ได้รับพิกัด";
