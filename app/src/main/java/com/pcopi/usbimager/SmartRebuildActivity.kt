@@ -309,6 +309,13 @@ class SmartRebuildActivity : Activity() {
             return b.toString()
         }
         b.append("ความจุมีแนวโน้มเพียงพอ แต่ยังไม่ใช่ขนาดย่อขั้นต่ำที่ยืนยันแล้ว\n")
+        // Capacity planning is read-only; it is not proof of a safe shrink.
+        val extBlock=p3.blockBytes?.toLong() ?: 4096L
+        val usableBytes=(availableAfterReserve/extBlock)*extBlock
+        b.append("ARC3 planned capacity (aligned, estimate only): ")
+            .append(FormatUtils.bytes(usableBytes)).append('\n')
+        b.append("EXT4 block alignment: ").append(extBlock).append(" B\n")
+        b.append("ยังไม่ได้ยืนยันว่าระบบไฟล์ EXT4 สามารถสร้างใหม่ในพื้นที่นี้ได้\n")
         val reasons=mutableListOf<String>()
         if(p2.cleanState!=true)reasons.add("ARC2 ไม่อยู่ในสถานะ Clean")
         if(p3.cleanState!=true)reasons.add("ARC3 ไม่อยู่ในสถานะ Clean")
