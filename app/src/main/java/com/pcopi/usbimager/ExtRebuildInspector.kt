@@ -145,7 +145,7 @@ object ExtRebuildInspector {
                     notes.add("ใช้ inline_data; งดวิเคราะห์ Block Bitmap")
                 if(groups>512)
                     notes.add("จำนวนกลุ่มมากเกินขอบเขตสแกนที่ตั้งไว้")
-                val supportedBitmap=(incompat and (0x10L or 0x8000L))==0L &&
+                val supportedBitmap=clean && !needsRecovery && (ro and 0x400L)==0L && (incompat and (0x10L or 0x8000L))==0L &&
                     (ro and 0x200L)==0L && groups<=512L && blockSize>=bs &&
                     groupsBlocks<=blockSize.toLong()*8L
 
@@ -202,7 +202,7 @@ object ExtRebuildInspector {
                 partitionBytes,descriptorSize)
             val flags=u16(descriptor,18)
             if((flags and 0x2)!=0)
-                throw IOException("พบ Block Bitmap กลุ่ม $group ยังไม่ Initialize")
+                throw IOException("BLOCK_UNINIT กลุ่ม $group: ยังไม่รองรับการประเมิน reserved metadata")
             val bitmapBlock=u32(descriptor,0)+
                 (if(uses64 && descriptorSize>=64)u32(descriptor,32) shl 32 else 0L)
             if(bitmapBlock<=0 || bitmapBlock>=totalBlocks)
