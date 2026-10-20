@@ -357,6 +357,58 @@ class SmartRebuildActivity : Activity() {
                                 .append(entry.size).append(" B)\n")
                         }
                         if(root.size>80)out.append("... รายการอื่นไม่ได้แสดง\n")
+                        // Bounded recursive metadata inventory; no file contents or secrets.
+                        // Inode/cluster keys prevent directory loops on malformed media.
+                        val pending=java.util.ArrayDeque<Triple<BootDiskReader.Entry,String,Int>>()
+                        val seen=mutableSetOf<Long>()
+                        for(dir in root.filter{it.directory})
+                            pending.add(Triple(dir,"/"+dir.name,1))
+                        var files=root.count{!it.directory}
+                        var folders=root.count{it.directory}
+                        var bytes=root.filter{!it.directory}.sumOf{it.size.coerceAtLeast(0L)}
+                        var walked=0
+                        var errors=0
+                        var truncated=false
+                        val maxDirs=200
+                        val maxDepth=8
+                        val maxEntries=1500
+                        var entries=root.size
+                        while(pending.isNotEmpty()){
+                            if(walked>=maxDirs || entries>=maxEntries) {
+                                truncated=true
+                                break
+                            }
+                            val (dir,location,depth)=pending.removeFirst()
+                            if(depth>maxDepth){truncated=true;continue}
+                            if(!seen.add(dir.cluster))continue
+                            walked++
+                            try {
+                                val children=reader.list(volume.number,dir)
+                                if(entries+children.size>maxEntries){truncated=true;break}
+                                entries+=children.size
+                                for(child in children){
+                                    if(child.directory){
+                                        folders++
+                                        pending.add(Triple(child,location+"/"+child.name,depth+1))
+                                    } else {
+                                        files++
+                                        bytes+=child.size.coerceAtLeast(0L)
+                                    }
+                                }
+                            }catch(_:Exception){errors++}
+                        }
+                        out.append("Recursive inventory: ")
+                            .append(files).append(" files, ")
+                            .append(folders).append(" folders, ")
+                            .append(FormatUtils.bytes(bytes)).append(" apparent file size\n")
+                        out.append("Walked directories: ").append(walked)
+                            .append(" | read errors: ").append(errors).append('\n')
+                        if(truncated || pending.isNotEmpty())
+                            out.append("INCOMPLETE: inventory limits reached; do not use for copying\n")
+                        if(errors>0)
+                            out.append("INCOMPLETE: some directories could not be read\n")
+                        out.append("Metadata-only: permissions, links, hardlinks and CRC not verified\n")
+
                         for(folder in root.filter{it.directory &&
                             it.name.lowercase() in setOf("boot","efi","grub","arc","config","loader")
                         }.take(5)) {
