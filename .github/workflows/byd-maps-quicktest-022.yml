@@ -1,0 +1,39 @@
+name: Build BYD GPack Maps Probe 0.2.2
+on:
+  push:
+    branches:
+      - byd-maps-quicktest-v022
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Verify Android SDK
+        run: |
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 4 -type f -name sdkmanager | head -n 1)
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Generate embedded GPS sample
+        working-directory: byd-maps-quicktest
+        run: |
+          python3 -m pip install pillow piexif
+          python3 tools/create_samples.py
+      - name: Compile APK
+        working-directory: byd-maps-quicktest
+        run: gradle --no-daemon assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BYD-GPack-Maps-QuickTest-v022-APK
+          path: byd-maps-quicktest/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
