@@ -26,7 +26,7 @@ import android.widget.*;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
-  private static final String URL="http://127.0.0.1:8767";
+  private static final String URL="http://127.0.0.1:8768";
   private static final String BANGKOK="13.7563310,100.5017650";
   private static final String DONCHEDI="อนุสรณ์ดอนเจดีย์ สุพรรณบุรี";
   private SharedPreferences prefs;
@@ -49,8 +49,8 @@ public class MainActivity extends Activity {
   private void layout(){
     ScrollView sc=new ScrollView(this);LinearLayout root=new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);root.setPadding(24,16,24,30);sc.addView(root);
-    header(root,"BYD Web Bridge V0.2.9",23);
-    header(root,"เลือกรูป → อ่าน GPS ต้นฉบับ → ส่งจุดหมาย → เปิด GPack อัตโนมัติ (ทดลอง)\nสำหรับ Phone Space V0.7.4 • ทดลองขณะรถจอดสนิท",15);
+    header(root,"BYD Web Bridge V0.2.10",23);
+    header(root,"เลือกรูป → อ่าน GPS → ส่งจุดหมาย → ลองเปิดแอป Google Maps จาก Android โดยตรงก่อน\nสำหรับ Phone Space V0.7.4 • ทดลองขณะรถจอดสนิท",15);
     header(root,"ขั้นที่ 1 — เปิดเซิร์ฟเวอร์สะพาน",19);
     button(root,"เริ่ม Web Bridge บนจอรถ",()->startBridge());
     button(root,"คัดลอกลิงก์ Browser: "+URL,()->copy(URL));
@@ -64,6 +64,17 @@ public class MainActivity extends Activity {
     header(root,"ใน Browser ภายใน GPack เปิด Bookmark เดิม: "+URL+"\nเมื่อเข้าได้ควรเห็นข้อความ 'เชื่อมต่อ Web Bridge สำเร็จ' และปุ่มเปิด Google Maps\nบันทึกเว็บไซต์ไว้ใน Bookmark เพื่อใช้ครั้งถัดไป",16);
     header(root,"ขั้นที่ 3 — เลือกและยืนยันภาพก่อนตรวจ GPS",19);
     button(root,"1. เลือกภาพ GPS จาก Flash Drive เพื่อเริ่มนำทาง",()->choosePhoto());
+    CheckBox directMaps=new CheckBox(this);
+    directMaps.setText("เลือกภาพแล้วทดลองเปิด Google Maps โดยตรง (ไม่ผ่าน Browser)");
+    directMaps.setTextSize(17);
+    directMaps.setChecked(prefs.getBoolean("tryNativeMaps",true));
+    directMaps.setOnCheckedChangeListener((v,yes)->prefs.edit().putBoolean("tryNativeMaps",yes).apply());
+    root.addView(directMaps);
+    button(root,"ทดลองเปิด Google Maps จาก Android โดยตรง",()->{
+      String q=prefs.getString("destination","");
+      if(!validGpsText(q)){message("กรุณาเลือกภาพที่มี GPS จริงก่อน");return;}
+      launchNativeMaps(q);
+    });
     CheckBox openGpack=new CheckBox(this);
     openGpack.setText("ส่งจุดหมายแล้วเปิด GPack อัตโนมัติ (ทดลอง)");
     openGpack.setTextSize(17);
@@ -71,7 +82,7 @@ public class MainActivity extends Activity {
     openGpack.setOnCheckedChangeListener((v,yes)->prefs.edit().putBoolean("autoOpenGpack",yes).apply());
     root.addView(openGpack);
     header(root,"เลือกภาพจากรายการแล้ว แอปจะแสดงรูปตัวอย่างและชื่อไฟล์ก่อน ไม่อ่าน GPS และไม่ส่งนำทางจนกว่าคุณจะติ๊กถูกและยืนยัน",14);
-    header(root,"ถ้าเปิดรูปจาก Phone Space แล้วแชร์ภาพให้เลือก 'BYD Web Bridge Test 0.2.9' ได้ (ถ้าระบบมีปุ่มแชร์)",14);
+    header(root,"ถ้าเปิดรูปจาก Phone Space แล้วแชร์ภาพให้เลือก 'BYD Web Bridge Test 0.2.10' ได้ (ถ้าระบบมีปุ่มแชร์)",14);
     input=new EditText(this);input.setText(BANGKOK);input.setSingleLine(false);
     input.setHint("ชื่อสถานที่ / พิกัด GPS / ลิงก์ Maps");input.setTextSize(17);root.addView(input);
     button(root,"ส่งพิกัดตัวอย่างจากภาพ GPS → Browser",()->send(BANGKOK,"พิกัดตัวอย่างจากภาพ GPS"));
@@ -92,7 +103,7 @@ public class MainActivity extends Activity {
     button(root,"หยุด Web Bridge หลังทดสอบ",()->{
       stopService(new Intent(this,BridgeService.class));prefs.edit().putString("server","สั่งหยุดบริการแล้ว").apply();refresh();
     });
-    header(root,"โหมดอัตโนมัติ: เปิดสวิตช์ที่หน้า Web Bridge ใน Browser ก่อน เมื่อมีจุดหมายใหม่และหน้า Browser กลับมาทำงาน จะทดลองเปิดเส้นทางอัตโนมัติ (อาจถูก Browser บล็อก)\nสำคัญ: จอดรถก่อนทดสอบ • ไม่รูท ไม่แก้ GPack • เวอร์ชันนี้ใช้พอร์ต 8767 แยกจาก Web Bridge V0.2.7/0.2.8 • ไม่จำเป็นต้องหยุดรุ่นเก่าเพื่อทดสอบ",14);
+    header(root,"โหมดอัตโนมัติ: เปิดสวิตช์ที่หน้า Web Bridge ใน Browser ก่อน เมื่อมีจุดหมายใหม่และหน้า Browser กลับมาทำงาน จะทดลองเปิดเส้นทางอัตโนมัติ (อาจถูก Browser บล็อก)\nสำคัญ: จอดรถก่อนทดสอบ • ไม่รูท ไม่แก้ GPack • เวอร์ชันนี้ใช้พอร์ต 8768 แยกจาก Web Bridge V0.2.7/0.2.8 • ไม่จำเป็นต้องหยุดรุ่นเก่าเพื่อทดสอบ",14);
     setContentView(sc);refresh();
   }
   private void header(LinearLayout box,String s,int size){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setPadding(4,12,4,12);box.addView(t);}
@@ -475,7 +486,14 @@ public class MainActivity extends Activity {
       .putString("feedback","รอทดสอบใน Browser")
       .apply();
     feedback="รอทดสอบใน Browser";startBridge();refresh();
-    message("GPS พร้อมแล้ว: "+s+" • เตรียมเปิด GPack");
+    message("ส่งจุดหมาย GPS แล้ว: "+s);
+    if(label!=null && label.startsWith("GPS จากภาพ") && prefs.getBoolean("tryNativeMaps",true)){
+      String goal=s;
+      new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(()->{
+        if(!launchNativeMaps(goal))openGpackAfterPhoto();
+      },550);
+      return;
+    }
     if(label!=null && label.startsWith("GPS จากภาพ") && prefs.getBoolean("autoOpenGpack",true)){
       new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(()->{
         try{
@@ -488,10 +506,57 @@ public class MainActivity extends Activity {
       },700);
     }
   }
+
+  private boolean validGpsText(String q){
+    if(q==null)return false;
+    String[] a=q.trim().split(",",-1);
+    if(a.length!=2)return false;
+    try{
+      double latitude=Double.parseDouble(a[0].trim());
+      double longitude=Double.parseDouble(a[1].trim());
+      return isValidGps(latitude,longitude);
+    }catch(Exception e){return false;}
+  }
+  // Android host may not see apps installed inside the separate GPack virtual environment.
+  // Launch only official Maps package; never let a random navigation app take the destination.
+  private boolean launchNativeMaps(String coords){
+    if(!validGpsText(coords)){message("ไม่มี GPS จริง จึงไม่เปิด Maps");return false;}
+    try{
+      Intent nav=new Intent(Intent.ACTION_VIEW,
+        Uri.parse("google.navigation:q="+Uri.encode(coords)+"&mode=d"));
+      nav.setPackage("com.google.android.apps.maps");
+      nav.addCategory(Intent.CATEGORY_DEFAULT);
+      nav.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      startActivity(nav);
+      prefs.edit().putString("nativeLaunch",
+        "Android host เรียก Google Maps โดยตรงแล้ว (รอยืนยันว่าหน้าจอนำทางเปิด)").apply();
+      refresh();
+      return true;
+    }catch(ActivityNotFoundException|SecurityException e){
+      prefs.edit().putString("nativeLaunch",
+        "ไม่พบ Maps บน Android host: "+e.getClass().getSimpleName()+
+        " • หาก Maps อยู่ใน GPack ต้องเปิดผ่าน Browser ภายใน GPack").apply();
+      refresh();
+      message("Maps อยู่ใน GPack หรือ Android host เปิดไม่ได้ • ใช้ปุ่มตรงจาก Browser");
+      return false;
+    }catch(Exception e){
+      prefs.edit().putString("nativeLaunch","เรียก Maps ไม่สำเร็จ: "+e.getMessage()).apply();
+      refresh();
+      return false;
+    }
+  }
+  private void openGpackAfterPhoto(){
+    if(!prefs.getBoolean("autoOpenGpack",true))return;
+    try{
+      Intent go=getPackageManager().getLaunchIntentForPackage("com.gpack.agent");
+      if(go!=null){go.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);startActivity(go);}
+      else message("กรุณาเปิด GPack Browser: "+URL);
+    }catch(Exception e){message("เปิด GPack ไม่สำเร็จ: "+e.getMessage());}
+  }
   private void record(String s){feedback=s;prefs.edit().putString("feedback",s).apply();refresh();message("บันทึกผลแล้ว");}
   private String report(){
-    return "BYD Web Bridge V0.2.9\n"
-      +"Phone Space baseline V0.7.4 • Separate test port 8767\n"
+    return "BYD Web Bridge V0.2.10\n"
+      +"Phone Space baseline V0.7.4 • Separate test port 8768\n"
       +"Android "+Build.VERSION.SDK_INT+" / "+Build.MODEL+"\n"
       +"Service: "+prefs.getString("server","ยังไม่เริ่ม")+"\n"
       +"Browser page visits: "+prefs.getInt("visits",0)+"\n"
@@ -500,6 +565,8 @@ public class MainActivity extends Activity {
       +"Destination: "+prefs.getString("destination",BANGKOK)+"\n"
       +"Revision: "+prefs.getLong("revision",0)+"\n"
       +"Auto-open GPack: "+prefs.getBoolean("autoOpenGpack",true)+"\n"
+      +"Try native Google Maps: "+prefs.getBoolean("tryNativeMaps",true)+"\n"
+      +"Android direct result: "+prefs.getString("nativeLaunch","ยังไม่ได้ลอง")+"\n"
       +"Sent at ms: "+prefs.getLong("sentAtMs",0)+"\n"
       +"ภาพจาก Flash Drive / Original EXIF diagnostic:\n"+prefs.getString("photoStatus","ยังไม่ได้เลือกรูป") +"\n"
       +"Test result: "+prefs.getString("feedback",feedback)+"\n"

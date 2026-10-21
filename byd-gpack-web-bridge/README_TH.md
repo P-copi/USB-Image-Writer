@@ -1,9 +1,6 @@
-# BYD Web Bridge V0.2.9 Photo Navigation
-This builds on V0.2.8.1 confirmed working on BYD.
-Uses separate Android package com.pcopi.byd.webbridge.v029 and loopback port 8767. Old 8766 version remains available.
-Original EXIF permission, USB photo selection confirmation, SHA-256, and 0,0 blocking preserved.
-After GPS read and send, try opening GPack automatically (checkbox enabled by default).
-GPack browser auto-navigation tries an HTTPS Maps Intent directed at com.google.android.apps.maps, with proven Google Maps WEB directions fallback.
-Manual large green one-tap button is a direct google.navigation:q=lat,lon&mode=d link with user activation. Second app-intent and original web-directions backup buttons remain.
-Important: Chrome may block external app launches without a genuine click. This is untested on BYD/GPack; do not claim zero-tap native launch has passed.
-Test parked: Install, start service 8767, open Browser http://127.0.0.1:8767 once, then pick image and confirm and report if GPack and native Maps launch. If browser maps route needs Start, return to bridge and try green native link on genuine tap.
+# V0.2.10 Native Google Maps first
+Previous V0.2.9: user selected GPS image and tapped "Start navigation in app Maps now" and confirmed Maps started navigation without second "Start" button. However, screenshot subsequently showed Maps web interstitial "Open Google Maps app? Continue using web / Next".
+New behavior: before launching GPack or Browser after GPS image confirmation, the HOST Android app calls ACTION_VIEW for "google.navigation:q=lat,lon&mode=d" and explicit com.google.android.apps.maps package. If Maps is visible to host, opens direct; otherwise gracefully falls back to GPack. Diagnostic tells which path attempted.
+GPack Browser 8768 native primary button uses Chrome intent URI explicit navigation scheme package com.google.android.apps.maps with NO browser fallback, so it cannot unintentionally open Google Maps Web which displays "Open app?" prompt. Additional original google.navigation scheme link and explicit HTTPS Maps package intent as alternatives, plus proven Google Maps website route as manual fallback. Web auto-redirect OFF by default so it does not trigger web interstitial from stale revision.
+LIMITATION: If official Maps exists only INSIDE GPack virtual environment and GPack Browser blocks the direct intent, native first launch will not be possible without a GPack-supported API. Avoid claiming the prompt can always be suppressed. Never silently click permissions or prompts or modify third-party apps.
+Car test: install alongside 0.2.9; start service 8768; open http://127.0.0.1:8768 inside GPack Browser once to verify green connection; choose GPS photo in V0.2.10 and confirm; observe whether native starts without prompt. If host cannot see app, browser opens; use primary BIG GREEN native-intent link manually. Record screenshot and "Android direct result" diagnostic.

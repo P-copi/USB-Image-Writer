@@ -16,24 +16,25 @@ button.toggle{background:#6e37bd;font-size:16px;padding:13px}
 button.enabled{background:#0b8155}
 .muted{opacity:.45;pointer-events:none}
 #tip{font-weight:650}#danger{color:#b91c1c;font-weight:700}
-</style></head><body><main><header><h1>BYD Photo Navigation <small>V0.2.9</small></h1>
-<p class="small">GPack Browser • Web Bridge พอร์ต 8767 • ใช้งานขณะรถจอด</p></header>
+</style></head><body><main><header><h1>BYD Photo Navigation <small>V0.2.10</small></h1>
+<p class="small">GPack Browser • Web Bridge พอร์ต 8768 • ใช้งานขณะรถจอด</p></header>
 <section class="card"><div id="state">กำลังเชื่อม Web Bridge…</div>
 <p>จุดหมายภาพล่าสุด</p><div id="destination">—</div><div id="label" class="small">กำลังรอข้อมูล</div></section>
 <section class="card">
 <h2>เปิด Google Maps นำทาง</h2>
-<a id="native" class="btn primary muted" href="#">▶ เริ่มนำทางในแอป Maps ทันที</a>
-<p class="small">ปุ่มนี้ทดลองเปิดแอป Google Maps โดยตรง เพื่อข้ามหน้าแสดงเส้นทาง (ต้องแตะจาก Browser)</p>
-<a id="intent" class="btn secondary muted" href="#">ลองเปิดแอป Maps อีกวิธี</a>
+<a id="native" class="btn primary muted" href="#">▶ เปิด Google Maps โดยตรง (ไม่ผ่านเว็บ)</a>
+<p class="small">ทดลองเรียกแอป Google Maps ภายใน GPack ด้วย Android navigation Intent โดยไม่เปิดหน้า google.com/maps ก่อน หาก GPack ไม่รองรับจะไม่เปิดอะไรขึ้น</p>
+<a id="intent" class="btn secondary muted" href="#">วิธีที่ 2: เปิดด้วย google.navigation</a>
+<a id="appUrl" class="btn secondary muted" href="#">วิธีที่ 3: ส่งลิงก์ให้แอป Maps โดยตรง</a>
 <a id="route" class="btn gray muted" href="#">เปิดเส้นทางวิธีเดิม (สำรอง)</a>
 <a id="pin" class="btn gray muted" href="#">ดูหมุด GPS ของภาพ</a>
 <div id="danger" role="status"></div>
 </section>
-<section class="card"><h2>นำทางอัตโนมัติ (ทดลอง)</h2>
+<section class="card"><h2>ทดลองระบบเปิด Browser อัตโนมัติ (ปิดไว้เป็นค่าเริ่มต้น)</h2>
 <button id="autoToggle" type="button" class="toggle">เปิดโหมดอัตโนมัติ</button>
 <p id="autoStatus" class="small"></p>
 <p id="tip" class="small"></p>
-<p class="small">Chrome อาจไม่อนุญาตให้เว็บเปิดแอปอื่นโดยไม่มีการแตะ หากไม่เริ่มนำทางเอง ให้กดปุ่มสีเขียวด้านบนหนึ่งครั้ง หรือใช้วิธีเดิมเป็นสำรอง</p>
+<p class="small">Browser บนจอ BYD อาจถาม “เปิดแอป Google Maps ไหม” ซึ่งเป็นกล่องจาก GPack/Google Maps ไม่สามารถปิดเองได้อย่างปลอดภัยจากหน้าเว็บนี้ เราจึงลองวิธีเปิดแอปโดยตรงแทน หากไม่ได้ให้ใช้วิธีเดิม</p>
 </section>
 <section class="card"><button id="retry" type="button" class="toggle">ตรวจการเชื่อมต่อใหม่</button>
 <p id="detail" class="small"></p></section></main>
