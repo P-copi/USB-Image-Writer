@@ -1,6 +1,19 @@
-# V0.2.10 Native Google Maps first
-Previous V0.2.9: user selected GPS image and tapped "Start navigation in app Maps now" and confirmed Maps started navigation without second "Start" button. However, screenshot subsequently showed Maps web interstitial "Open Google Maps app? Continue using web / Next".
-New behavior: before launching GPack or Browser after GPS image confirmation, the HOST Android app calls ACTION_VIEW for "google.navigation:q=lat,lon&mode=d" and explicit com.google.android.apps.maps package. If Maps is visible to host, opens direct; otherwise gracefully falls back to GPack. Diagnostic tells which path attempted.
-GPack Browser 8768 native primary button uses Chrome intent URI explicit navigation scheme package com.google.android.apps.maps with NO browser fallback, so it cannot unintentionally open Google Maps Web which displays "Open app?" prompt. Additional original google.navigation scheme link and explicit HTTPS Maps package intent as alternatives, plus proven Google Maps website route as manual fallback. Web auto-redirect OFF by default so it does not trigger web interstitial from stale revision.
-LIMITATION: If official Maps exists only INSIDE GPack virtual environment and GPack Browser blocks the direct intent, native first launch will not be possible without a GPack-supported API. Avoid claiming the prompt can always be suppressed. Never silently click permissions or prompts or modify third-party apps.
-Car test: install alongside 0.2.9; start service 8768; open http://127.0.0.1:8768 inside GPack Browser once to verify green connection; choose GPS photo in V0.2.10 and confirm; observe whether native starts without prompt. If host cannot see app, browser opens; use primary BIG GREEN native-intent link manually. Record screenshot and "Android direct result" diagnostic.
+# BYD Photo Navigation V0.2.11 — photo preview + auto launch experiment
+
+## Goal
+Send confirmed GPS JPEG from USB in BYD host into loopback Web Bridge. GPack Chrome at http://127.0.0.1:8769 shows **thumbnail + filename + actual GPS**, and tries to open native Google Maps navigation through the **same Android intent URL** that user confirmed working with a physical click in V0.2.10.
+
+## Safety and limitations
+- USB photo remains read-only. Only the confirmed 800px-or-less JPEG thumbnail is cached privately and served at `127.0.0.1:8769/api/photo?rev=N` (requires current revision, no CORS). Never uploads original photo to Google Maps, only GPS.
+- EXIF ACCESS_MEDIA_LOCATION permission and invalid/0,0 blocking retained from V0.2.8.1.
+- Auto launch ON by default only for *confirmed GPS images* sent during the past 5 minutes. Each revision attempted at most once, preventing repeated loops when returning from Maps.
+- In GPack Browser, Chromium might block an `intent:` external app navigation not triggered by user gesture. There is **no supported way to bypass that security** in JavaScript. If auto launch is blocked, manually tap the big green 'เปิด Google Maps นำทางทันที' button — V0.2.10 established that this button enters actual spoken-navigation UI without secondary Start or web interstitial.
+- The host Android environment cannot open virtualized Google Maps directly; host-side native launch is OFF by default. Tries GPack agent BROWSABLE link forwarding only if supported, otherwise opens GPack launcher.
+- V0.2.11 separate appId and port 8769; prior tested V0.2.10 retained for fallback.
+
+## Safe car testing (parked)
+1. Install 0.2.11, start bridge and confirm 'กำลังฟัง 127.0.0.1:8769'.
+2. Inside GPack Browser open http://127.0.0.1:8769 (green 'เชื่อมต่อสำเร็จ'). Auto ON by default.
+3. In Android V0.2.11 select actual JPEG with GPS from USB; tick confirmation. App sends EXIF GPS and a thumbnail; tries to launch GPack, possibly launcher.
+4. Observe GPack browser whether new photo appears and Google Maps starts navigation without extra user tap; record what happens.
+5. If Browser doesn't auto-start Maps, click main green button once to open native Maps; this is supported fallback.
