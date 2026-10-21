@@ -1,19 +1,9 @@
-# BYD Web Bridge V0.2.8.1 — Separate port 8766
-
-## Why
-V0.2.7 starts on port 8765, but V0.2.8 gets EADDRINUSE even after reported stop of V0.2.7. Browser may show ERR_CONNECTION_REFUSED later. Rather than repeated user stop/restart steps, isolate the new EXIF test version.
-
-## What changed
-- Separate app ID com.pcopi.byd.webbridge.v0281, independently installable from previous versions.
-- Foreground service binds 127.0.0.1:8766, not 8765.
-- Application buttons, notifications, reports and GPack browser pages all display http://127.0.0.1:8766.
-- EXIF original metadata permissions and image-selection confirmation from 0.2.8 retained; invalid GPS 0,0 is blocked.
-- Existing GPack and original Phone Space unchanged.
-
-## Test one step at a time
-1. Install V0.2.8.1 (do not uninstall V0.2.7).
-2. Open V0.2.8.1, tap Start Web Bridge and check the service reports listening 127.0.0.1:8766.
-3. After success, visit http://127.0.0.1:8766 inside GPack Browser.
-4. Only then choose same Flash Drive image, confirm, grant permission, and check actual original EXIF GPS.
-
-If the isolated port also fails, inspect app state and permissions instead of blaming old 8765 collision.
+# BYD Web Bridge V0.2.9 Photo Navigation
+This builds on V0.2.8.1 confirmed working on BYD.
+Uses separate Android package com.pcopi.byd.webbridge.v029 and loopback port 8767. Old 8766 version remains available.
+Original EXIF permission, USB photo selection confirmation, SHA-256, and 0,0 blocking preserved.
+After GPS read and send, try opening GPack automatically (checkbox enabled by default).
+GPack browser auto-navigation tries an HTTPS Maps Intent directed at com.google.android.apps.maps, with proven Google Maps WEB directions fallback.
+Manual large green one-tap button is a direct google.navigation:q=lat,lon&mode=d link with user activation. Second app-intent and original web-directions backup buttons remain.
+Important: Chrome may block external app launches without a genuine click. This is untested on BYD/GPack; do not claim zero-tap native launch has passed.
+Test parked: Install, start service 8767, open Browser http://127.0.0.1:8767 once, then pick image and confirm and report if GPack and native Maps launch. If browser maps route needs Start, return to bridge and try green native link on genuine tap.
