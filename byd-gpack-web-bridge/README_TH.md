@@ -1,16 +1,5 @@
-# V0.2.13 — Navigation Audio Diagnostics
-Retains the validated EXIF GPS Photo -> Android host -> GPack Browser -> native Google Maps navigation path from versions 0.2.8.1–0.2.12. Installs separately, localhost port **8771**.
-
-## New
-- Collapsed **"ตรวจเสียง Google Maps / ลำโพงรถ"** section on GPack Browser includes a user-activated Web Audio sine-tone test (only tests Chrome audio output), optional speechSynthesis test (may be missing TTS voice), and buttons to record heard/not heard for both Chrome and Google Maps in local browser settings (never transmits these results to external services).
-- Exact official Google Maps navigation sound troubleshooting: Maps > profile > Settings > Navigation settings > Play test sound; set Guidance volume=Louder; check Play voice over Bluetooth as appropriate; check Maps Sound vs Alerts only. Google official support: https://support.google.com/maps/answer/11523237 .
-- No attempt to change GPack, Maps system volume, routing, microphone permission, or app audio settings.
-- Still prioritizes navigation first and lazy-loads optional photo only when diagnostics expanded.
-- Chrome may block automatic external-app launches without gesture; keep one-tap native button.
-
-## Vehicle test (parked)
-1. Install v13 next to v12; open it, check port 8771 in the advanced report.
-2. GPack Chrome open http://127.0.0.1:8771 and confirm green.
-3. Expand 'ตรวจเสียง Google Maps / ลำโพงรถ', click test Chrome audio. Report heard or not.
-4. Independently open Google Maps settings via app UI and use 'Play test sound' to diagnose actual Maps voice. If voice test works, no reason to change Web Bridge. If Chrome tone works but Maps test not, examine Maps settings, offline voice pack, audio route.
-5. For navigation, select a known verified GPS photo and confirm it can still open Google Maps when green button is tapped.
+# BYD Photo Navigation V0.2.14: attempt direct GPack Chrome opening
+Aimed at reducing steps 'confirm GPS image -> Android host opens GPack launcher -> user must tap Chrome and sometimes type Web Bridge URL'. Implements a real host-to-GPack ACTION_VIEW http://127.0.0.1:8772 package-targeted attempt without relying on resolveActivity(), which may be filtered on Android 11+. If no exported GPack VIEW activity, falls back to standard GPack launcher and passes URL hints (may be ignored). No claim that the private virtual Chrome is reachable without an exported GPack handler.
+Read-only GPack capabilities report counts visible VIEW and SHARE handlers. Optional user-driven SHARE URL test is provided for investigation, not run automatically. One-click copy URL to avoid retyping if clipboard shared. Web Bridge, EXIF, photo lazy preview, native Google Maps one-click, voice test all preserved.
+Installation: v0.2.14 independent package, port 8772, old versions intact. Parked-car test: open v0.2.14 (server auto-listens); GPack Chrome one-time http://127.0.0.1:8772 (bookmark); choose photo and confirm; observe if Chrome opens itself or only launcher. If only launcher, use advanced 'วิเคราะห์ช่องทางเปิด Chrome ภายใน GPack' and send readout/screenshots. Keep working Maps button for travel.
+Not attempted: root, Accessibility click automation, hidden GPack services, silent Chrome confirm bypass. When Chrome/Maps only virtualized and GPack doesn't expose dispatcher, host-side zero-tap internal Chrome launch isn't possible via ordinary Android Intent.

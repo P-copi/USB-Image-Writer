@@ -26,7 +26,7 @@ import android.widget.*;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
-  private static final String URL="http://127.0.0.1:8771";
+  private static final String URL="http://127.0.0.1:8772";
   private static final String BANGKOK="13.7563310,100.5017650";
   private static final String DONCHEDI="อนุสรณ์ดอนเจดีย์ สุพรรณบุรี";
   private SharedPreferences prefs;
@@ -54,12 +54,13 @@ public class MainActivity extends Activity {
     root.setPadding(24,16,24,30);
     sc.addView(root);
 
-    header(root,"BYD Photo Navigation V0.2.13",24);
-    header(root,"เลือกภาพ GPS → ตรวจและยืนยันหนึ่งครั้ง → ส่งไป GPack → ทดลองนำทางทันที",16);
+    header(root,"BYD Photo Navigation V0.2.14",24);
+    header(root,"เลือกภาพ GPS → ยืนยัน → ทดลองเปิด Chrome ใน GPack → Google Maps",16);
     button(root,"▶ เลือกภาพ GPS เพื่อเปิด Google Maps",()->choosePhoto());
-    header(root,"เมื่อส่งภาพสำเร็จ แอปจะลองเปิด GPack • หาก Chrome ยังอยู่หน้าแอป ให้เปิด Web Bridge ที่ "+URL+" แล้วกดปุ่มนำทางสีเขียวหนึ่งครั้ง",14);
+    header(root,"หลังส่ง GPS แอปจะลองเปิด Web Bridge ผ่าน GPack โดยตรง หาก GPack ไม่รับลิงก์ จะเปิดหน้ารวมแอปเหมือนรุ่นเดิม",14);
 
-    button(root,"เปิด GPack",this::openGpackAfterPhoto);
+    button(root,"▶ ทดลองเปิด Chrome/Web Bridge ภายใน GPack",this::openGpackAfterPhoto);
+    button(root,"คัดลอก URL Web Bridge (ไม่ต้องพิมพ์)",()->copy(URL));
     button(root,"เปิด/เริ่มบริการ Web Bridge อีกครั้ง",this::startBridge);
     header(root,"Browser ภายใน GPack: "+URL+" (บันทึกเป็น Bookmark) • เปิดแอปนี้จะเริ่ม Bridge ให้อัตโนมัติ",14);
 
@@ -74,6 +75,16 @@ public class MainActivity extends Activity {
     root.addView(advanced);
 
     header(advanced,"ตั้งค่าและเครื่องมือทดสอบ",19);
+    button(advanced,"วิเคราะห์ช่องทางเปิด Chrome ภายใน GPack",()->{
+      String cap=gpackCapabilities();
+      prefs.edit().putString("gpackCapabilities",cap).apply();
+      refresh();
+      new android.app.AlertDialog.Builder(this)
+        .setTitle("ความสามารถรับ URL ของ GPack")
+        .setMessage(cap)
+        .setPositiveButton("ตกลง",(d,w)->{}).show();
+    });
+    button(advanced,"ทดลองส่งลิงก์ให้ GPack ทางแชร์ข้อความ",this::shareBridgeWithGpack);
     header(advanced,"ทดสอบเสียงนำทาง: เปิด Google Maps ภายใน GPack → รูปโปรไฟล์ → การตั้งค่า → การตั้งค่าการนำทาง → เล่นเสียงทดสอบ (Play test sound) เพื่อฟังเสียงของ Maps โดยตรง หากไม่มีเสียงให้ตรวจระดับเสียงนำทาง และช่องทาง Bluetooth",15);
     CheckBox openGpack=new CheckBox(this);
     openGpack.setText("ส่งภาพแล้วเปิด GPack อัตโนมัติ (ทดลอง)");
@@ -118,7 +129,7 @@ public class MainActivity extends Activity {
       prefs.edit().putString("server","สั่งหยุดบริการแล้ว").apply();
       refresh();
     });
-    header(advanced,"พอร์ต 8771 แยกจากรุ่นก่อน • ไม่แก้ไข GPack หรือภาพต้นฉบับ • ทดลองขณะรถจอดสนิท",14);
+    header(advanced,"พอร์ต 8772 แยกจากรุ่นก่อน • ไม่แก้ไข GPack หรือภาพต้นฉบับ • ทดลองขณะรถจอดสนิท",14);
     setContentView(sc);
     refresh();
   }
@@ -578,39 +589,96 @@ public class MainActivity extends Activity {
       return false;
     }
   }
+  private void saveGpackResult(String s){
+    prefs.edit().putString("gpackLaunch",s).apply();
+    refresh();
+  }
+  // Android 11+ can filter resolveActivity() while startActivity() may still work.
+  // Try public GPack BROWSABLE URL handling directly; never call hidden APIs.
   private void openGpackAfterPhoto(){
-    // Keep a real host-side open action available from UI even if auto-open is disabled.
     if(!prefs.getBoolean("autoOpenGpack",true))return;
-    // GPack might offer a BROWSABLE URL dispatcher. If not, return to its launcher safely.
+    final String gpack="com.gpack.agent";
     try{
       Intent open=new Intent(Intent.ACTION_VIEW,Uri.parse(URL));
       open.addCategory(Intent.CATEGORY_BROWSABLE);
-      open.setPackage("com.gpack.agent");
-      open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-      if(open.resolveActivity(getPackageManager())!=null){
-        startActivity(open);
-        prefs.edit().putString("gpackLaunch","เปิด Bridge URL ผ่าน GPack agent โดยตรง (รอยืนยันผล)").apply();
-        return;
-      }
-    }catch(Exception ignored){}
+      open.setPackage(gpack);
+      open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+      open.putExtra(Intent.EXTRA_TEXT,URL);
+      open.putExtra("url",URL);
+      startActivity(open);
+      saveGpackResult("ส่ง ACTION_VIEW ไปยัง GPack ได้ (รอภาพยืนยันว่า Chrome เปิดจริง)");
+      return;
+    }catch(ActivityNotFoundException | SecurityException e){
+      saveGpackResult("GPack ไม่รับ VIEW URL ตรง: "+e.getClass().getSimpleName());
+    }catch(Exception e){
+      saveGpackResult("GPack VIEW ผิดพลาด: "+e.getClass().getSimpleName()+" "+e.getMessage());
+    }
     try{
-      Intent go=getPackageManager().getLaunchIntentForPackage("com.gpack.agent");
+      Intent go=getPackageManager().getLaunchIntentForPackage(gpack);
       if(go!=null){
-        go.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);startActivity(go);
-        prefs.edit().putString("gpackLaunch","เปิด GPack launcher (อาจต้องแตะ Chrome)").apply();
+        go.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        go.putExtra(Intent.EXTRA_TEXT,URL);
+        go.putExtra("url",URL);
+        go.putExtra("targetPackage","com.android.chrome");
+        startActivity(go);
+        saveGpackResult("ไม่มี VIEW handler; เปิด GPack launcher และส่ง URL hint (ถ้าอยู่หน้ารวมแอป ให้แตะ Chrome)");
       }else{
-        prefs.edit().putString("gpackLaunch","ไม่พบ GPack agent").apply();
-        message("กรุณาเปิด GPack Browser: "+URL);
+        saveGpackResult("หา GPack launcher ไม่พบ");
+        message("ไม่พบ GPack • คัดลอก URL เพื่อเปิด Chrome ด้วยตนเอง");
       }
     }catch(Exception e){
-      prefs.edit().putString("gpackLaunch","เปิด GPack ไม่สำเร็จ: "+e.getMessage()).apply();
-      message("เปิด GPack ไม่สำเร็จ: "+e.getMessage());
+      saveGpackResult("เปิด GPack launcher ไม่ได้: "+e.getClass().getSimpleName()+" "+e.getMessage());
+      message("ไม่สามารถเปิด GPack ได้: "+e.getMessage());
+    }
+  }
+  // Diagnostic only: do not execute any unverified internal GPack components.
+  private String gpackCapabilities(){
+    StringBuilder b=new StringBuilder();
+    android.content.pm.PackageManager pm=getPackageManager();
+    final String pkg="com.gpack.agent";
+    b.append("GPack package: ").append(pkg).append('\n');
+    try{
+      android.content.pm.PackageInfo info=pm.getPackageInfo(pkg,0);
+      b.append("GPack version: ").append(info.versionName).append('\n');
+    }catch(Exception e){
+      b.append("Package query: ").append(e.getClass().getSimpleName()).append('\n');
+    }
+    Intent view=new Intent(Intent.ACTION_VIEW,Uri.parse(URL));
+    view.addCategory(Intent.CATEGORY_BROWSABLE);view.setPackage(pkg);
+    java.util.List<android.content.pm.ResolveInfo> matches=
+      pm.queryIntentActivities(view,android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
+    b.append("GPack VIEW URL handlers: ").append(matches.size()).append('\n');
+    for(int i=0;i<Math.min(matches.size(),4);i++){
+      android.content.pm.ResolveInfo item=matches.get(i);
+      if(item.activityInfo!=null)b.append("- ").append(item.activityInfo.name).append('\n');
+    }
+    Intent share=new Intent(Intent.ACTION_SEND);
+    share.setType("text/plain");share.setPackage(pkg);
+    b.append("GPack SHARE text/plain handlers: ").append(
+      pm.queryIntentActivities(share,android.content.pm.PackageManager.MATCH_DEFAULT_ONLY).size()
+    ).append('\n');
+    b.append("Web Bridge URL: ").append(URL).append('\n');
+    b.append("ถ้าจำนวน VIEW เป็น 0 อาจไม่มีช่องทางเปิด Chrome ภายใน GPack จาก Android หลักโดยตรง");
+    return b.toString();
+  }
+  private void shareBridgeWithGpack(){
+    try{
+      Intent share=new Intent(Intent.ACTION_SEND);
+      share.setType("text/plain");
+      share.setPackage("com.gpack.agent");
+      share.putExtra(Intent.EXTRA_TEXT,URL);
+      share.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      startActivity(share);
+      saveGpackResult("ส่งลิงก์ ACTION_SEND ไป GPack แล้ว • ตรวจบนจอว่ามีตัวเลือก Chrome หรือไม่");
+    }catch(Exception e){
+      saveGpackResult("GPack ไม่รับ ACTION_SEND: "+e.getClass().getSimpleName());
+      message("GPack ไม่รองรับแชร์ลิงก์จาก Android หลัก");
     }
   }
   private void record(String s){feedback=s;prefs.edit().putString("feedback",s).apply();refresh();message("บันทึกผลแล้ว");}
   private String report(){
-    return "BYD Web Bridge V0.2.13\n"
-      +"Phone Space baseline V0.7.4 • Separate test port 8771\n"
+    return "BYD Web Bridge V0.2.14\n"
+      +"Phone Space baseline V0.7.4 • Separate test port 8772\n"
       +"Android "+Build.VERSION.SDK_INT+" / "+Build.MODEL+"\n"
       +"Service: "+prefs.getString("server","ยังไม่เริ่ม")+"\n"
       +"Browser page visits: "+prefs.getInt("visits",0)+"\n"
@@ -623,6 +691,7 @@ public class MainActivity extends Activity {
       +"Android direct result: "+prefs.getString("nativeLaunch","ยังไม่ได้ลอง")+"\n"
       +"Thumbnail ready: "+prefs.getBoolean("photoAvailable",false)+" • "+prefs.getString("photoName","")+"\n"
       +"GPack entry: "+prefs.getString("gpackLaunch","ยังไม่ได้ลอง")+"\n"
+      +"GPack link handlers: "+prefs.getString("gpackCapabilities","ยังไม่ได้ตรวจ")+"\n"
       +"Sent at ms: "+prefs.getLong("sentAtMs",0)+"\n"
       +"ภาพจาก Flash Drive / Original EXIF diagnostic:\n"+prefs.getString("photoStatus","ยังไม่ได้เลือกรูป") +"\n"
       +"Test result: "+prefs.getString("feedback",feedback)+"\n"
