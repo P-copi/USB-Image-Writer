@@ -49,7 +49,7 @@ public class MainActivity extends Activity {
   private void layout(){
     ScrollView sc=new ScrollView(this);LinearLayout root=new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);root.setPadding(24,16,24,30);sc.addView(root);
-    header(root,"BYD Web Bridge V0.2.8.1.1",23);
+    header(root,"BYD Web Bridge V0.2.8.1",23);
     header(root,"แสดงภาพก่อนเลือก • ขอสิทธิ์ ACCESS_MEDIA_LOCATION • เปรียบเทียบ EXIF ปกติกับข้อมูลต้นฉบับ • ป้องกัน GPS 0,0\nสำหรับ Phone Space V0.7.4 • ทดลองขณะรถจอดสนิท",15);
     header(root,"ขั้นที่ 1 — เปิดเซิร์ฟเวอร์สะพาน",19);
     button(root,"เริ่ม Web Bridge บนจอรถ",()->startBridge());
@@ -472,7 +472,7 @@ public class MainActivity extends Activity {
   }
   private void record(String s){feedback=s;prefs.edit().putString("feedback",s).apply();refresh();message("บันทึกผลแล้ว");}
   private String report(){
-    return "BYD Web Bridge V0.2.8.1.1\n"
+    return "BYD Web Bridge V0.2.8.1\n"
       +"Phone Space baseline V0.7.4 • Separate test port 8766\n"
       +"Android "+Build.VERSION.SDK_INT+" / "+Build.MODEL+"\n"
       +"Service: "+prefs.getString("server","ยังไม่เริ่ม")+"\n"
