@@ -1,19 +1,19 @@
-# BYD Web Bridge V0.2.8 — Original EXIF Investigation
+# BYD Web Bridge V0.2.8.1 — Separate port 8766
+
 ## Why
-The phone Phone Space/Dome Camera read GPS 16.823692,100.262039 but BYD Bridge 0.2.7 sees redacted-looking 0/1 GPS EXIF and missing hemisphere refs when directly opening the selected USB file. This suggests location metadata redaction (not yet proven). The user's phone screenshot does not prove that the flash-drive copy is byte-identical; compare hashes if the mismatch persists.
+V0.2.7 starts on port 8765, but V0.2.8 gets EADDRINUSE even after reported stop of V0.2.7. Browser may show ERR_CONNECTION_REFUSED later. Rather than repeated user stop/restart steps, isolate the new EXIF test version.
 
-## Changes
-- Request runtime ACCESS_MEDIA_LOCATION after user has explicitly chosen and confirmed a photo. Explain privacy before asking; never upload the photo.
-- Try MediaStore.getMediaUri to convert SAF URI to MediaStore where supported, then request original bytes using MediaStore.setRequireOriginal; also try original flag directly on SAF URI as fallback.
-- Read AndroidX EXIF from original byte stream and include raw coordinate/tag readings alongside previously recorded redacted readings and checksum.
-- Keep checkbox and preview UI. Do not send 0,0 GPS. Keep successful manual GPack navigation bridge untouched.
+## What changed
+- Separate app ID com.pcopi.byd.webbridge.v0281, independently installable from previous versions.
+- Foreground service binds 127.0.0.1:8766, not 8765.
+- Application buttons, notifications, reports and GPack browser pages all display http://127.0.0.1:8766.
+- EXIF original metadata permissions and image-selection confirmation from 0.2.8 retained; invalid GPS 0,0 is blocked.
+- Existing GPack and original Phone Space unchanged.
 
-## Manual test
-1. STOP previous Web Bridge version first (all use port 8765).
-2. Install and launch 0.2.8, then tap Start Bridge.
-3. Select and confirm the SAME Buddha image directly from USB on BYD.
-4. Grant the location metadata permission when prompted.
-5. Check "รายงานสภาพการเชื่อมต่อ". If valid coords, return to GPack Browser. If 0,0, send the ORIGINAL EXIF diagnostics screenshot.
-6. Android USB document providers may not implement original access; in that case the app records a specific permission/provider error rather than inventing coordinates.
+## Test one step at a time
+1. Install V0.2.8.1 (do not uninstall V0.2.7).
+2. Open V0.2.8.1, tap Start Web Bridge and check the service reports listening 127.0.0.1:8766.
+3. After success, visit http://127.0.0.1:8766 inside GPack Browser.
+4. Only then choose same Flash Drive image, confirm, grant permission, and check actual original EXIF GPS.
 
-Vehicle must remain parked during tests.
+If the isolated port also fails, inspect app state and permissions instead of blaming old 8765 collision.

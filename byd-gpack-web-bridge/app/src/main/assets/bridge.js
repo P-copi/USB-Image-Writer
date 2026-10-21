@@ -83,7 +83,7 @@
     }).catch(function(e){
       state.textContent='× Web Bridge ติดต่อไม่ได้: '+e.message;
       state.className='bad';
-      detail.textContent='เปิด Bridge V0.2.6 และหยุดบริการ V0.2.5 ตัวเก่า';
+      detail.textContent='เปิด Bridge V0.2.8.1 และหยุดบริการ V0.2.5 ตัวเก่า';
     });
   }
   updateButton();

@@ -26,7 +26,7 @@ import android.widget.*;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
-  private static final String URL="http://127.0.0.1:8765";
+  private static final String URL="http://127.0.0.1:8766";
   private static final String BANGKOK="13.7563310,100.5017650";
   private static final String DONCHEDI="อนุสรณ์ดอนเจดีย์ สุพรรณบุรี";
   private SharedPreferences prefs;
@@ -49,7 +49,7 @@ public class MainActivity extends Activity {
   private void layout(){
     ScrollView sc=new ScrollView(this);LinearLayout root=new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);root.setPadding(24,16,24,30);sc.addView(root);
-    header(root,"BYD Web Bridge V0.2.8",23);
+    header(root,"BYD Web Bridge V0.2.8.1.1",23);
     header(root,"แสดงภาพก่อนเลือก • ขอสิทธิ์ ACCESS_MEDIA_LOCATION • เปรียบเทียบ EXIF ปกติกับข้อมูลต้นฉบับ • ป้องกัน GPS 0,0\nสำหรับ Phone Space V0.7.4 • ทดลองขณะรถจอดสนิท",15);
     header(root,"ขั้นที่ 1 — เปิดเซิร์ฟเวอร์สะพาน",19);
     button(root,"เริ่ม Web Bridge บนจอรถ",()->startBridge());
@@ -65,7 +65,7 @@ public class MainActivity extends Activity {
     header(root,"ขั้นที่ 3 — เลือกและยืนยันภาพก่อนตรวจ GPS",19);
     button(root,"เลือกรูปจาก Flash Drive → ดูภาพและติ๊กยืนยัน",()->choosePhoto());
     header(root,"เลือกภาพจากรายการแล้ว แอปจะแสดงรูปตัวอย่างและชื่อไฟล์ก่อน ไม่อ่าน GPS และไม่ส่งนำทางจนกว่าคุณจะติ๊กถูกและยืนยัน",14);
-    header(root,"ถ้าเปิดรูปจาก Phone Space แล้วแชร์ภาพให้เลือก 'BYD Web Bridge Test 0.2.8' ได้ (ถ้าระบบมีปุ่มแชร์)",14);
+    header(root,"ถ้าเปิดรูปจาก Phone Space แล้วแชร์ภาพให้เลือก 'BYD Web Bridge Test 0.2.8.1' ได้ (ถ้าระบบมีปุ่มแชร์)",14);
     input=new EditText(this);input.setText(BANGKOK);input.setSingleLine(false);
     input.setHint("ชื่อสถานที่ / พิกัด GPS / ลิงก์ Maps");input.setTextSize(17);root.addView(input);
     button(root,"ส่งพิกัดตัวอย่างจากภาพ GPS → Browser",()->send(BANGKOK,"พิกัดตัวอย่างจากภาพ GPS"));
@@ -86,7 +86,7 @@ public class MainActivity extends Activity {
     button(root,"หยุด Web Bridge หลังทดสอบ",()->{
       stopService(new Intent(this,BridgeService.class));prefs.edit().putString("server","สั่งหยุดบริการแล้ว").apply();refresh();
     });
-    header(root,"โหมดอัตโนมัติ: เปิดสวิตช์ที่หน้า Web Bridge ใน Browser ก่อน เมื่อมีจุดหมายใหม่และหน้า Browser กลับมาทำงาน จะทดลองเปิดเส้นทางอัตโนมัติ (อาจถูก Browser บล็อก)\nสำคัญ: จอดรถก่อนทดสอบ • ไม่รูท ไม่แก้ GPack • หาก V0.2.4 หรือ V0.2.5 ยังทำงาน ให้หยุดบริการตัวเก่าก่อน",14);
+    header(root,"โหมดอัตโนมัติ: เปิดสวิตช์ที่หน้า Web Bridge ใน Browser ก่อน เมื่อมีจุดหมายใหม่และหน้า Browser กลับมาทำงาน จะทดลองเปิดเส้นทางอัตโนมัติ (อาจถูก Browser บล็อก)\nสำคัญ: จอดรถก่อนทดสอบ • ไม่รูท ไม่แก้ GPack • เวอร์ชันนี้ใช้พอร์ต 8766 แยกจาก Web Bridge V0.2.7/0.2.8 • ไม่จำเป็นต้องหยุดรุ่นเก่าเพื่อทดสอบ",14);
     setContentView(sc);refresh();
   }
   private void header(LinearLayout box,String s,int size){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setPadding(4,12,4,12);box.addView(t);}
@@ -472,8 +472,8 @@ public class MainActivity extends Activity {
   }
   private void record(String s){feedback=s;prefs.edit().putString("feedback",s).apply();refresh();message("บันทึกผลแล้ว");}
   private String report(){
-    return "BYD Web Bridge V0.2.8\n"
-      +"Phone Space baseline V0.7.4\n"
+    return "BYD Web Bridge V0.2.8.1.1\n"
+      +"Phone Space baseline V0.7.4 • Separate test port 8766\n"
       +"Android "+Build.VERSION.SDK_INT+" / "+Build.MODEL+"\n"
       +"Service: "+prefs.getString("server","ยังไม่เริ่ม")+"\n"
       +"Browser page visits: "+prefs.getInt("visits",0)+"\n"
