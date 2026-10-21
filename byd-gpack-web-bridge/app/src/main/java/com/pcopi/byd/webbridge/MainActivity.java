@@ -26,7 +26,7 @@ import android.widget.*;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
-  private static final String URL="http://127.0.0.1:8770";
+  private static final String URL="http://127.0.0.1:8771";
   private static final String BANGKOK="13.7563310,100.5017650";
   private static final String DONCHEDI="อนุสรณ์ดอนเจดีย์ สุพรรณบุรี";
   private SharedPreferences prefs;
@@ -54,7 +54,7 @@ public class MainActivity extends Activity {
     root.setPadding(24,16,24,30);
     sc.addView(root);
 
-    header(root,"BYD Photo Navigation V0.2.12",24);
+    header(root,"BYD Photo Navigation V0.2.13",24);
     header(root,"เลือกภาพ GPS → ตรวจและยืนยันหนึ่งครั้ง → ส่งไป GPack → ทดลองนำทางทันที",16);
     button(root,"▶ เลือกภาพ GPS เพื่อเปิด Google Maps",()->choosePhoto());
     header(root,"เมื่อส่งภาพสำเร็จ แอปจะลองเปิด GPack • หาก Chrome ยังอยู่หน้าแอป ให้เปิด Web Bridge ที่ "+URL+" แล้วกดปุ่มนำทางสีเขียวหนึ่งครั้ง",14);
@@ -74,6 +74,7 @@ public class MainActivity extends Activity {
     root.addView(advanced);
 
     header(advanced,"ตั้งค่าและเครื่องมือทดสอบ",19);
+    header(advanced,"ทดสอบเสียงนำทาง: เปิด Google Maps ภายใน GPack → รูปโปรไฟล์ → การตั้งค่า → การตั้งค่าการนำทาง → เล่นเสียงทดสอบ (Play test sound) เพื่อฟังเสียงของ Maps โดยตรง หากไม่มีเสียงให้ตรวจระดับเสียงนำทาง และช่องทาง Bluetooth",15);
     CheckBox openGpack=new CheckBox(this);
     openGpack.setText("ส่งภาพแล้วเปิด GPack อัตโนมัติ (ทดลอง)");
     openGpack.setTextSize(17);
@@ -117,7 +118,7 @@ public class MainActivity extends Activity {
       prefs.edit().putString("server","สั่งหยุดบริการแล้ว").apply();
       refresh();
     });
-    header(advanced,"พอร์ต 8770 แยกจากรุ่นก่อน • ไม่แก้ไข GPack หรือภาพต้นฉบับ • ทดลองขณะรถจอดสนิท",14);
+    header(advanced,"พอร์ต 8771 แยกจากรุ่นก่อน • ไม่แก้ไข GPack หรือภาพต้นฉบับ • ทดลองขณะรถจอดสนิท",14);
     setContentView(sc);
     refresh();
   }
@@ -608,8 +609,8 @@ public class MainActivity extends Activity {
   }
   private void record(String s){feedback=s;prefs.edit().putString("feedback",s).apply();refresh();message("บันทึกผลแล้ว");}
   private String report(){
-    return "BYD Web Bridge V0.2.12\n"
-      +"Phone Space baseline V0.7.4 • Separate test port 8770\n"
+    return "BYD Web Bridge V0.2.13\n"
+      +"Phone Space baseline V0.7.4 • Separate test port 8771\n"
       +"Android "+Build.VERSION.SDK_INT+" / "+Build.MODEL+"\n"
       +"Service: "+prefs.getString("server","ยังไม่เริ่ม")+"\n"
       +"Browser page visits: "+prefs.getInt("visits",0)+"\n"

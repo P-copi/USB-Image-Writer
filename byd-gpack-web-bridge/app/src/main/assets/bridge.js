@@ -7,8 +7,8 @@ photoSection=el('photoSection'),detail=el('detail'),toggle=el('autoToggle'),auto
 var links={native:el('native'),alternative:el('alternative'),webRoute:el('webRoute'),pin:el('pin')};
 var lastRevision=null,lastPhoto=null,attempting=false, pending=null;
 var mem={};
-function read(k){try{return localStorage.getItem('byd0212-'+k);}catch(e){return mem[k]||null;}}
-function write(k,v){mem[k]=String(v);try{localStorage.setItem('byd0212-'+k,String(v));}catch(e){}}
+function read(k){try{return localStorage.getItem('byd0213-'+k);}catch(e){return mem[k]||null;}}
+function write(k,v){mem[k]=String(v);try{localStorage.setItem('byd0213-'+k,String(v));}catch(e){}}
 var mode=read('auto'),auto=mode===null?true:mode==='on';
 function valid(q){
  var m=/^([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)$/.exec(String(q||'').trim());
@@ -106,7 +106,7 @@ function check(){
  }).catch(function(e){
    state.textContent='× ไม่สามารถเชื่อมต่อได้: '+e.message;
    state.className='error';
-   error.textContent='เปิดแอป V0.2.12 บน Android หลัก และตรวจบริการ 127.0.0.1:8770';
+   error.textContent='เปิดแอป V0.2.13 บน Android หลัก และตรวจบริการ 127.0.0.1:8771';
  });
 }
 links.native.addEventListener('click',function(){
@@ -120,5 +120,59 @@ toggle.addEventListener('click',function(){
 el('retry').addEventListener('click',check);
 document.addEventListener('visibilitychange',function(){if(!document.hidden)check();});
 window.addEventListener('pageshow',check);
+
+var audioStatus=el('audioStatus'),soundResults=el('soundResults');
+var AudioCtor=window.AudioContext||window.webkitAudioContext;
+function sayAudioMessage(msg){audioStatus.textContent=msg;}
+el('testBeep').addEventListener('click',function(){
+ if(!AudioCtor){sayAudioMessage('Chrome รุ่นนี้ไม่รองรับการสร้างเสียงทดสอบ');return;}
+ try{
+   var audio=new AudioCtor();
+   var osc=audio.createOscillator();
+   var gain=audio.createGain();
+   osc.type='sine';osc.frequency.value=740;
+   gain.gain.setValueAtTime(0.0001,audio.currentTime);
+   gain.gain.exponentialRampToValueAtTime(0.16,audio.currentTime+0.04);
+   gain.gain.exponentialRampToValueAtTime(0.0001,audio.currentTime+0.75);
+   osc.connect(gain);gain.connect(audio.destination);
+   var start=function(){
+     osc.start();osc.stop(audio.currentTime+0.8);
+     sayAudioMessage('ส่งเสียงสัญญาณจาก Chrome แล้ว • คุณได้ยินหรือไม่?');
+     osc.onended=function(){audio.close();};
+   };
+   var resume=audio.resume();
+   if(resume&&typeof resume.then==='function')resume.then(start).catch(function(e){
+     sayAudioMessage('Chrome เปิดเสียงทดสอบไม่ได้: '+e.message);
+   });
+   else start();
+ }catch(e){sayAudioMessage('เกิดข้อผิดพลาดกับเสียงทดสอบ: '+e.message);}
+});
+el('testSpeech').addEventListener('click',function(){
+ if(!window.speechSynthesis||!window.SpeechSynthesisUtterance){
+   sayAudioMessage('Chrome ภายใน GPack ไม่รองรับ Text-to-Speech ผ่านเว็บ');
+   return;
+ }
+ try{
+   window.speechSynthesis.cancel();
+   var speech=new SpeechSynthesisUtterance('นี่คือการทดสอบเสียงพูดจากเว็บบริดจ์');
+   speech.lang='th-TH';speech.rate=0.92;speech.volume=1;
+   speech.onstart=function(){sayAudioMessage('Chrome เริ่มสังเคราะห์เสียงพูดแล้ว • โปรดฟังเสียง');};
+   speech.onerror=function(ev){sayAudioMessage('เสียงพูด Chrome ใช้ไม่ได้: '+ev.error+' (ไม่ได้แปลว่าเสียง Maps เสีย)');};
+   speech.onend=function(){sayAudioMessage('Chrome ส่งคำสั่งเสียงพูดจบแล้ว • หากไม่ดัง ให้ทดสอบเสียงใน Maps อีกครั้ง');};
+   window.speechSynthesis.speak(speech);
+ }catch(e){sayAudioMessage('ไม่สามารถทดสอบเสียงพูด: '+e.message);}
+});
+function result(k,v){
+ write('sound-'+k,v);
+ var browser=read('sound-browser'),maps=read('sound-maps');
+ soundResults.textContent='เสียง Chrome: '+(browser||'ยังไม่รายงาน')+
+ ' • เสียงทดสอบ Google Maps: '+(maps||'ยังไม่รายงาน');
+}
+el('heardBeep').addEventListener('click',function(){result('browser','ได้ยิน');});
+el('noBeep').addEventListener('click',function(){result('browser','ไม่ได้ยิน');});
+el('heardMaps').addEventListener('click',function(){result('maps','ได้ยิน');});
+el('noMaps').addEventListener('click',function(){result('maps','ไม่ได้ยิน');});
+soundResults.textContent='เสียง Chrome: '+(read('sound-browser')||'ยังไม่รายงาน')+
+ ' • เสียงทดสอบ Google Maps: '+(read('sound-maps')||'ยังไม่รายงาน');
 showMode();check();window.setInterval(check,1100);
 })();

@@ -1,20 +1,16 @@
-# BYD Photo Navigation V0.2.12 — navigation-first interface
+# V0.2.13 — Navigation Audio Diagnostics
+Retains the validated EXIF GPS Photo -> Android host -> GPack Browser -> native Google Maps navigation path from versions 0.2.8.1–0.2.12. Installs separately, localhost port **8771**.
 
-Validated bases kept: V0.2.8.1 EXIF latitude/longitude with Android ACCESS_MEDIA_LOCATION; V0.2.10 native Maps Android Intent triggered by physical tap in GPack Browser and started navigation without Maps secondary "Start"; V0.2.11 preview of user's selected GPS image on localhost.
+## New
+- Collapsed **"ตรวจเสียง Google Maps / ลำโพงรถ"** section on GPack Browser includes a user-activated Web Audio sine-tone test (only tests Chrome audio output), optional speechSynthesis test (may be missing TTS voice), and buttons to record heard/not heard for both Chrome and Google Maps in local browser settings (never transmits these results to external services).
+- Exact official Google Maps navigation sound troubleshooting: Maps > profile > Settings > Navigation settings > Play test sound; set Guidance volume=Louder; check Play voice over Bluetooth as appropriate; check Maps Sound vs Alerts only. Google official support: https://support.google.com/maps/answer/11523237 .
+- No attempt to change GPack, Maps system volume, routing, microphone permission, or app audio settings.
+- Still prioritizes navigation first and lazy-loads optional photo only when diagnostics expanded.
+- Chrome may block automatic external-app launches without gesture; keep one-tap native button.
 
-Changes:
-- Host launches Web Bridge foreground service when app opens; **one primary photo GPS chooser** front and center. Advanced diagnostics and demo coordinates collapsed.
-- GPack Browser 127.0.0.1:8770 displays GPS and prominent **one-tap native Maps navigation button** without obstructing picture preview. The optional picture preview remains in collapsed diagnostics and is fetched lazily when opened; original file remains unmodified.
-- New valid GPS image arrival triggers an **experimental automatic native intent attempt** once per recent revision (2-minute window), never a stale picture or 0,0. Redirect is attempted immediately without a timer, but Chrome may refuse external app launch without user gesture. That security rule CANNOT be bypassed by JavaScript.
-- Keeps manual direct native Maps button that **actually worked on car**; web link fallback is diagnostic only. Does not auto-open google.com/maps and avoids its "Open Maps?" interstitial where possible.
-- Host Android still cannot directly resolve Maps installed only within GPack; it may open GPack launcher instead of Chrome. No unsupported GPack API assumption; user might need to tap Chrome and the green button.
-- Separate appId com.pcopi.byd.webbridge.v0212, server port 8770. Previous v11/v10 remain untouched for travel fallback.
-
-Parked-car test:
-1. Install v12, open; verify service listening on 8770 via diagnostics (should auto-start).
-2. Open GPack Chrome to http://127.0.0.1:8770 once; verify green status and primary direct Maps button.
-3. Return to host and choose previously verified JPEG on USB; tick confirmation.
-4. See whether host opens GPack browser automatically or launcher, and whether Chrome auto opens native Maps. Do NOT misreport promise of bypassing Chromium user gesture controls.
-5. If Chrome remains on page, tap giant green button once. Confirm route mode and correct GPS. Optional "แสดงภาพและเครื่องมือตรวจสอบ" opens hidden thumbnail only when needed.
-
-Compliance: no root, no click automation, no bypasses of prompt permissions, only 127.0.0.1 local photo transfer.
+## Vehicle test (parked)
+1. Install v13 next to v12; open it, check port 8771 in the advanced report.
+2. GPack Chrome open http://127.0.0.1:8771 and confirm green.
+3. Expand 'ตรวจเสียง Google Maps / ลำโพงรถ', click test Chrome audio. Report heard or not.
+4. Independently open Google Maps settings via app UI and use 'Play test sound' to diagnose actual Maps voice. If voice test works, no reason to change Web Bridge. If Chrome tone works but Maps test not, examine Maps settings, offline voice pack, audio route.
+5. For navigation, select a known verified GPS photo and confirm it can still open Google Maps when green button is tapped.

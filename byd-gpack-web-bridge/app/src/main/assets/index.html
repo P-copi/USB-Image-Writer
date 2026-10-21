@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="th">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>BYD Photo Navigation V0.2.12</title>
+<title>BYD Photo Navigation V0.2.13</title>
 <style>
 *{box-sizing:border-box}:root{color-scheme:light}
 body{margin:0;background:#edf3f8;color:#1c3447;font-family:system-ui,"Noto Sans Thai",sans-serif}
@@ -26,8 +26,8 @@ summary{cursor:pointer;font-weight:700;font-size:17px;padding:7px 0}
 #detail{overflow-wrap:anywhere}
 </style>
 </head><body><main>
-<header><h1>BYD Photo Navigation <small>V0.2.12</small></h1>
-<p class="small">จากภาพ GPS สู่การนำทาง • GPack Browser • พอร์ต 8770</p></header>
+<header><h1>BYD Photo Navigation <small>V0.2.13</small></h1>
+<p class="small">จากภาพ GPS สู่การนำทาง • GPack Browser • พอร์ต 8771</p></header>
 <section class="card">
 <div id="state">กำลังตรวจการเชื่อมต่อกับ Web Bridge…</div>
 <div class="small">จุดหมายที่เลือกไว้</div>
@@ -40,6 +40,25 @@ summary{cursor:pointer;font-weight:700;font-size:17px;padding:7px 0}
 <a id="native" class="btn primary muted" href="#">▶ เริ่มนำทางทันที</a>
 <p class="small">ระบบจะทดลองเปิด Maps เองเมื่อได้รับภาพใหม่ หาก Chrome จำกัดการเปิดแอปอัตโนมัติ ให้แตะปุ่มสีเขียวครั้งเดียว ซึ่งเราได้ทดสอบว่าเข้าโหมดนำทางได้โดยไม่ต้องกด “เริ่ม” ซ้ำ</p>
 <div id="error" class="error"></div>
+</section>
+<section class="card">
+<details id="voiceDiagnostics">
+<summary>ตรวจเสียง Google Maps / ลำโพงรถ</summary>
+<p class="small">ทดสอบขณะรถจอดสนิทเท่านั้น • การทดสอบนี้ไม่เปลี่ยนการตั้งค่า Google Maps หรือระบบรถ</p>
+<button id="testBeep" type="button">🔊 ทดลองเสียงสัญญาณจาก Chrome</button>
+<button id="testSpeech" type="button">ทดลองเสียงพูดจาก Chrome (ถ้ารองรับ)</button>
+<div id="audioStatus" class="small" role="status" aria-live="polite">ยังไม่ได้ทดสอบ</div>
+<p class="small">หากไม่มีเสียงสัญญาณจาก Chrome ให้ตรวจระดับเสียงสื่อ (Media) และช่องทางออกเสียงของ GPack ก่อน</p>
+<p><strong>ตรวจเสียงจริงของ Google Maps:</strong></p>
+<p class="small">เปิดแอป Google Maps ภายใน GPack → แตะรูปโปรไฟล์ → การตั้งค่า → การตั้งค่าการนำทาง (Navigation settings) → <strong>เล่นเสียงทดสอบ (Play test sound)</strong> จากนั้นเลือก <strong>ระดับเสียงนำทาง: ดังมาก (Louder)</strong> หากเสียงเบา</p>
+<p class="small">ถ้าระบบเสียงไม่ตรงลำโพง ให้ตรวจตัวเลือก <strong>เล่นเสียงผ่าน Bluetooth (Play voice over Bluetooth)</strong> ให้เหมาะกับการเชื่อมต่อจริง หากไม่มีคำสั่งเลี้ยวขณะรถจอด Maps อาจยังไม่พูด ซึ่งไม่ใช่หลักฐานว่าระบบเสียงเสีย</p>
+<p><strong>ผลที่ได้ยิน:</strong></p>
+<button id="heardBeep" type="button">ได้ยินเสียง Chrome</button>
+<button id="noBeep" type="button">ไม่ได้ยินเสียง Chrome</button>
+<button id="heardMaps" type="button">ได้ยินเสียงทดสอบ Maps</button>
+<button id="noMaps" type="button">ไม่ได้ยินเสียงทดสอบ Maps</button>
+<div id="soundResults" class="small"></div>
+</details>
 </section>
 <section class="card">
 <details id="diagnostics">
