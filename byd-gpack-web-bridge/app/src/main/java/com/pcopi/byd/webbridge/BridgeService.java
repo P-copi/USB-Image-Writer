@@ -12,7 +12,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public class BridgeService extends Service {
-  static final int PORT=8768;
+  static final int PORT=8769;
   private volatile boolean running=false;
   private ServerSocket socket;
   private Thread accepting;
@@ -23,7 +23,7 @@ public class BridgeService extends Service {
   @Override public int onStartCommand(Intent intent,int flags,int startId){return START_STICKY;}
   @Override public IBinder onBind(Intent intent){return null;}
   private void makeForeground(){
-    String channel="byd_web_bridge_v0210";
+    String channel="byd_web_bridge_v0211";
     NotificationManager nm=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
     if(Build.VERSION.SDK_INT>=26){
       nm.createNotificationChannel(new NotificationChannel(channel,"BYD Web Bridge",NotificationManager.IMPORTANCE_LOW));
@@ -31,8 +31,8 @@ public class BridgeService extends Service {
     Intent open=new Intent(this,MainActivity.class);
     PendingIntent p=PendingIntent.getActivity(this,0,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
     Notification notification=new Notification.Builder(this,channel)
-       .setSmallIcon(android.R.drawable.ic_menu_mylocation).setContentTitle("BYD Web Bridge V0.2.10 • พอร์ต 8766")
-       .setContentText("127.0.0.1:8768 • เปิดใน Browser ภายใน GPack")
+       .setSmallIcon(android.R.drawable.ic_menu_mylocation).setContentTitle("BYD Web Bridge V0.2.11 • พอร์ต 8769")
+       .setContentText("127.0.0.1:8769 • เปิดใน Browser ภายใน GPack")
        .setOngoing(true).setContentIntent(p).build();
     startForeground(901,notification);
   }
@@ -83,6 +83,22 @@ public class BridgeService extends Service {
       }else if("/api/state".equals(path)){
         prefs.edit().putInt("polls",prefs.getInt("polls",0)+1).putString("lastSeen",timestamp()).apply();
         respond(s,200,"application/json; charset=utf-8",jsonState());
+      }else if("/api/photo".equals(path)){
+        // Serve only a small local JPEG thumbnail associated with the exact current revision.
+        long revision=prefs.getLong("revision",0);
+        if(!prefs.getBoolean("photoAvailable",false) || !parts[1].equals("/api/photo?rev="+revision)){
+          respond(s,404,"text/plain; charset=utf-8","No image for destination");return;
+        }
+        java.io.File file=new java.io.File(getCacheDir(),"bridge-photo.jpg");
+        if(!file.isFile() || file.length()==0 || file.length()>500000){
+          respond(s,404,"text/plain; charset=utf-8","No valid thumbnail");return;
+        }
+        try(java.io.FileInputStream stream=new java.io.FileInputStream(file);
+            java.io.ByteArrayOutputStream bytes=new java.io.ByteArrayOutputStream()){
+          byte[] buf=new byte[8192];int n;
+          while((n=stream.read(buf))!=-1)bytes.write(buf,0,n);
+          respondBytes(s,200,"image/jpeg",bytes.toByteArray());
+        }
       }else if("/ping".equals(path)){
         respond(s,200,"text/plain; charset=utf-8","BYD WEB BRIDGE OK");
       }else{
@@ -119,6 +135,8 @@ public class BridgeService extends Service {
     }
     return "{\"connected\":true,\"revision\":"+prefs.getLong("revision",0)
       +",\"sentAtMs\":"+prefs.getLong("sentAtMs",0)
+      +",\"photoAvailable\":"+prefs.getBoolean("photoAvailable",false)
+      +",\"photoUrl\":\"/api/photo?rev="+prefs.getLong("revision",0)+"\""
       +",\"destination\":\""+esc(destination)+"\",\"label\":\""+esc(label)+"\""
       +",\"searchUrl\":\""+esc(search)+"\",\"directionsUrl\":\""+esc(dir)+"\""
       +",\"geoUrl\":\""+esc("geo:0,0?q="+link)+"\""
@@ -128,7 +146,9 @@ public class BridgeService extends Service {
   static String mapsSearch(String q){return "https://www.google.com/maps/search/?api=1&query="+Uri.encode(q);}
   static String mapsDir(String q){return "https://www.google.com/maps/dir/?api=1&destination="+Uri.encode(q)+"&travelmode=driving&dir_action=navigate";}
   private void respond(Socket s,int status,String contentType,String body)throws IOException{
-    byte[] bytes=body.getBytes(StandardCharsets.UTF_8);
+    respondBytes(s,status,contentType,body.getBytes(StandardCharsets.UTF_8));
+  }
+  private void respondBytes(Socket s,int status,String contentType,byte[] bytes)throws IOException{
     OutputStream out=s.getOutputStream();
     String pre="HTTP/1.1 "+status+" "+(status==200?"OK":"Error")+"\r\n"
       +"Content-Type: "+contentType+"\r\n"+"Content-Length: "+bytes.length+"\r\n"
