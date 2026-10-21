@@ -1,68 +1,63 @@
 <!doctype html>
 <html lang="th">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>BYD Photo Navigation V0.2.11</title>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>BYD Photo Navigation V0.2.12</title>
 <style>
-*{box-sizing:border-box}
-:root{color-scheme:light}
-body{font-family:system-ui,"Noto Sans Thai",sans-serif;background:#eef3f8;color:#183048;margin:0}
-main{max-width:800px;margin:0 auto;padding:12px 15px 45px}
-h1{font-size:24px;margin:8px 0 0}h2{font-size:19px;margin:0 0 10px}
-.small{font-size:13px;color:#506274;line-height:1.55}
-.card{background:#fff;border:1px solid #d7e0e9;border-radius:18px;padding:17px;margin:12px 0;box-shadow:0 2px 9px #0001}
-#state{font-weight:750;font-size:16px}
-.ok{color:#087b45}.bad{color:#b42318}
-#destination{font-size:22px;font-weight:800;overflow-wrap:anywhere;margin:6px 0}
-#photo{width:100%;max-height:290px;object-fit:contain;border-radius:12px;background:#f5f7fb;border:1px solid #e2e7ec}
-#photoSection[hidden],#photo[hidden]{display:none}
-#label{overflow-wrap:anywhere}
-.btn,button{display:block;width:100%;border:0;border-radius:13px;padding:17px 14px;margin:11px 0;
-cursor:pointer;text-align:center;text-decoration:none;font-weight:750;font-size:17px;color:#fff;background:#245b83}
-.btn.primary{background:#128048;font-size:23px;padding:24px 12px}
-.btn.secondary{background:#32608d}.btn.gray{background:#536477;font-size:15px;padding:12px}
-button.toggle{background:#7951b7;font-size:16px;padding:13px}
-button.enabled{background:#0b8155}
-.muted{opacity:.45;pointer-events:none}
-#launchState{font-size:15px;font-weight:700;line-height:1.6;background:#f5f8fa;padding:10px;border-radius:10px}
-#danger{color:#b91c1c;font-weight:750}
+*{box-sizing:border-box}:root{color-scheme:light}
+body{margin:0;background:#edf3f8;color:#1c3447;font-family:system-ui,"Noto Sans Thai",sans-serif}
+main{max-width:820px;margin:auto;padding:18px 15px 40px}
+h1{font-size:24px;margin:3px 0}h2{font-size:19px;margin:0 0 9px}
+.card{background:#fff;border:1px solid #d6e1ea;border-radius:19px;padding:16px;margin:11px 0;box-shadow:0 2px 8px #0001}
+.muted{opacity:.42;pointer-events:none}
+.small{font-size:13px;color:#516578;line-height:1.55}
+.success{color:#067a42;font-weight:750}.error{color:#b42318;font-weight:750}
+#destination{font-size:24px;font-weight:780;margin:10px 0;overflow-wrap:anywhere}
+#label{font-size:14px;overflow-wrap:anywhere;color:#526475}
+.btn,button{width:100%;display:block;padding:15px;border:0;border-radius:13px;margin:11px 0;
+  background:#28618d;color:#fff;text-align:center;text-decoration:none;cursor:pointer;font:700 17px system-ui,"Noto Sans Thai",sans-serif}
+.btn.primary{background:#0d854d;font-size:23px;padding:26px 13px}
+.btn.secondary{background:#456786;font-size:15px;padding:13px}
+button.on{background:#0a8254}button.off{background:#77529f}
+#actionStatus{border-radius:12px;padding:13px;background:#f2f7fa;font-size:16px;font-weight:670;line-height:1.6}
+#photo{display:block;max-height:280px;max-width:100%;width:100%;object-fit:contain;border-radius:10px;background:#f1f5f9}
+#photo[hidden]{display:none}
+details{border-top:1px solid #e1e7ee;padding-top:14px}
+summary{cursor:pointer;font-weight:700;font-size:17px;padding:7px 0}
+#detail{overflow-wrap:anywhere}
 </style>
-</head>
-<body><main>
-<header>
-<h1>BYD Photo Navigation V0.2.11</h1>
-<div class="small">ภาพ GPS → GPack → Google Maps • Web Bridge 127.0.0.1:8769 • ทดสอบขณะรถจอด</div>
-</header>
+</head><body><main>
+<header><h1>BYD Photo Navigation <small>V0.2.12</small></h1>
+<p class="small">จากภาพ GPS สู่การนำทาง • GPack Browser • พอร์ต 8770</p></header>
 <section class="card">
-<div id="state">กำลังเชื่อมต่อ…</div>
+<div id="state">กำลังตรวจการเชื่อมต่อกับ Web Bridge…</div>
+<div class="small">จุดหมายที่เลือกไว้</div>
+<div id="destination">—</div>
+<div id="label">รอภาพที่ยืนยันแล้ว</div>
+</section>
+<section class="card">
+<h2>Google Maps นำทาง</h2>
+<div id="actionStatus" role="status" aria-live="polite">รอรับ GPS จากภาพใหม่</div>
+<a id="native" class="btn primary muted" href="#">▶ เริ่มนำทางทันที</a>
+<p class="small">ระบบจะทดลองเปิด Maps เองเมื่อได้รับภาพใหม่ หาก Chrome จำกัดการเปิดแอปอัตโนมัติ ให้แตะปุ่มสีเขียวครั้งเดียว ซึ่งเราได้ทดสอบว่าเข้าโหมดนำทางได้โดยไม่ต้องกด “เริ่ม” ซ้ำ</p>
+<div id="error" class="error"></div>
+</section>
+<section class="card">
+<details id="diagnostics">
+<summary>แสดงภาพและเครื่องมือตรวจสอบ (ไม่จำเป็นต่อการนำทาง)</summary>
 <div id="photoSection" hidden>
-<p><strong>ภาพที่ส่งล่าสุด</strong></p>
-<img id="photo" alt="ภาพย่อของจุดหมายที่ผู้ใช้ยืนยันแล้ว" hidden />
+<p class="small">ภาพย่อจากรูปที่ยืนยันแล้ว เก็บไว้ตรวจสอบเท่านั้น</p>
+<img id="photo" alt="ภาพย่อ GPS ที่ส่งจาก Android" hidden>
 <p id="photoText" class="small"></p>
 </div>
-<p class="small">พิกัดจุดหมายล่าสุด</p>
-<div id="destination">—</div>
-<div id="label" class="small">รอภาพ GPS จาก Android หลัก</div>
-</section>
-<section class="card">
-<h2>นำทางไปยังภาพนี้</h2>
-<div id="launchState" aria-live="polite">รอภาพ GPS ใหม่ • ระบบจะทดลองเปิด Google Maps อัตโนมัติ</div>
-<a id="native" class="btn primary muted" href="#">▶ เปิด Google Maps นำทางทันที</a>
-<p class="small">หาก Chrome ไม่ยอมเปิดแอปโดยอัตโนมัติ ให้แตะปุ่มสีเขียวเพียงครั้งเดียว วิธีนี้ผ่านการทดสอบกับ Google Maps ใน GPack แล้ว</p>
-<a id="intent" class="btn secondary muted" href="#">เปิดแอป Maps ด้วย URI (ทางเลือก)</a>
-<a id="route" class="btn gray muted" href="#">เปิดเส้นทางบนเว็บ (สำรอง)</a>
-<a id="pin" class="btn gray muted" href="#">ดูตำแหน่ง GPS ของภาพ</a>
-<div id="danger"></div>
-</section>
-<section class="card">
-<h2>โหมดอัตโนมัติ</h2>
-<button id="autoToggle" type="button" class="toggle enabled">ปิดโหมดนำทางอัตโนมัติ</button>
+<p class="small">ภาพไม่ได้ส่งขึ้นอินเทอร์เน็ต มีเพียงพิกัดสำหรับนำทางเท่านั้น</p>
+<a id="alternative" class="btn secondary muted" href="#">เปิด Maps ด้วย google.navigation (สำรอง)</a>
+<a id="webRoute" class="btn secondary muted" href="#">เปิดเส้นทาง Google Maps บนเว็บ (สำรอง)</a>
+<a id="pin" class="btn secondary muted" href="#">ดูหมุด GPS ของภาพ</a>
+<button id="autoToggle" type="button" class="on">ปิดโหมดทดลองเปิดนำทางอัตโนมัติ</button>
 <p id="autoStatus" class="small"></p>
-<p class="small">เมื่อได้รับพิกัดใหม่และหน้า Browser พร้อมทำงาน จะลองเปิดแอป Google Maps โดยตรง ไม่ส่งไปหน้าเว็บก่อน Chrome อาจบล็อกการเปิดแอปที่ไม่ได้เกิดจากการแตะ ซึ่งเป็นข้อจำกัดของระบบ ไม่ใช่ GPS ผิดพลาด</p>
-<button id="retry" type="button" class="toggle">ตรวจการเชื่อมต่อใหม่</button>
+<button id="retry" type="button">รีเฟรชการเชื่อมต่อ</button>
 <p id="detail" class="small"></p>
-</section>
-</main>
+</details>
+</section></main>
 <script src="/bridge.js"></script>
 </body></html>

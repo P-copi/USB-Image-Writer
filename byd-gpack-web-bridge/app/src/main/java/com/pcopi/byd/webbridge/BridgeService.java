@@ -12,7 +12,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public class BridgeService extends Service {
-  static final int PORT=8769;
+  static final int PORT=8770;
   private volatile boolean running=false;
   private ServerSocket socket;
   private Thread accepting;
@@ -23,7 +23,7 @@ public class BridgeService extends Service {
   @Override public int onStartCommand(Intent intent,int flags,int startId){return START_STICKY;}
   @Override public IBinder onBind(Intent intent){return null;}
   private void makeForeground(){
-    String channel="byd_web_bridge_v0211";
+    String channel="byd_web_bridge_v0212";
     NotificationManager nm=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
     if(Build.VERSION.SDK_INT>=26){
       nm.createNotificationChannel(new NotificationChannel(channel,"BYD Web Bridge",NotificationManager.IMPORTANCE_LOW));
@@ -31,8 +31,8 @@ public class BridgeService extends Service {
     Intent open=new Intent(this,MainActivity.class);
     PendingIntent p=PendingIntent.getActivity(this,0,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
     Notification notification=new Notification.Builder(this,channel)
-       .setSmallIcon(android.R.drawable.ic_menu_mylocation).setContentTitle("BYD Web Bridge V0.2.11 • พอร์ต 8769")
-       .setContentText("127.0.0.1:8769 • เปิดใน Browser ภายใน GPack")
+       .setSmallIcon(android.R.drawable.ic_menu_mylocation).setContentTitle("BYD Web Bridge V0.2.12 • พอร์ต 8769")
+       .setContentText("127.0.0.1:8770 • เปิดใน Browser ภายใน GPack")
        .setOngoing(true).setContentIntent(p).build();
     startForeground(901,notification);
   }

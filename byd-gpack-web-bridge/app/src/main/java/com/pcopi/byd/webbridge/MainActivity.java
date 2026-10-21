@@ -26,7 +26,7 @@ import android.widget.*;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
-  private static final String URL="http://127.0.0.1:8769";
+  private static final String URL="http://127.0.0.1:8770";
   private static final String BANGKOK="13.7563310,100.5017650";
   private static final String DONCHEDI="อนุสรณ์ดอนเจดีย์ สุพรรณบุรี";
   private SharedPreferences prefs;
@@ -42,69 +42,84 @@ public class MainActivity extends Activity {
     prefs=getSharedPreferences("bridge",MODE_PRIVATE);
     feedback=prefs.getString("feedback",feedback);
     layout();
+    startBridge(); // Starts while main activity is foreground; no separate service-start step.
     handleShare(getIntent());
   }
   @Override protected void onNewIntent(Intent it){super.onNewIntent(it);setIntent(it);handleShare(it);}
   @Override protected void onResume(){super.onResume();if(status!=null)refresh();}
   private void layout(){
-    ScrollView sc=new ScrollView(this);LinearLayout root=new LinearLayout(this);
-    root.setOrientation(LinearLayout.VERTICAL);root.setPadding(24,16,24,30);sc.addView(root);
-    header(root,"BYD Web Bridge V0.2.11",23);
-    header(root,"เลือกรูป GPS → ยืนยัน → แสดงรูปใน GPack Browser → ทดลองเริ่ม Google Maps อัตโนมัติ\nสำหรับ Phone Space V0.7.4 • ทดลองขณะรถจอดสนิท",15);
-    header(root,"ขั้นที่ 1 — เปิดเซิร์ฟเวอร์สะพาน",19);
-    button(root,"เริ่ม Web Bridge บนจอรถ",()->startBridge());
-    button(root,"คัดลอกลิงก์ Browser: "+URL,()->copy(URL));
-    button(root,"เปิด GPack",()->{
-      try{Intent i=getPackageManager().getLaunchIntentForPackage("com.gpack.agent");
-        if(i==null){message("ไม่พบปุ่มเปิด GPack ใน Android หลัก");return;}
-        startActivity(i);
-      }catch(Exception e){message("เปิด GPack ไม่สำเร็จ: "+e.getMessage());}
+    ScrollView sc=new ScrollView(this);
+    LinearLayout root=new LinearLayout(this);
+    root.setOrientation(LinearLayout.VERTICAL);
+    root.setPadding(24,16,24,30);
+    sc.addView(root);
+
+    header(root,"BYD Photo Navigation V0.2.12",24);
+    header(root,"เลือกภาพ GPS → ตรวจและยืนยันหนึ่งครั้ง → ส่งไป GPack → ทดลองนำทางทันที",16);
+    button(root,"▶ เลือกภาพ GPS เพื่อเปิด Google Maps",()->choosePhoto());
+    header(root,"เมื่อส่งภาพสำเร็จ แอปจะลองเปิด GPack • หาก Chrome ยังอยู่หน้าแอป ให้เปิด Web Bridge ที่ "+URL+" แล้วกดปุ่มนำทางสีเขียวหนึ่งครั้ง",14);
+
+    button(root,"เปิด GPack",this::openGpackAfterPhoto);
+    button(root,"เปิด/เริ่มบริการ Web Bridge อีกครั้ง",this::startBridge);
+    header(root,"Browser ภายใน GPack: "+URL+" (บันทึกเป็น Bookmark) • เปิดแอปนี้จะเริ่ม Bridge ให้อัตโนมัติ",14);
+
+    LinearLayout advanced=new LinearLayout(this);
+    advanced.setOrientation(LinearLayout.VERTICAL);
+    advanced.setVisibility(android.view.View.GONE);
+    button(root,"แสดง/ซ่อน เครื่องมือทดสอบและรายงาน",()->{
+      advanced.setVisibility(advanced.getVisibility()==android.view.View.VISIBLE
+        ? android.view.View.GONE : android.view.View.VISIBLE);
+      refresh();
     });
-    header(root,"ขั้นที่ 2 — เปิด Browser ภายใน GPack",19);
-    header(root,"ใน Browser ภายใน GPack เปิด Bookmark เดิม: "+URL+"\nเมื่อเข้าได้ควรเห็นข้อความ 'เชื่อมต่อ Web Bridge สำเร็จ' และปุ่มเปิด Google Maps\nบันทึกเว็บไซต์ไว้ใน Bookmark เพื่อใช้ครั้งถัดไป",16);
-    header(root,"ขั้นที่ 3 — เลือกและยืนยันภาพก่อนตรวจ GPS",19);
-    button(root,"1. เลือกภาพ GPS จาก Flash Drive เพื่อเริ่มนำทาง",()->choosePhoto());
-    CheckBox directMaps=new CheckBox(this);
-    directMaps.setText("ทดลองเปิด Maps จาก Android หลักก่อน (ปกติ Maps อยู่ใน GPack)");
-    directMaps.setTextSize(17);
-    directMaps.setChecked(prefs.getBoolean("tryNativeMaps",false));
-    directMaps.setOnCheckedChangeListener((v,yes)->prefs.edit().putBoolean("tryNativeMaps",yes).apply());
-    root.addView(directMaps);
-    button(root,"ทดลองเปิด Google Maps จาก Android โดยตรง",()->{
-      String q=prefs.getString("destination","");
-      if(!validGpsText(q)){message("กรุณาเลือกภาพที่มี GPS จริงก่อน");return;}
-      launchNativeMaps(q);
-    });
+    root.addView(advanced);
+
+    header(advanced,"ตั้งค่าและเครื่องมือทดสอบ",19);
     CheckBox openGpack=new CheckBox(this);
-    openGpack.setText("ส่งจุดหมายแล้วเปิด GPack อัตโนมัติ (ทดลอง)");
+    openGpack.setText("ส่งภาพแล้วเปิด GPack อัตโนมัติ (ทดลอง)");
     openGpack.setTextSize(17);
     openGpack.setChecked(prefs.getBoolean("autoOpenGpack",true));
     openGpack.setOnCheckedChangeListener((v,yes)->prefs.edit().putBoolean("autoOpenGpack",yes).apply());
-    root.addView(openGpack);
-    header(root,"ยืนยันภาพแล้ว ระบบจะส่งภาพย่อให้ Web Bridge แสดงทันที พร้อมพิกัด GPS จริง และทดลองเปิด Maps • ภาพต้นฉบับไม่เปลี่ยนแปลง",14);
-    header(root,"ถ้าเปิดรูปจาก Phone Space แล้วแชร์ภาพให้เลือก 'BYD Web Bridge Test 0.2.11' ได้ (ถ้าระบบมีปุ่มแชร์)",14);
-    input=new EditText(this);input.setText(BANGKOK);input.setSingleLine(false);
-    input.setHint("ชื่อสถานที่ / พิกัด GPS / ลิงก์ Maps");input.setTextSize(17);root.addView(input);
-    button(root,"ส่งพิกัดตัวอย่างจากภาพ GPS → Browser",()->send(BANGKOK,"พิกัดตัวอย่างจากภาพ GPS"));
-    button(root,"ส่งสถานที่: อนุสรณ์ดอนเจดีย์",()->send(DONCHEDI,"อนุสรณ์ดอนเจดีย์"));
-    button(root,"ส่งข้อความในช่องด้านบน → Browser",()->send(input.getText().toString(),"จุดหมายที่ผู้ใช้ระบุ"));
-    header(root,"ขั้นที่ 4 — ตรวจสิ่งที่เกิดขึ้นจริง",19);
-    button(root,"✓ Browser เปิดและแสดง Web Bridge ได้",()->record("Browser เชื่อมสะพานได้"));
-    button(root,"× Browser เปิด Web Bridge ไม่ได้",()->record("Browser เชื่อมสะพานไม่ได้"));
-    button(root,"✓ Google Maps เปิดพร้อมหมุดตรงพิกัด",()->record("Google Maps มีหมุดพิกัดตรง"));
-    button(root,"✓ Google Maps เปิดพร้อมเส้นทางถูกต้อง",()->record("Google Maps มีเส้นทางถูกต้อง"));
-    button(root,"! Maps เปิดแต่ไม่มีพิกัด/หมุด",()->record("Maps เปิดแต่ไม่มีหมุด/จุดหมาย"));
-    button(root,"× Maps ไม่เปิด",()->record("Maps ไม่เปิด"));
-    header(root,"รายงานสภาพการเชื่อมต่อ",19);
-    status=new TextView(this);status.setTextSize(16);status.setTextIsSelectable(true);
-    status.setPadding(8,8,8,8);root.addView(status);
-    button(root,"รีเฟรชรายงาน",this::refresh);
-    button(root,"คัดลอกรายงานทั้งหมด",()->copy(report()));
-    button(root,"หยุด Web Bridge หลังทดสอบ",()->{
-      stopService(new Intent(this,BridgeService.class));prefs.edit().putString("server","สั่งหยุดบริการแล้ว").apply();refresh();
+    advanced.addView(openGpack);
+
+    CheckBox directMaps=new CheckBox(this);
+    directMaps.setText("ทดลองเปิด Maps จาก Android หลัก (ปกติ Maps อยู่ภายใน GPack)");
+    directMaps.setTextSize(17);
+    directMaps.setChecked(prefs.getBoolean("tryNativeMaps",false));
+    directMaps.setOnCheckedChangeListener((v,yes)->prefs.edit().putBoolean("tryNativeMaps",yes).apply());
+    advanced.addView(directMaps);
+
+    button(advanced,"ทดลองเปิด Maps บน Android หลัก",()->{
+      String q=prefs.getString("destination","");
+      if(!validGpsText(q)){message("กรุณาส่งภาพที่มี GPS จริงก่อน");return;}
+      launchNativeMaps(q);
     });
-    header(root,"โหมดอัตโนมัติ: เปิดเป็นค่าเริ่มต้นใน GPack Browser V0.2.11 • หาก Chrome บล็อก ต้องแตะปุ่มสีเขียวเอง เมื่อมีจุดหมายใหม่และหน้า Browser กลับมาทำงาน จะทดลองเปิดเส้นทางอัตโนมัติ (อาจถูก Browser บล็อก)\nสำคัญ: จอดรถก่อนทดสอบ • ไม่รูท ไม่แก้ GPack • เวอร์ชันนี้ใช้พอร์ต 8769 แยกจาก Web Bridge V0.2.7/0.2.8 • ไม่จำเป็นต้องหยุดรุ่นเก่าเพื่อทดสอบ",14);
-    setContentView(sc);refresh();
+    input=new EditText(this);
+    input.setText(BANGKOK);
+    input.setHint("ชื่อสถานที่ / พิกัด GPS / ลิงก์ Maps");
+    input.setTextSize(17);
+    advanced.addView(input);
+    button(advanced,"ส่งพิกัดตัวอย่าง → Browser",()->send(BANGKOK,"พิกัดตัวอย่าง"));
+    button(advanced,"ส่งอนุสรณ์ดอนเจดีย์ → Browser",()->send(DONCHEDI,"อนุสรณ์ดอนเจดีย์"));
+    button(advanced,"ส่งข้อความในช่อง → Browser",()->send(input.getText().toString(),"จุดหมายจากผู้ใช้"));
+    button(advanced,"✓ Browser เชื่อมต่อสำเร็จ",()->record("Browser เชื่อมต่อสำเร็จ"));
+    button(advanced,"✓ Maps นำทางสำเร็จ",()->record("Google Maps นำทางสำเร็จ"));
+    button(advanced,"× Maps ไม่เปิด",()->record("Google Maps ไม่เปิด"));
+    header(advanced,"รายงานสภาพการเชื่อมต่อ",19);
+    status=new TextView(this);
+    status.setTextSize(16);
+    status.setTextIsSelectable(true);
+    status.setPadding(8,8,8,8);
+    advanced.addView(status);
+    button(advanced,"รีเฟรชรายงาน",this::refresh);
+    button(advanced,"คัดลอกรายงานทั้งหมด",()->copy(report()));
+    button(advanced,"หยุด Web Bridge หลังทดสอบ",()->{
+      stopService(new Intent(this,BridgeService.class));
+      prefs.edit().putString("server","สั่งหยุดบริการแล้ว").apply();
+      refresh();
+    });
+    header(advanced,"พอร์ต 8770 แยกจากรุ่นก่อน • ไม่แก้ไข GPack หรือภาพต้นฉบับ • ทดลองขณะรถจอดสนิท",14);
+    setContentView(sc);
+    refresh();
   }
   private void header(LinearLayout box,String s,int size){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setPadding(4,12,4,12);box.addView(t);}
   private void button(LinearLayout box,String s,Runnable a){
@@ -563,6 +578,7 @@ public class MainActivity extends Activity {
     }
   }
   private void openGpackAfterPhoto(){
+    // Keep a real host-side open action available from UI even if auto-open is disabled.
     if(!prefs.getBoolean("autoOpenGpack",true))return;
     // GPack might offer a BROWSABLE URL dispatcher. If not, return to its launcher safely.
     try{
@@ -592,8 +608,8 @@ public class MainActivity extends Activity {
   }
   private void record(String s){feedback=s;prefs.edit().putString("feedback",s).apply();refresh();message("บันทึกผลแล้ว");}
   private String report(){
-    return "BYD Web Bridge V0.2.11\n"
-      +"Phone Space baseline V0.7.4 • Separate test port 8769\n"
+    return "BYD Web Bridge V0.2.12\n"
+      +"Phone Space baseline V0.7.4 • Separate test port 8770\n"
       +"Android "+Build.VERSION.SDK_INT+" / "+Build.MODEL+"\n"
       +"Service: "+prefs.getString("server","ยังไม่เริ่ม")+"\n"
       +"Browser page visits: "+prefs.getInt("visits",0)+"\n"
