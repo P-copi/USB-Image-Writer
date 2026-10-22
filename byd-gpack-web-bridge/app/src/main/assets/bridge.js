@@ -7,8 +7,8 @@ photoSection=el('photoSection'),detail=el('detail'),toggle=el('autoToggle'),auto
 var links={native:el('native'),alternative:el('alternative'),webRoute:el('webRoute'),pin:el('pin')};
 var lastRevision=null,lastPhoto=null,attempting=false, pending=null;
 var mem={};
-function read(k){try{return localStorage.getItem('byd0214-'+k);}catch(e){return mem[k]||null;}}
-function write(k,v){mem[k]=String(v);try{localStorage.setItem('byd0214-'+k,String(v));}catch(e){}}
+function read(k){try{return localStorage.getItem('byd0215-'+k);}catch(e){return mem[k]||null;}}
+function write(k,v){mem[k]=String(v);try{localStorage.setItem('byd0215-'+k,String(v));}catch(e){}}
 var mode=read('auto'),auto=mode===null?true:mode==='on';
 function valid(q){
  var m=/^([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)$/.exec(String(q||'').trim());
@@ -106,7 +106,7 @@ function check(){
  }).catch(function(e){
    state.textContent='× ไม่สามารถเชื่อมต่อได้: '+e.message;
    state.className='error';
-   error.textContent='เปิดแอป V0.2.14 บน Android หลัก และตรวจบริการ 127.0.0.1:8772';
+   error.textContent='เปิดแอป V0.2.15 บน Android หลัก และตรวจบริการ 127.0.0.1:8773';
  });
 }
 links.native.addEventListener('click',function(){

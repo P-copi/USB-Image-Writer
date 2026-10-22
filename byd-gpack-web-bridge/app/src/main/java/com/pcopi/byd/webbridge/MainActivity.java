@@ -26,7 +26,7 @@ import android.widget.*;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
-  private static final String URL="http://127.0.0.1:8772";
+  private static final String URL="http://127.0.0.1:8773";
   private static final String BANGKOK="13.7563310,100.5017650";
   private static final String DONCHEDI="อนุสรณ์ดอนเจดีย์ สุพรรณบุรี";
   private SharedPreferences prefs;
@@ -54,12 +54,15 @@ public class MainActivity extends Activity {
     root.setPadding(24,16,24,30);
     sc.addView(root);
 
-    header(root,"BYD Photo Navigation V0.2.14",24);
-    header(root,"เลือกภาพ GPS → ยืนยัน → ทดลองเปิด Chrome ใน GPack → Google Maps",16);
+    header(root,"BYD Photo Navigation V0.2.15",24);
+    header(root,"เลือกภาพ GPS → ยืนยัน → ตรวจช่องทางเปิด Chrome ภายใน GPack → Google Maps",16);
     button(root,"▶ เลือกภาพ GPS เพื่อเปิด Google Maps",()->choosePhoto());
-    header(root,"หลังส่ง GPS แอปจะลองเปิด Web Bridge ผ่าน GPack โดยตรง หาก GPack ไม่รับลิงก์ จะเปิดหน้ารวมแอปเหมือนรุ่นเดิม",14);
+    header(root,"V0.2.15 ค้นหา Chrome ที่ GPack อนุญาตให้เปิดจาก Android หลักได้ โดยไม่ต้องพิมพ์ URL ใหม่ • หากไม่พบจะใช้ GPack ตามเดิม",14);
 
-    button(root,"▶ ทดลองเปิด Chrome/Web Bridge ภายใน GPack",this::openGpackAfterPhoto);
+    button(root,"▶ ทดลองเปิด Chrome/Web Bridge ภายใน GPack",()->{
+      if(!launchSavedChromeCandidate())openGpackAfterPhoto();
+    });
+    button(root,"🔎 ค้นหาทางเปิด Chrome ใน GPack",this::showChromeLaunchCandidates);
     button(root,"คัดลอก URL Web Bridge (ไม่ต้องพิมพ์)",()->copy(URL));
     button(root,"เปิด/เริ่มบริการ Web Bridge อีกครั้ง",this::startBridge);
     header(root,"Browser ภายใน GPack: "+URL+" (บันทึกเป็น Bookmark) • เปิดแอปนี้จะเริ่ม Bridge ให้อัตโนมัติ",14);
@@ -75,6 +78,20 @@ public class MainActivity extends Activity {
     root.addView(advanced);
 
     header(advanced,"ตั้งค่าและเครื่องมือทดสอบ",19);
+    CheckBox autoChrome=new CheckBox(this);
+    autoChrome.setText("เมื่อส่งภาพ ให้ลองเปิด Chrome ผ่านทางที่เลือกไว้ (ทดลอง)");
+    autoChrome.setTextSize(17);
+    autoChrome.setChecked(prefs.getBoolean("autoOpenChrome",false));
+    autoChrome.setOnCheckedChangeListener((v,yes)->{
+      if(yes && prefs.getString("chromeComponent","").isEmpty()){
+        message("ต้องค้นหาหรือเลือกทางเปิด Chrome ของ GPack ก่อน");
+        v.setChecked(false);return;
+      }
+      prefs.edit().putBoolean("autoOpenChrome",yes).apply();
+    });
+    advanced.addView(autoChrome);
+    button(advanced,"ดูรายการทางเปิดแอป Chrome ที่ GPack เปิดเผย",this::showChromeLaunchCandidates);
+    button(advanced,"ทดลองเปิด Chrome ที่ติดตั้งบน Android หลัก (แยกจาก GPack)",this::tryHostChrome);
     button(advanced,"วิเคราะห์ช่องทางเปิด Chrome ภายใน GPack",()->{
       String cap=gpackCapabilities();
       prefs.edit().putString("gpackCapabilities",cap).apply();
@@ -129,7 +146,7 @@ public class MainActivity extends Activity {
       prefs.edit().putString("server","สั่งหยุดบริการแล้ว").apply();
       refresh();
     });
-    header(advanced,"พอร์ต 8772 แยกจากรุ่นก่อน • ไม่แก้ไข GPack หรือภาพต้นฉบับ • ทดลองขณะรถจอดสนิท",14);
+    header(advanced,"พอร์ต 8773 แยกจากรุ่นก่อน • ไม่แก้ไข GPack หรือภาพต้นฉบับ • ทดลองขณะรถจอดสนิท",14);
     setContentView(sc);
     refresh();
   }
@@ -547,7 +564,11 @@ public class MainActivity extends Activity {
       return;
     }
     if(label!=null && label.startsWith("GPS จากภาพ") && prefs.getBoolean("autoOpenGpack",true)){
-      new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(this::openGpackAfterPhoto,400);
+      new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(()->{
+        if(!(prefs.getBoolean("autoOpenChrome",false) && launchSavedChromeCandidate())){
+          openGpackAfterPhoto();
+        }
+      },400);
     }
   }
 
@@ -588,6 +609,111 @@ public class MainActivity extends Activity {
       refresh();
       return false;
     }
+  }
+  private java.util.List<android.content.pm.ResolveInfo> chromeGpackCandidates(){
+    java.util.ArrayList<android.content.pm.ResolveInfo> selected=new java.util.ArrayList<>();
+    try{
+      android.content.pm.PackageManager pm=getPackageManager();
+      Intent q=new Intent(Intent.ACTION_MAIN);
+      q.addCategory(Intent.CATEGORY_LAUNCHER);
+      q.setPackage("com.gpack.agent");
+      java.util.List<android.content.pm.ResolveInfo> matches=pm.queryIntentActivities(q,0);
+      if(matches==null)return selected;
+      for(android.content.pm.ResolveInfo ri:matches){
+        if(ri.activityInfo==null||!ri.activityInfo.exported)continue;
+        String label=String.valueOf(ri.loadLabel(pm)).toLowerCase(Locale.ROOT);
+        String component=ri.activityInfo.name.toLowerCase(Locale.ROOT);
+        if(label.contains("chrome")||label.contains("browser")||
+           label.contains("โครม")||component.contains("chrome")||component.contains("browser")){
+          selected.add(ri);
+        }
+      }
+    }catch(Exception e){
+      prefs.edit().putString("chromeDiscoverError",e.getClass().getSimpleName()+": "+e.getMessage()).apply();
+    }
+    return selected;
+  }
+  private void showChromeLaunchCandidates(){
+    android.content.pm.PackageManager pm=getPackageManager();
+    java.util.List<android.content.pm.ResolveInfo> options=chromeGpackCandidates();
+    if(options.isEmpty()){
+      StringBuilder statusText=new StringBuilder();
+      statusText.append("ไม่พบทางลัด Chrome ที่ GPack เปิดให้ Android หลักเรียกได้ผ่าน ACTION_MAIN/LAUNCHER\n\n");
+      statusText.append("จึงยังไม่สามารถเปิด Chrome ภายใน GPack อัตโนมัติด้วยวิธีมาตรฐานได้\n");
+      statusText.append("ยังใช้วิธีกด Chrome ใน GPack แล้วเปิด Bookmark Web Bridge ได้ตามเดิม\n\n");
+      statusText.append("สถานะที่ตรวจพบ:\n").append(gpackCapabilities());
+      prefs.edit().putString("chromeDiscovery","ไม่พบ Chrome launcher แบบ exported").apply();
+      new android.app.AlertDialog.Builder(this).setTitle("ผลค้นหา Chrome ภายใน GPack")
+        .setMessage(statusText.toString()).setPositiveButton("ตกลง",(d,w)->{}).show();
+      refresh();return;
+    }
+    String[] labels=new String[options.size()];
+    for(int i=0;i<options.size();i++){
+      android.content.pm.ResolveInfo info=options.get(i);
+      labels[i]=String.valueOf(info.loadLabel(pm))+"\n"+info.activityInfo.name;
+    }
+    new android.app.AlertDialog.Builder(this)
+      .setTitle("ทดสอบ Chrome ที่ GPack เปิดเผย ("+options.size()+" รายการ)")
+      .setItems(labels,(dialog,which)->{
+        android.content.pm.ResolveInfo selected=options.get(which);
+        String name=selected.activityInfo.name;
+        // Only exported launcher activities already identified as Chrome/Browser.
+        prefs.edit().putString("chromeComponent",name)
+          .putBoolean("autoOpenChrome",false)
+          .putString("chromeDiscovery","เลือก "+name+" เพื่อทดลอง (ยังไม่ยืนยันว่าเปิด Chrome)").apply();
+        boolean started=launchSavedChromeCandidate();
+        if(!started)message("ไม่สามารถเรียก Chrome shortcut นี้ได้ • เปิด GPack ตามเดิม");
+      })
+      .setNegativeButton("ยกเลิก",(d,w)->{}).show();
+  }
+  private boolean launchSavedChromeCandidate(){
+    String cls=prefs.getString("chromeComponent","");
+    if(cls.isEmpty())return false;
+    try{
+      // Revalidate exported launcher visibility every time; don't run arbitrary stored components.
+      java.util.List<android.content.pm.ResolveInfo> found=chromeGpackCandidates();
+      boolean allowed=false;
+      for(android.content.pm.ResolveInfo ri:found){
+        if(ri.activityInfo!=null && cls.equals(ri.activityInfo.name)){allowed=true;break;}
+      }
+      if(!allowed){
+        prefs.edit().putString("chromeLaunchResult","รายการทางเปิด Chrome นี้ไม่ปรากฏในระบบแล้ว").apply();
+        return false;
+      }
+      Intent launch=new Intent(Intent.ACTION_MAIN);
+      launch.addCategory(Intent.CATEGORY_LAUNCHER);
+      launch.setClassName("com.gpack.agent",cls);
+      launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+      launch.putExtra("url",URL);
+      launch.putExtra(Intent.EXTRA_TEXT,URL);
+      launch.putExtra("targetPackage","com.android.chrome");
+      startActivity(launch);
+      prefs.edit().putString("chromeLaunchResult",
+        "เรียก "+cls+" ผ่าน exported Chrome launcher แล้ว (ยังต้องยืนยันว่าแสดง URL 127.0.0.1:8773 จริง)").apply();
+      refresh();
+      return true;
+    }catch(Exception e){
+      prefs.edit().putString("chromeLaunchResult",
+        "เรียก Chrome ไม่สำเร็จ: "+e.getClass().getSimpleName()+" "+e.getMessage()).apply();
+      refresh();
+      return false;
+    }
+  }
+  private void tryHostChrome(){
+    try{
+      Intent chrome=new Intent(Intent.ACTION_VIEW,Uri.parse(URL));
+      chrome.addCategory(Intent.CATEGORY_BROWSABLE);
+      chrome.setPackage("com.android.chrome");
+      chrome.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      startActivity(chrome);
+      prefs.edit().putString("chromeLaunchResult",
+        "ทดลองเรียก Chrome บน Android หลักแล้ว • หาก Google Maps อยู่ใน GPack ยังไม่รับรองว่าจะเปิดนำทางได้").apply();
+    }catch(Exception e){
+      prefs.edit().putString("chromeLaunchResult",
+        "Android หลักไม่มี Chrome ที่เปิด URL นี้ได้: "+e.getClass().getSimpleName()).apply();
+      message("Chrome อาจมีอยู่เฉพาะใน GPack");
+    }
+    refresh();
   }
   private void saveGpackResult(String s){
     prefs.edit().putString("gpackLaunch",s).apply();
@@ -677,8 +803,8 @@ public class MainActivity extends Activity {
   }
   private void record(String s){feedback=s;prefs.edit().putString("feedback",s).apply();refresh();message("บันทึกผลแล้ว");}
   private String report(){
-    return "BYD Web Bridge V0.2.14\n"
-      +"Phone Space baseline V0.7.4 • Separate test port 8772\n"
+    return "BYD Web Bridge V0.2.15\n"
+      +"Phone Space baseline V0.7.4 • Separate test port 8773\n"
       +"Android "+Build.VERSION.SDK_INT+" / "+Build.MODEL+"\n"
       +"Service: "+prefs.getString("server","ยังไม่เริ่ม")+"\n"
       +"Browser page visits: "+prefs.getInt("visits",0)+"\n"
@@ -692,6 +818,10 @@ public class MainActivity extends Activity {
       +"Thumbnail ready: "+prefs.getBoolean("photoAvailable",false)+" • "+prefs.getString("photoName","")+"\n"
       +"GPack entry: "+prefs.getString("gpackLaunch","ยังไม่ได้ลอง")+"\n"
       +"GPack link handlers: "+prefs.getString("gpackCapabilities","ยังไม่ได้ตรวจ")+"\n"
+      +"Chrome discovery: "+prefs.getString("chromeDiscovery","ยังไม่ได้ค้นหา")+"\n"
+      +"Chrome selected: "+prefs.getString("chromeComponent","ยังไม่ได้เลือก")+"\n"
+      +"Chrome auto enabled: "+prefs.getBoolean("autoOpenChrome",false)+"\n"
+      +"Chrome last launch: "+prefs.getString("chromeLaunchResult","ยังไม่ได้ลอง")+"\n"
       +"Sent at ms: "+prefs.getLong("sentAtMs",0)+"\n"
       +"ภาพจาก Flash Drive / Original EXIF diagnostic:\n"+prefs.getString("photoStatus","ยังไม่ได้เลือกรูป") +"\n"
       +"Test result: "+prefs.getString("feedback",feedback)+"\n"
