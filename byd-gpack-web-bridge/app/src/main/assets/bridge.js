@@ -6,9 +6,12 @@ error=el('error'),diagnostics=el('diagnostics'),photo=el('photo'),photoText=el('
 photoSection=el('photoSection'),detail=el('detail'),toggle=el('autoToggle'),autoStatus=el('autoStatus');
 var links={native:el('native'),alternative:el('alternative'),webRoute:el('webRoute'),pin:el('pin')};
 var lastRevision=null,lastPhoto=null,attempting=false, pending=null;
+var recentList=el('recentList'),recentStatus=el('recentStatus'),
+placeInput=el('placeInput'),goPlace=el('goPlace'),voiceInput=el('voiceInput'),
+voiceStatus=el('voiceStatus'),shortcutHelp=el('shortcutHelp');
 var mem={};
-function read(k){try{return localStorage.getItem('byd0215-'+k);}catch(e){return mem[k]||null;}}
-function write(k,v){mem[k]=String(v);try{localStorage.setItem('byd0215-'+k,String(v));}catch(e){}}
+function read(k){try{return localStorage.getItem('byd0216-'+k);}catch(e){return mem[k]||null;}}
+function write(k,v){mem[k]=String(v);try{localStorage.setItem('byd0216-'+k,String(v));}catch(e){}}
 var mode=read('auto'),auto=mode===null?true:mode==='on';
 function valid(q){
  var m=/^([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)$/.exec(String(q||'').trim());
@@ -26,6 +29,74 @@ function imageEvent(d){
  typeof d.label==='string'&&d.label.indexOf('GPS จากภาพ ')===0&&valid(d.destination));
 }
 function token(d){return String(d.revision)+'-'+String(d.sentAtMs);}
+function getLinkForPlace(q){
+ return 'intent:q='+encodeURIComponent(q)+'&mode=d#Intent;scheme=google.navigation;'+
+  'package=com.google.android.apps.maps;action=android.intent.action.VIEW;end';
+}
+var lastHistoryKey='';
+function showRecent(d){
+ var raw=Array.isArray(d.recent)?d.recent:[];
+ var list=[],seen={};
+ raw.forEach(function(item){
+   if(!item||!valid(item.destination)||seen[item.destination])return;
+   if(list.length>=10)return;
+   seen[item.destination]=true;
+   list.push({destination:item.destination,label:String(item.label||'จุดหมายจากภาพ').slice(0,120)});
+ });
+ var key=JSON.stringify(list);
+ if(key===lastHistoryKey)return;
+ lastHistoryKey=key;
+ while(recentList.firstChild)recentList.removeChild(recentList.firstChild);
+ recentStatus.textContent=list.length?
+  'มีจุดหมายจากภาพ '+list.length+' แห่ง • แตะเพื่อเปิดนำทางใน Google Maps':
+  'ยังไม่มีประวัติจุดหมายที่ยืนยันจากภาพ';
+ list.forEach(function(item){
+   var a=document.createElement('a');
+   a.href=getLinkForPlace(item.destination);
+   a.textContent='▶ '+item.label.replace(/^GPS จากภาพ\s*/,'');
+   var small=document.createElement('small');
+   small.textContent=item.destination;
+   a.appendChild(small);
+   recentList.appendChild(a);
+ });
+}
+function updatePlace(){
+ var q=placeInput.value.trim();
+ // Browser maps may accept address strings, but user confirms by tapping the link.
+ var ok=q.length>0 && q.length<=160 && !/^[\s,0.]+$/.test(q);
+ goPlace.href=ok?getLinkForPlace(q):'#';
+ if(ok)goPlace.classList.remove('muted');else goPlace.classList.add('muted');
+}
+placeInput.addEventListener('input',updatePlace);
+goPlace.addEventListener('click',function(){
+ voiceStatus.textContent='ส่งคำขอเปิด Google Maps ไปยังจุดหมายใหม่แล้ว';
+});
+el('copyBridgeUrl').addEventListener('click',function(){
+ var text=window.location.origin+'/';
+ var ui=el('copyStatus');
+ if(navigator.clipboard&&navigator.clipboard.writeText){
+   navigator.clipboard.writeText(text).then(function(){ui.textContent='คัดลอกแล้ว • '+text;}).catch(function(){ui.textContent='คัดลอกไม่ได้ กรุณาใช้บุ๊กมาร์ก Chrome';});
+ }else{
+   ui.textContent='Chrome รุ่นนี้ไม่รองรับ Clipboard API • ใช้บุ๊กมาร์กแทน';
+ }
+});
+voiceInput.addEventListener('click',function(){
+ var Rec=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!Rec){voiceStatus.textContent='Chrome ภายใน GPack ไม่รองรับการฟังเสียงผ่านเว็บไซต์ • ใช้ไมโครโฟนภายใน Google Maps หากมี';return;}
+ try{
+   var rec=new Rec();
+   rec.lang='th-TH';rec.interimResults=false;rec.maxAlternatives=1;
+   rec.onresult=function(ev){
+     if(ev.results&&ev.results[0]&&ev.results[0][0]){
+       placeInput.value=String(ev.results[0][0].transcript||'').slice(0,160);
+       updatePlace();
+       voiceStatus.textContent='ได้ยิน: '+placeInput.value+' • ตรวจชื่อสถานที่แล้วแตะนำทาง';
+     }
+   };
+   rec.onerror=function(ev){voiceStatus.textContent='ไมโครโฟน Chrome ใช้ไม่ได้: '+ev.error+' • ทดลองเสียงภายใน Google Maps';};
+   rec.start();voiceStatus.textContent='กำลังฟังชื่อสถานที่...';
+ }catch(e){voiceStatus.textContent='Chrome ไม่สามารถเริ่มรับเสียงได้: '+e.message;}
+});
 function showMode(){
  toggle.textContent=auto?'ปิดโหมดทดลองเปิดนำทางอัตโนมัติ':'เปิดโหมดทดลองเปิดนำทางอัตโนมัติ';
  toggle.className=auto?'on':'off';
@@ -89,7 +160,7 @@ function check(){
  }).then(function(d){
    state.textContent='✓ เชื่อมต่อ Web Bridge สำเร็จ • รับข้อมูลจาก Android หลัก';
    state.className='success';
-   present(d);
+   present(d);showRecent(d);
    var rev=Number(d.revision),ms=Number(d.sentAtMs),now=Date.now();
    var fresh=ms>0&&ms<=now&&now-ms<120000;
    var key=token(d);
@@ -106,7 +177,7 @@ function check(){
  }).catch(function(e){
    state.textContent='× ไม่สามารถเชื่อมต่อได้: '+e.message;
    state.className='error';
-   error.textContent='เปิดแอป V0.2.15 บน Android หลัก และตรวจบริการ 127.0.0.1:8773';
+   error.textContent='เปิดแอป V0.2.16 บน Android หลัก และตรวจบริการ 127.0.0.1:8774';
  });
 }
 links.native.addEventListener('click',function(){

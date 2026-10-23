@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="th">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>BYD Photo Navigation V0.2.15</title>
+<title>BYD Photo Navigation V0.2.16</title>
 <style>
 *{box-sizing:border-box}:root{color-scheme:light}
 body{margin:0;background:#edf3f8;color:#1c3447;font-family:system-ui,"Noto Sans Thai",sans-serif}
@@ -24,10 +24,13 @@ button.on{background:#0a8254}button.off{background:#77529f}
 details{border-top:1px solid #e1e7ee;padding-top:14px}
 summary{cursor:pointer;font-weight:700;font-size:17px;padding:7px 0}
 #detail{overflow-wrap:anywhere}
+#recentList a{display:block;text-decoration:none;padding:16px 13px;margin:8px 0;background:#e6f3ec;color:#13563a;border:1px solid #b8dcc9;border-radius:12px;font-size:17px;font-weight:700;overflow-wrap:anywhere}
+#recentList a small{display:block;font-weight:400;color:#416457}
+#placeInput:focus{outline:2px solid #2d9259}
 </style>
 </head><body><main>
-<header><h1>BYD Photo Navigation <small>V0.2.15</small></h1>
-<p class="small">จากภาพ GPS สู่การนำทาง • GPack Browser • พอร์ต 8773</p></header>
+<header><h1>BYD Photo Navigation <small>V0.2.16</small></h1>
+<p class="small">จากภาพ GPS สู่การนำทาง • GPack Browser • พอร์ต 8774</p></header>
 <section class="card">
 <div id="state">กำลังตรวจการเชื่อมต่อกับ Web Bridge…</div>
 <div class="small">จุดหมายที่เลือกไว้</div>
@@ -40,6 +43,30 @@ summary{cursor:pointer;font-weight:700;font-size:17px;padding:7px 0}
 <a id="native" class="btn primary muted" href="#">▶ เริ่มนำทางทันที</a>
 <p class="small">ระบบจะทดลองเปิด Maps เองเมื่อได้รับภาพใหม่ หาก Chrome จำกัดการเปิดแอปอัตโนมัติ ให้แตะปุ่มสีเขียวครั้งเดียว ซึ่งเราได้ทดสอบว่าเข้าโหมดนำทางได้โดยไม่ต้องกด “เริ่ม” ซ้ำ</p>
 <div id="error" class="error"></div>
+</section>
+<section class="card">
+<h2>เปลี่ยนจุดหมายระหว่างนำทาง</h2>
+<p class="small">เมื่อกลับเข้ามา Web Bridge สามารถเลือกจุดหมายที่เคยส่งจากภาพได้ ไม่ต้องกลับไปเลือกภาพหรือคัดลอกที่อยู่เว็บใหม่</p>
+<div id="recentStatus" class="small"></div>
+<div id="recentList"></div>
+<p class="small">หรือค้นหาจุดหมายใหม่โดยใช้ชื่อสถานที่หรือพิกัด</p>
+<input id="placeInput" type="text" inputmode="text" autocomplete="off" maxlength="160"
+ placeholder="เช่น วัดพระศรีรัตนมหาธาตุ พิษณุโลก" aria-label="ชื่อจุดหมายใหม่"
+ style="width:100%;padding:15px;border:1px solid #b3c3d0;border-radius:12px;font-size:17px">
+<button id="voiceInput" type="button" class="off">🎤 ลองพูดชื่อจุดหมาย (ถ้า Chrome รองรับ)</button>
+<div id="voiceStatus" class="small"></div>
+<a id="goPlace" class="btn secondary muted" href="#">▶ นำทางไปยังจุดหมายที่ค้นหา</a>
+<p class="small">การเลือกจุดหมายใหม่จะเปิด Google Maps ผ่านคำสั่งนำทาง (อาจแทนที่เส้นทางเดิม หรือให้ Maps ยืนยันก่อน)</p>
+</section>
+<section class="card">
+<details id="shortcutHelp">
+<summary>ทำทางลัด Web Bridge — ไม่ต้องพิมพ์ 127.0.0.1 ซ้ำ</summary>
+<p class="small"><strong>ครั้งเดียวใน Chrome ภายใน GPack:</strong> เมื่อเปิด http://127.0.0.1:8774 แล้ว ให้กดเมนู ⋮ → เพิ่มบุ๊กมาร์ก (รูปดาว) หรือ “Add to Home screen / Create shortcut” หากเมนูนี้มีให้ใช้</p>
+<p class="small">ตั้งชื่อว่า “BYD นำทางจากภาพ” เมื่อกลับจาก Maps ให้เปิด Chrome → เลือกบุ๊กมาร์ก หรือแตะทางลัดที่สร้างไว้ แทนการพิมพ์ URL</p>
+<p class="small">วิธีสร้างทางลัดขึ้นอยู่กับเวอร์ชัน Chrome/GPack; ถ้าไม่รองรับให้ใช้บุ๊กมาร์กแทน การสร้างทางลัดไม่ได้ทำให้ Android หลักเปิด Chrome ภายใน GPack ได้เอง</p>
+<button id="copyBridgeUrl" type="button">คัดลอก URL Web Bridge</button>
+<div id="copyStatus" class="small"></div>
+</details>
 </section>
 <section class="card">
 <details id="voiceDiagnostics">

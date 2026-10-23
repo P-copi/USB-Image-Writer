@@ -26,7 +26,7 @@ import android.widget.*;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
-  private static final String URL="http://127.0.0.1:8773";
+  private static final String URL="http://127.0.0.1:8774";
   private static final String BANGKOK="13.7563310,100.5017650";
   private static final String DONCHEDI="อนุสรณ์ดอนเจดีย์ สุพรรณบุรี";
   private SharedPreferences prefs;
@@ -54,16 +54,17 @@ public class MainActivity extends Activity {
     root.setPadding(24,16,24,30);
     sc.addView(root);
 
-    header(root,"BYD Photo Navigation V0.2.15",24);
-    header(root,"เลือกภาพ GPS → ยืนยัน → ตรวจช่องทางเปิด Chrome ภายใน GPack → Google Maps",16);
+    header(root,"BYD Photo Navigation V0.2.16",24);
+    header(root,"เลือกภาพ GPS → ยืนยัน → เปิด Google Maps • เก็บจุดหมายไว้เปลี่ยนเส้นทางภายหลัง",16);
     button(root,"▶ เลือกภาพ GPS เพื่อเปิด Google Maps",()->choosePhoto());
-    header(root,"V0.2.15 ค้นหา Chrome ที่ GPack อนุญาตให้เปิดจาก Android หลักได้ โดยไม่ต้องพิมพ์ URL ใหม่ • หากไม่พบจะใช้ GPack ตามเดิม",14);
+    header(root,"V0.2.16 ค้นหา Chrome ที่ GPack อนุญาตให้เปิดจาก Android หลักได้ โดยไม่ต้องพิมพ์ URL ใหม่ • หากไม่พบจะใช้ GPack ตามเดิม",14);
 
     button(root,"▶ ทดลองเปิด Chrome/Web Bridge ภายใน GPack",()->{
       if(!launchSavedChromeCandidate())openGpackAfterPhoto();
     });
     button(root,"🔎 ค้นหาทางเปิด Chrome ใน GPack",this::showChromeLaunchCandidates);
     button(root,"คัดลอก URL Web Bridge (ไม่ต้องพิมพ์)",()->copy(URL));
+    header(root,"หากต้องสลับจุดหมายระหว่างนำทาง: เปิด Chrome ใน GPack → เปิดบุ๊กมาร์ก Web Bridge → เลือกจุดหมายที่เคยส่ง หรือค้นหาจุดหมายใหม่ → แตะนำทาง",14);
     button(root,"เปิด/เริ่มบริการ Web Bridge อีกครั้ง",this::startBridge);
     header(root,"Browser ภายใน GPack: "+URL+" (บันทึกเป็น Bookmark) • เปิดแอปนี้จะเริ่ม Bridge ให้อัตโนมัติ",14);
 
@@ -78,6 +79,20 @@ public class MainActivity extends Activity {
     root.addView(advanced);
 
     header(advanced,"ตั้งค่าและเครื่องมือทดสอบ",19);
+    button(advanced,"ดูจุดหมาย GPS ที่บันทึกจากภาพล่าสุด",()->{
+      try{
+        org.json.JSONArray a=new org.json.JSONArray(prefs.getString("recentGps","[]"));
+        StringBuilder sb=new StringBuilder();
+        for(int i=0;i<a.length();i++){
+          org.json.JSONObject z=a.optJSONObject(i);if(z==null)continue;
+          sb.append(i+1).append(". ").append(z.optString("label")).append("\n")
+            .append(z.optString("destination")).append("\n\n");
+        }
+        if(sb.length()==0)sb.append("ยังไม่มีประวัติ GPS ที่ยืนยันแล้ว");
+        new android.app.AlertDialog.Builder(this).setTitle("จุดหมายล่าสุด (ในเครื่อง)")
+         .setMessage(sb.toString()).setPositiveButton("ตกลง",(d,w)->{}).show();
+      }catch(Exception e){message("อ่านประวัติไม่ได้: "+e.getMessage());}
+    });
     CheckBox autoChrome=new CheckBox(this);
     autoChrome.setText("เมื่อส่งภาพ ให้ลองเปิด Chrome ผ่านทางที่เลือกไว้ (ทดลอง)");
     autoChrome.setTextSize(17);
@@ -146,7 +161,7 @@ public class MainActivity extends Activity {
       prefs.edit().putString("server","สั่งหยุดบริการแล้ว").apply();
       refresh();
     });
-    header(advanced,"พอร์ต 8773 แยกจากรุ่นก่อน • ไม่แก้ไข GPack หรือภาพต้นฉบับ • ทดลองขณะรถจอดสนิท",14);
+    header(advanced,"พอร์ต 8774 แยกจากรุ่นก่อน • ไม่แก้ไข GPack หรือภาพต้นฉบับ • ทดลองขณะรถจอดสนิท",14);
     setContentView(sc);
     refresh();
   }
@@ -548,6 +563,7 @@ public class MainActivity extends Activity {
     if(s.matches("^[-+]?0+(?:\\.0+)?\\s*,\\s*[-+]?0+(?:\\.0+)?$")){
       message("ไม่ส่งพิกัด 0,0 เพื่อป้องกันนำทางผิดจุด");return;
     }
+    if(label!=null&&label.startsWith("GPS จากภาพ")&&validGpsText(s))saveRecentGps(s,label);
     if(label==null||!label.startsWith("GPS จากภาพ"))clearThumbnail();
     prefs.edit().putString("destination",s).putString("label",label)
       .putLong("revision",prefs.getLong("revision",0)+1)
@@ -572,6 +588,31 @@ public class MainActivity extends Activity {
     }
   }
 
+  private void saveRecentGps(String destination,String label){
+    try{
+      org.json.JSONArray old=new org.json.JSONArray(prefs.getString("recentGps","[]"));
+      org.json.JSONArray out=new org.json.JSONArray();
+      org.json.JSONObject newest=new org.json.JSONObject();
+      newest.put("destination",destination);
+      newest.put("label",label);
+      newest.put("savedAtMs",System.currentTimeMillis());
+      out.put(newest);
+      for(int i=0;i<old.length()&&out.length()<10;i++){
+        org.json.JSONObject item=old.optJSONObject(i);
+        if(item==null)continue;
+        String d=item.optString("destination","");
+        if(!validGpsText(d)||destination.equals(d))continue;
+        org.json.JSONObject safe=new org.json.JSONObject();
+        safe.put("destination",d);
+        safe.put("label",item.optString("label","จุดหมายจากภาพ"));
+        safe.put("savedAtMs",item.optLong("savedAtMs",0));
+        out.put(safe);
+      }
+      prefs.edit().putString("recentGps",out.toString()).apply();
+    }catch(Exception e){
+      prefs.edit().putString("historyWriteError",e.getClass().getSimpleName()).apply();
+    }
+  }
   private boolean validGpsText(String q){
     if(q==null)return false;
     String[] a=q.trim().split(",",-1);
@@ -689,7 +730,7 @@ public class MainActivity extends Activity {
       launch.putExtra("targetPackage","com.android.chrome");
       startActivity(launch);
       prefs.edit().putString("chromeLaunchResult",
-        "เรียก "+cls+" ผ่าน exported Chrome launcher แล้ว (ยังต้องยืนยันว่าแสดง URL 127.0.0.1:8773 จริง)").apply();
+        "เรียก "+cls+" ผ่าน exported Chrome launcher แล้ว (ยังต้องยืนยันว่าแสดง URL 127.0.0.1:8774 จริง)").apply();
       refresh();
       return true;
     }catch(Exception e){
@@ -803,8 +844,8 @@ public class MainActivity extends Activity {
   }
   private void record(String s){feedback=s;prefs.edit().putString("feedback",s).apply();refresh();message("บันทึกผลแล้ว");}
   private String report(){
-    return "BYD Web Bridge V0.2.15\n"
-      +"Phone Space baseline V0.7.4 • Separate test port 8773\n"
+    return "BYD Web Bridge V0.2.16\n"
+      +"Phone Space baseline V0.7.4 • Separate test port 8774\n"
       +"Android "+Build.VERSION.SDK_INT+" / "+Build.MODEL+"\n"
       +"Service: "+prefs.getString("server","ยังไม่เริ่ม")+"\n"
       +"Browser page visits: "+prefs.getInt("visits",0)+"\n"
@@ -812,6 +853,7 @@ public class MainActivity extends Activity {
       +"Last browser activity: "+prefs.getString("lastSeen","ยังไม่พบ")+"\n"
       +"Destination: "+prefs.getString("destination",BANGKOK)+"\n"
       +"Revision: "+prefs.getLong("revision",0)+"\n"
+      +"Saved GPS destinations: "+prefs.getString("recentGps","[]")+"\n"
       +"Auto-open GPack: "+prefs.getBoolean("autoOpenGpack",true)+"\n"
       +"Try native Google Maps: "+prefs.getBoolean("tryNativeMaps",true)+"\n"
       +"Android direct result: "+prefs.getString("nativeLaunch","ยังไม่ได้ลอง")+"\n"

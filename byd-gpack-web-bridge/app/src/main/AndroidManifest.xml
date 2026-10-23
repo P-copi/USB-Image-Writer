@@ -13,7 +13,7 @@
   <intent><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="http"/></intent>
   <intent><action android:name="android.intent.action.SEND"/><data android:mimeType="text/plain"/></intent>
  </queries>
- <application android:allowBackup="false" android:usesCleartextTraffic="true" android:label="BYD Web Bridge Test 0.2.15" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+ <application android:allowBackup="false" android:usesCleartextTraffic="true" android:label="BYD Web Bridge Test 0.2.16" android:theme="@android:style/Theme.Material.Light.NoActionBar">
   <activity android:name=".MainActivity" android:exported="true">
    <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
    <intent-filter><action android:name="android.intent.action.SEND"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="text/plain"/></intent-filter>

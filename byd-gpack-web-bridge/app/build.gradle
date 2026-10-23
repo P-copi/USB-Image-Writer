@@ -1,6 +1,6 @@
 plugins { id 'com.android.application' }
 android { namespace 'com.pcopi.byd.webbridge'; compileSdk 35
- defaultConfig { applicationId 'com.pcopi.byd.webbridge.v0215'; minSdk 26; targetSdk 34; versionCode 13; versionName '0.2.15-chrome-discovery' }
+ defaultConfig { applicationId 'com.pcopi.byd.webbridge.v0216'; minSdk 26; targetSdk 34; versionCode 14; versionName '0.2.16-route-change' }
  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 } }
 
 dependencies { implementation 'androidx.exifinterface:exifinterface:1.3.7' }
