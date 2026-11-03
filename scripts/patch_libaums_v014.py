@@ -6,7 +6,9 @@ root = Path(sys.argv[1] if len(sys.argv) > 1 else "_libaums")
 usb = root / "libaums/src/main/java/me/jahnen/libaums/core/usb/UsbCommunication.kt"
 s = usb.read_text()
 old_timeout = "const val TRANSFER_TIMEOUT = 5000"
-new_timeout = "const val TRANSFER_TIMEOUT = 2500"
+# Allow longer flash-controller pauses during large sequential Android OTG reads.
+# Timeout remains bounded; persistent errors still fail safely.
+new_timeout = "const val TRANSFER_TIMEOUT = 7000"
 if old_timeout not in s:
     raise SystemExit("TRANSFER_TIMEOUT marker not found")
 usb.write_text(s.replace(old_timeout, new_timeout, 1))
