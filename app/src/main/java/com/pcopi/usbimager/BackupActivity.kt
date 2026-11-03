@@ -272,7 +272,7 @@ class BackupActivity : Activity() {
         if (compact && compactBytes <= 0L) {
             AlertDialog.Builder(this)
                 .setTitle("ARC Boot Compact ยังไม่พร้อม")
-                .setMessage("ต้องตรวจสอบโครงสร้าง ARC ก่อนเริ่มสำรอง\\n" + compactNote)
+                .setMessage("ต้องตรวจสอบโครงสร้าง ARC ก่อนเริ่มสำรอง\n" + compactNote)
                 .setPositiveButton("ตกลง", null).show()
             return
         }
@@ -287,24 +287,24 @@ class BackupActivity : Activity() {
                 AlertDialog.Builder(this)
                     .setTitle("พื้นที่ในมือถือไม่เพียงพอ")
                     .setMessage("ต้องบันทึก: " + FormatUtils.bytes(neededBytes) +
-                        "\\nพื้นที่ว่างมือถือ: " + FormatUtils.bytes(free) +
-                        "\\nต้องเหลือพื้นที่สำรองอย่างน้อย 512 MiB")
+                        "\nพื้นที่ว่างมือถือ: " + FormatUtils.bytes(free) +
+                        "\nต้องเหลือพื้นที่สำรองอย่างน้อย 512 MiB")
                     .setPositiveButton("ตกลง", null).show()
                 return
             }
         }
         val modeInfo = when {
-            compact -> "\\nARC Compact: " + FormatUtils.bytes(neededBytes) +
-                "\\nคัดลอก LBA 0 ถึงท้าย ARC3 เท่านั้น รวม MBR และข้อมูลบูตทั้งหมด" +
-                "\\nไม่ใช่ Full Raw 28.67 GB และยังต้องทดสอบบูตจริง"
-            compressed -> "\\nFull Raw GZIP: ต้องอ่านทุก Sector ของ USB รวมพื้นที่ที่อาจอ่านไม่ได้"
-            else -> "\\nFull Raw IMG: ต้องอ่านทุก Sector ของ USB รวมพื้นที่ที่อาจอ่านไม่ได้"
+            compact -> "\nARC Compact: " + FormatUtils.bytes(neededBytes) +
+                "\nคัดลอก LBA 0 ถึงท้าย ARC3 เท่านั้น รวม MBR และข้อมูลบูตทั้งหมด" +
+                "\nไม่ใช่ Full Raw 28.67 GB และยังต้องทดสอบบูตจริง"
+            compressed -> "\nFull Raw GZIP: ต้องอ่านทุก Sector ของ USB รวมพื้นที่ที่อาจอ่านไม่ได้"
+            else -> "\nFull Raw IMG: ต้องอ่านทุก Sector ของ USB รวมพื้นที่ที่อาจอ่านไม่ได้"
         }
         AlertDialog.Builder(this)
             .setTitle(if (compact) "ยืนยัน ARC Boot Compact" else "ยืนยันสำรอง USB ทั้งลูก")
             .setMessage("USB ต้นฉบับ: " + FormatUtils.bytes(capacity) +
-                modeInfo + "\\n\\nเลือกหน่วยความจำภายในมือถือ ห้ามเลือก USB ต้นฉบับเป็นที่บันทึก" +
-                "\\nUSB ต้นฉบับเป็น Read-only สำหรับงานนี้")
+                modeInfo + "\n\nเลือกหน่วยความจำภายในมือถือ ห้ามเลือก USB ต้นฉบับเป็นที่บันทึก" +
+                "\nUSB ต้นฉบับเป็น Read-only สำหรับงานนี้")
             .setNegativeButton("ยกเลิก", null)
             .setPositiveButton("เลือกตำแหน่งบันทึก") { _, _ ->
                 pendingCompact = compact
