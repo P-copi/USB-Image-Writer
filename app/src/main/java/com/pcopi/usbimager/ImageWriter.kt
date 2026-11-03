@@ -98,64 +98,117 @@ object ImageWriter {
         // compete for the interface and recovery may never succeed until replugged.
         // libaums performs BOT reset/clear-halt on the SAME claimed connection;
         // this outer loop simply retries the same block without closing the session.
-        fun writeChunk(lba: Long, data: ByteArray, count: Int, completedBeforeChunk: Long) {
-            var lastError: IOException? = null
-            for (tryIndex in 0..MAX_PERSISTENT_RECOVERY_ATTEMPTS) {
+        // Persist the reduced window across file chunks rather than immediately
+        // returning to large transfers after every 256 KiB stream read.
+        var writeWindowBytes = 0
+        var verifyWindowBytes = 0
+        var writeGoodSegments = 0
+        var verifyGoodSegments = 0
+
+        // Keep one claimed USB session throughout Write and Verify.
+        // Every confirmed segment has an aligned size and an exact LBA.
+        // On SCSI error retry only the failed range; never skip a sector.
+        fun transferChunk(
+            stage: Stage,
+            startLba: Long,
+            data: ByteArray,
+            count: Int,
+            confirmedBeforeChunk: Long
+        ) {
+            val deviceBlockSize = ensureRaw().blockSize
+            val normalWindow = alignedSize(PREFERRED_TRANSFER_BYTES, deviceBlockSize)
+            var window = (if (stage == Stage.WRITE) writeWindowBytes else verifyWindowBytes)
+                .takeIf { it > 0 } ?: normalWindow
+            var completed = 0
+            var consecutiveGood = if (stage == Stage.WRITE) writeGoodSegments else verifyGoodSegments
+
+            while (completed < count) {
                 checkCancelled(isCancelled)
-                try {
-                    ensureRaw().blockDevice.write(lba, ByteBuffer.wrap(data, 0, count))
-                    return
-                } catch (e: IOException) {
-                    lastError = e
-                    if (tryIndex >= MAX_PERSISTENT_RECOVERY_ATTEMPTS) break
-                    onRecovery(
-                        Recovery(
-                            stage = Stage.WRITE,
-                            completedBytes = completedBeforeChunk,
-                            totalBytes = rawImageSize,
-                            attempt = tryIndex + 1,
-                            maxAttempts = MAX_PERSISTENT_RECOVERY_ATTEMPTS,
-                            reason = e.message ?: e.javaClass.simpleName
+                val segmentSize = min(window, count - completed)
+                val segmentLba = startLba + completed / deviceBlockSize
+                var lastError: IOException? = null
+                var ok = false
+
+                for (attempt in 1..MAX_SEGMENT_ATTEMPTS) {
+                    checkCancelled(isCancelled)
+                    try {
+                        // Fresh ByteBuffer slice for every retry; no stale position.
+                        val bb = ByteBuffer.wrap(data, completed, segmentSize)
+                        if (stage == Stage.WRITE)
+                            ensureRaw().blockDevice.write(segmentLba, bb)
+                        else
+                            ensureRaw().blockDevice.read(segmentLba, bb)
+                        ok = true
+                        break
+                    } catch (e: IOException) {
+                        lastError = e
+                        onRecovery(
+                            Recovery(
+                                stage = stage,
+                                completedBytes = confirmedBeforeChunk + completed,
+                                totalBytes = rawImageSize,
+                                attempt = attempt,
+                                maxAttempts = MAX_SEGMENT_ATTEMPTS,
+                                reason = "LBA " + segmentLba + " • " +
+                                    (segmentSize / 1024) + " KiB • " + shortReason(e)
+                            )
                         )
-                    )
-                    Thread.sleep(RECOVERY_DELAY_MS)
+                        if (attempt < MAX_SEGMENT_ATTEMPTS) Thread.sleep(350L)
+                    }
+                }
+
+                if (ok) {
+                    completed += segmentSize
+                    consecutiveGood++
+                    // Only enlarge transfers after sustained clean communication.
+                    if (consecutiveGood >= 128 && window < normalWindow) {
+                        window = min(normalWindow, window * 2)
+                        consecutiveGood = 0
+                    }
+                } else {
+                    consecutiveGood = 0
+                    if (window > deviceBlockSize) {
+                        window = alignedSize((window / 4).coerceAtLeast(deviceBlockSize), deviceBlockSize)
+                        onRecovery(
+                            Recovery(
+                                stage = stage,
+                                completedBytes = confirmedBeforeChunk + completed,
+                                totalBytes = rawImageSize,
+                                attempt = 1,
+                                maxAttempts = MAX_SEGMENT_ATTEMPTS,
+                                reason = "LBA " + segmentLba +
+                                    " • ลดขนาดคำสั่งเหลือ " + window +
+                                    " B • " + shortReason(lastError)
+                            )
+                        )
+                        Thread.sleep(400L)
+                    } else {
+                        val phase = if (stage == Stage.WRITE) "เขียน" else "Verify"
+                        throw IOException(
+                            phase + " USB ไม่สำเร็จที่ LBA " + segmentLba +
+                                " (ตำแหน่ง " + ((confirmedBeforeChunk + completed) / (1024 * 1024)) +
+                                " MiB) แม้ลดขนาดคำสั่งเหลือ " + deviceBlockSize + " B • " +
+                                shortReason(lastError) +
+                                " • USB ปลายทางอาจเขียนไม่ครบ ห้ามใช้บูตจนกว่าจะเขียนใหม่และ Verify ผ่าน",
+                            lastError
+                        )
+                    }
+                }
+                if (stage == Stage.WRITE) {
+                    writeWindowBytes = window
+                    writeGoodSegments = consecutiveGood
+                } else {
+                    verifyWindowBytes = window
+                    verifyGoodSegments = consecutiveGood
                 }
             }
-            throw IOException(
-                "USB สะดุดระหว่างเขียนและกู้ใน connection เดิมไม่สำเร็จ กรุณาถอดแล้วเสียบ Flash Drive ใหม่",
-                lastError
-            )
         }
 
-        fun readChunk(lba: Long, data: ByteArray, count: Int, completedBeforeChunk: Long) {
-            var lastError: IOException? = null
-            for (tryIndex in 0..MAX_PERSISTENT_RECOVERY_ATTEMPTS) {
-                checkCancelled(isCancelled)
-                try {
-                    val bb = ByteBuffer.wrap(data, 0, count)
-                    ensureRaw().blockDevice.read(lba, bb)
-                    return
-                } catch (e: IOException) {
-                    lastError = e
-                    if (tryIndex >= MAX_PERSISTENT_RECOVERY_ATTEMPTS) break
-                    onRecovery(
-                        Recovery(
-                            stage = Stage.VERIFY,
-                            completedBytes = completedBeforeChunk,
-                            totalBytes = rawImageSize,
-                            attempt = tryIndex + 1,
-                            maxAttempts = MAX_PERSISTENT_RECOVERY_ATTEMPTS,
-                            reason = e.message ?: e.javaClass.simpleName
-                        )
-                    )
-                    Thread.sleep(RECOVERY_DELAY_MS)
-                }
-            }
-            throw IOException(
-                "USB สะดุดระหว่าง Verify และกู้ใน connection เดิมไม่สำเร็จ กรุณาถอดแล้วเสียบ Flash Drive ใหม่",
-                lastError
-            )
-        }
+        fun writeChunk(lba: Long, data: ByteArray, count: Int, completedBeforeChunk: Long) =
+            transferChunk(Stage.WRITE, lba, data, count, completedBeforeChunk)
+
+        fun readChunk(lba: Long, data: ByteArray, count: Int, completedBeforeChunk: Long) =
+            transferChunk(Stage.VERIFY, lba, data, count, completedBeforeChunk)
 
         try {
             val first = ensureRaw()
@@ -289,7 +342,18 @@ object ImageWriter {
 
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
-    private const val MAX_PERSISTENT_RECOVERY_ATTEMPTS = 24
-    private const val RECOVERY_DELAY_MS = 650L
+    private fun alignedSize(bytes: Int, blockSize: Int): Int =
+        (bytes / blockSize).coerceAtLeast(1) * blockSize
+
+    private fun shortReason(error: Throwable?): String {
+        if (error == null) return "unknown USB error"
+        val message = error.message.orEmpty().replace('\n', ' ').take(150)
+        val cause = error.cause?.message.orEmpty().replace('\n', ' ').take(90)
+        return error.javaClass.simpleName + ": " + message +
+            (if (cause.isBlank()) "" else " / " + cause)
+    }
+
+    private const val PREFERRED_TRANSFER_BYTES = 32 * 1024
+    private const val MAX_SEGMENT_ATTEMPTS = 2
     private const val VERIFY_SETTLE_DELAY_MS = 1500L
 }

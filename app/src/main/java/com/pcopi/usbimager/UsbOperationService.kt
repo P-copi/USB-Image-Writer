@@ -196,7 +196,9 @@ class UsbOperationService : Service() {
             ImageWriter.Stage.WRITE -> "เขียน"
             ImageWriter.Stage.VERIFY -> "Verify"
         }
-        val stageText = "USB สะดุด • กำลังกู้การเชื่อมต่อ ${r.attempt}/${r.maxAttempts}"
+        val stageText = "USB สะดุดระหว่าง" + phase +
+            " • ลองใหม่ " + r.attempt + "/" + r.maxAttempts +
+            "\n" + r.reason
         snapshot = Snapshot(
             running = true,
             stage = stageText,

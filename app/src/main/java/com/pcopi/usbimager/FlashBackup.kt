@@ -16,7 +16,7 @@ import java.security.MessageDigest
 import kotlin.math.min
 
 /**
- * Full raw USB -> IMG. No writes to source USB, no bad-sector substitution.
+ * Full raw or restricted ARC compact USB -> IMG. No writes to source USB, no bad-sector substitution.
  * If USB read fails, adaptively retry smaller *aligned* read requests on the
  * SAME claimed USB session. A partially read chunk is never written to output.
  */
@@ -36,7 +36,10 @@ object FlashBackup {
         val verifyMillis: Long,
         val outputUri: Uri,
         val storedBytes: Long,
-        val compressed: Boolean
+        val compressed: Boolean,
+        val recoveredReads: Int,
+        val compact: Boolean,
+        val physicalUsbBytes: Long
     )
 
     @Throws(Exception::class)
@@ -46,6 +49,7 @@ object FlashBackup {
         manager: UsbManager,
         device: UsbDevice,
         compressed: Boolean,
+        compact: Boolean,
         onProgress: (Progress) -> Unit,
         isCancelled: () -> Boolean
     ): Result {
@@ -53,11 +57,16 @@ object FlashBackup {
         try {
             val result = UsbRawDevice.open(manager, device).use { usb ->
                 usb.init()
-                val total = usb.capacityBytes
+                val physicalBytes = usb.capacityBytes
+                if (compact && compressed) throw IOException("ARC Compact รองรับ .img ไม่บีบอัดเท่านั้น")
+                // Validate all MBR partitions before opening the output file.
+                // Compact mode never reads the unused tail outside ARC3.
+                val total = if (compact) ArcBootImagePlanner.inspect(usb).imageBytes else physicalBytes
                 val blockSize = usb.blockSize
                 if (total <= 0L || blockSize <= 0 || total % blockSize != 0L)
                     throw IOException("ความจุหรือ Block Size ของ USB ไม่ถูกต้อง")
 
+                // Keep file I/O efficient, while issuing smaller SCSI reads inside AdaptiveReader.
                 val chunk = (256 * 1024 / blockSize).coerceAtLeast(1) * blockSize
                 val reader = AdaptiveReader(usb, manager, device, blockSize, isCancelled)
                 val buffer = ByteArray(chunk)
@@ -129,8 +138,17 @@ object FlashBackup {
                         if (col >= 0 && !cursor.isNull(col)) cursor.getLong(col) else -1L
                     } else -1L
                 } ?: -1L
+                // Some Android document providers report a final byte count. For
+                // full raw IMG it must agree with the physical USB capacity.
+                // The full SHA-256 read-back above remains the primary integrity test.
+                if (!compressed && savedBytes >= 0L && savedBytes != total)
+                    throw IOException("IMG ขนาดไม่ตรงกับที่สำรอง: ไฟล์ " +
+                        FormatUtils.bytes(savedBytes) + " / USB " + FormatUtils.bytes(total))
+                if (compressed && savedBytes == 0L)
+                    throw IOException("ไฟล์ .img.gz ที่บันทึกมีขนาดเป็นศูนย์")
                 Result(total, originalHash, readMillis, nanosMillis(verifyStart),
-                    targetUri, savedBytes, compressed)
+                    targetUri, savedBytes, compressed, reader.recoveredReads,
+                    compact, physicalBytes)
             }
             completed = true
             return result
@@ -149,9 +167,13 @@ object FlashBackup {
         private val blockSize: Int,
         private val isCancelled: () -> Boolean
     ) {
-        private val normal = alignedSize(64 * 1024)
+        // Conservative 32 KiB transfers: a 2.5 s USB timeout and repeated
+        // 64 KiB reads caused frequent recovery on some Samsung OTG setups.
+        private val normal = alignedSize(32 * 1024)
         private var window = normal
         private var goodReads = 0
+        var recoveredReads = 0
+            private set
 
         /** Fills buffer[0,count), never skips a sector and never changes USB source. */
         fun readFully(
@@ -168,6 +190,7 @@ object FlashBackup {
                 val size = min(window, count - copied)
                 var error: IOException? = null
                 var ok = false
+                var hadError = false
                 for (attempt in 1..2) {
                     checkCancelled(isCancelled)
                     if (!manager.deviceList.values.any { it.deviceId == device.deviceId } ||
@@ -180,16 +203,21 @@ object FlashBackup {
                         ok = true
                         break
                     } catch (e: IOException) {
+                        hadError = true
                         error = e
                         onRecovery(lba, size, "ครั้ง " + attempt + "/2 • " + briefError(e))
-                        if (attempt < 2) Thread.sleep(250L)
+                        if (attempt < 2) Thread.sleep(400L)
                     }
                 }
                 if (ok) {
+                    if (hadError) {
+                        recoveredReads++
+                        onRecovery(lba, size, "กู้การอ่านสำเร็จ • อ่านข้อมูลต่อ")
+                    }
                     copied += size
                     goodReads++
-                    // Gradually recover throughput after USB becomes healthy again.
-                    if (goodReads >= 32 && window < normal) {
+                    // Increase transfer size only after a sustained period of clean reads.
+                    if (goodReads >= 128 && window < normal) {
                         window = (window * 4).coerceAtMost(normal)
                         goodReads = 0
                     }
@@ -198,11 +226,16 @@ object FlashBackup {
                     if (window > blockSize) {
                         window = alignedSize((window / 4).coerceAtLeast(blockSize))
                         onRecovery(lba, window, "กำลังลดขนาดการอ่านเพื่อกู้ข้อมูล")
+                        // Give the drive controller a short settling interval.
+                        Thread.sleep(400L)
                     } else {
+                        val positionMiB = absolute / (1024L * 1024L)
                         throw IOException(
                             "อ่าน USB ไม่สำเร็จที่ LBA " + lba +
+                                " (ตำแหน่งประมาณ " + positionMiB + " MiB)" +
                                 " แม้ลองอ่านทีละ " + blockSize +
-                                " B แล้ว • " + briefError(error),
+                                " B แล้ว • " + briefError(error) +
+                                " • ตรวจพอร์ต OTG, กำลังไฟ, หรือลอง USB ตัวอื่น",
                             error
                         )
                     }

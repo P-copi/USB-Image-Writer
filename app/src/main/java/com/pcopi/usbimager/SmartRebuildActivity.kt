@@ -97,16 +97,16 @@ class SmartRebuildActivity : Activity() {
         root.addView(cards)
         val controls=ToolkitUi.card(this)
         controls.addView(ToolkitUi.button(this,"รีเฟรช Flash Drive",ToolkitUi.BLUE){refresh()})
-        checkButton=ToolkitUi.button(this,"ตรวจ EXT และความพร้อมย้าย (อ่านอย่างเดียว)",
+        checkButton=ToolkitUi.button(this,"ตรวจทั้งหมดครั้งเดียว (FAT / EXT / Journal / MBR)",
             ToolkitUi.GREEN){requestInspection()}
         controls.addView(checkButton,ToolkitUi.margin(this,8))
         state=ToolkitUi.text(this,"รอการตรวจสอบ",14f,ToolkitUi.SUB)
         controls.addView(state,ToolkitUi.margin(this,9))
         root.addView(controls,ToolkitUi.margin(this,12))
         val out=ToolkitUi.card(this)
-        out.addView(ToolkitUi.text(this,"รายงานเตรียม Smart Rebuild",17f,ToolkitUi.INK,true))
+        out.addView(ToolkitUi.text(this,"รายงานตรวจครบชุด Smart Rebuild",17f,ToolkitUi.INK,true))
         result=ToolkitUi.text(this,
-            "จะแสดง UUID, ความจุ, สถานะ Journal, ชนิด EXT, บล็อกที่จัดสรรล่าสุด และคำเตือน",
+            "ตรวจ FAT, EXT, MBR, UUID, Feature flags, Journal และคำเตือนในครั้งเดียว",
             13f,ToolkitUi.INK)
         result.setTextIsSelectable(true)
         out.addView(result,ToolkitUi.margin(this,9))
@@ -191,7 +191,7 @@ class SmartRebuildActivity : Activity() {
                     onProgress={message -> runOnUiThread{if(!isFinishing)state.text=message}},
                     cancelled={Thread.currentThread().isInterrupted}
                 )
-                val text=formatReport(data)
+                val text=formatReport(data)+formatRebuildGate(data)+inspectBootFiles(src)
                 runOnUiThread {
                     reportText=text
                     result.text=text
@@ -259,6 +259,193 @@ class SmartRebuildActivity : Activity() {
         }
         b.append("\nหมายเหตุ: ยังไม่ได้ย่อ หรือโคลนข้อมูลใด ๆ\n")
         return b.toString()
+    }
+
+    /**
+     * Strict fail-closed direct-USB rebuild gate. This is a feasibility report,
+     * NOT a filesystem resizer. No write operation is enabled here.
+     */
+    private fun formatRebuildGate(data:ExtRebuildInspector.Report):String {
+        val b=StringBuilder("\n=== Direct USB Rebuild • Safety Gate ===\n")
+        b.append("โหมด: เขียน Flash Drive โดยตรง | Verify: เปิด | IMG compression: ปิด\n")
+        b.append("USB ต้นฉบับ: READ-ONLY • ไม่ซ่อม/ฟอร์แมต/ย่อ\n")
+        val target=data.targetBytes
+        if(target==null) {
+            b.append("BLOCKED: ยังไม่ได้เลือก USB ปลายทาง\n")
+            return b.toString()
+        }
+        if(data.layout!="MBR" || data.partitions.size!=3 ||
+            data.partitions.map{it.number}!=listOf(1,2,3)) {
+            b.append("BLOCKED: รูปแบบพาร์ทิชันไม่ตรงกับ Arc Loader 3 partitions ที่ตรวจสอบ\n")
+            return b.toString()
+        }
+        val p1=data.partitions[0]
+        val p2=data.partitions[1]
+        val p3=data.partitions[2]
+        val expected=p1.filesystem=="FAT32" && p2.filesystem=="EXT2" &&
+            p3.filesystem=="EXT4" && p1.startLba==2048L &&
+            p2.startLba==p1.endLba+1L && p3.startLba==p2.endLba+1L
+        if(!expected) {
+            b.append("BLOCKED: ระบบไฟล์หรือขอบเขตพาร์ทิชันไม่ตรงกับรูปแบบที่รองรับ\n")
+            return b.toString()
+        }
+        val sector=data.sectorBytes.toLong()
+        val targetSectors=target/sector
+        val p3Available=targetSectors-p3.startLba
+        b.append("ความจุปลายทาง: ").append(FormatUtils.bytes(target)).append('\n')
+        b.append("ตำแหน่งเริ่ม ARC3 ที่ต้องรักษา: LBA ").append(p3.startLba).append('\n')
+        if(target<=0 || target%sector!=0L || p3Available<=0L) {
+            b.append("BLOCKED: USB ปลายทางไม่พอสำหรับโครงสร้างพาร์ทิชัน\n")
+            return b.toString()
+        }
+        b.append("พื้นที่ ARC3 สูงสุดตามขนาดปลายทาง (ก่อนเผื่อพื้นที่): ")
+            .append(FormatUtils.bytes(p3Available*sector)).append('\n')
+        val reserve=64L*1024L*1024L
+        val availableAfterReserve=p3Available*sector-reserve
+        b.append("เผื่อท้ายดิสก์เบื้องต้น: ").append(FormatUtils.bytes(reserve)).append('\n')
+        if(availableAfterReserve<=0L ||
+            (p3.allocatedBytes ?: Long.MAX_VALUE)>=availableAfterReserve) {
+            b.append("BLOCKED: พื้นที่ ARC3 หลังสำรองไม่เพียงพอตามข้อมูลที่ตรวจได้\n")
+            return b.toString()
+        }
+        b.append("ความจุมีแนวโน้มเพียงพอ แต่ยังไม่ใช่ขนาดย่อขั้นต่ำที่ยืนยันแล้ว\n")
+        // Capacity planning is read-only; it is not proof of a safe shrink.
+        val extBlock=p3.blockBytes?.toLong() ?: 4096L
+        val usableBytes=(availableAfterReserve/extBlock)*extBlock
+        b.append("ARC3 planned capacity (aligned, estimate only): ")
+            .append(FormatUtils.bytes(usableBytes)).append('\n')
+        b.append("EXT4 block alignment: ").append(extBlock).append(" B\n")
+        b.append("ยังไม่ได้ยืนยันว่าระบบไฟล์ EXT4 สามารถสร้างใหม่ในพื้นที่นี้ได้\n")
+        val reasons=mutableListOf<String>()
+        if(p2.cleanState!=true)reasons.add("ARC2 ไม่อยู่ในสถานะ Clean")
+        if(p3.cleanState!=true)reasons.add("ARC3 ไม่อยู่ในสถานะ Clean")
+        if(p2.journalRecoveryRequired==true || p3.journalRecoveryRequired==true)
+            reasons.add("มี EXT Journal ที่ต้อง Recovery บนสำเนา")
+        if(p3.highAllocatedBlock==null)
+            reasons.add("ยังไม่ยืนยันตำแหน่ง Metadata/Block ที่ต้องย้าย")
+        if((p3.notes.any{it.contains("checksums",ignoreCase=true)}))
+            reasons.add("ยังไม่ได้ Verify EXT4 metadata CRC32C")
+        reasons.add("ยังไม่มี EXT4 filesystem-aware rebuild และการรักษา boot metadata ที่ผ่านการทดสอบ")
+        reasons.add("ยังไม่มี Direct Write + Read-back Verify ที่ผ่านการทดสอบบน USB ปลายทาง")
+        b.append("สถานะ: BLOCKED — ยังไม่อนุญาตให้เขียน\n")
+        for(reason in reasons)b.append("• ").append(reason).append('\n')
+        b.append("การตรวจนี้ไม่ได้เปลี่ยนแปลง USB ทั้งสองลูก\n")
+        return b.toString()
+    }
+
+    /** Bounded read-only file inventory using the existing FAT/EXT explorer. */
+    private fun inspectBootFiles(device:UsbDevice):String {
+        val out=StringBuilder("\n=== รายการไฟล์และโฟลเดอร์ (Read-only) ===\n")
+        try {
+            BootDiskReader.open(usb,device).use { reader ->
+                val scan=reader.scan()
+                out.append("รูปแบบดิสก์: ").append(scan.style).append('\n')
+                for(volume in scan.volumes) {
+                    out.append("\nPartition ").append(volume.number)
+                        .append(" [").append(volume.fileSystem).append("]\n")
+                    if(!volume.isReadable) {
+                        out.append("ยังอ่านรายการไฟล์ไม่ได้: ").append(volume.warning).append('\n')
+                        continue
+                    }
+                    try {
+                        val root=reader.list(volume.number,null)
+                        out.append("Root entries: ").append(root.size)
+                            .append(" (แสดงสูงสุด 80)\n")
+                        for(entry in root.take(80)) {
+                            out.append(if(entry.directory)"[DIR] " else "[FILE] ")
+                                .append(entry.name).append(" (")
+                                .append(entry.size).append(" B)\n")
+                        }
+                        if(root.size>80)out.append("... รายการอื่นไม่ได้แสดง\n")
+                        // Bounded recursive metadata inventory; no file contents or secrets.
+                        // Inode/cluster keys prevent directory loops on malformed media.
+                        val pending=java.util.ArrayDeque<Triple<BootDiskReader.Entry,String,Int>>()
+                        val seen=mutableSetOf<Long>()
+                        for(dir in root.filter{it.directory})
+                            pending.add(Triple(dir,"/"+dir.name,1))
+                        var files=root.count{!it.directory}
+                        var folders=root.count{it.directory}
+                        var bytes=root.filter{!it.directory}.sumOf{it.size.coerceAtLeast(0L)}
+                        var walked=0
+                        var errors=0
+                        val errorDetails=mutableListOf<String>()
+                        var truncated=false
+                        val maxDirs=200
+                        val maxDepth=8
+                        val maxEntries=1500
+                        var entries=root.size
+                        while(pending.isNotEmpty()){
+                            if(walked>=maxDirs || entries>=maxEntries) {
+                                truncated=true
+                                break
+                            }
+                            val (dir,location,depth)=pending.removeFirst()
+                            if(depth>maxDepth){truncated=true;continue}
+                            if(!seen.add(dir.cluster))continue
+                            walked++
+                            try {
+                                val children=reader.list(volume.number,dir)
+                                if(entries+children.size>maxEntries){truncated=true;break}
+                                entries+=children.size
+                                for(child in children){
+                                    if(child.directory){
+                                        folders++
+                                        pending.add(Triple(child,location+"/"+child.name,depth+1))
+                                    } else {
+                                        files++
+                                        bytes+=child.size.coerceAtLeast(0L)
+                                    }
+                                }
+                            }catch(e:Exception){
+                                errors++
+                                if(errorDetails.size<12){
+                                    val message=(e.message ?: e.javaClass.simpleName)
+                                        .replace('\n',' ').replace('\r',' ').take(180)
+                                    errorDetails.add(location.take(180)+" : "+message)
+                                }
+                            }
+                        }
+                        out.append("Recursive inventory: ")
+                            .append(files).append(" files, ")
+                            .append(folders).append(" folders, ")
+                            .append(FormatUtils.bytes(bytes)).append(" apparent file size\n")
+                        out.append("Walked directories: ").append(walked)
+                            .append(" | read errors: ").append(errors).append('\n')
+                        if(truncated || pending.isNotEmpty())
+                            out.append("INCOMPLETE: inventory limits reached; do not use for copying\n")
+                        if(errors>0)
+                            out.append("INCOMPLETE: some directories could not be read\n")
+                        for(detail in errorDetails)
+                            out.append("READ ERROR: ").append(detail).append('\n')
+
+                        out.append("Metadata-only: permissions, links, hardlinks and CRC not verified\n")
+
+                        for(folder in root.filter{it.directory &&
+                            it.name.lowercase() in setOf("boot","efi","grub","arc","config","loader")
+                        }.take(5)) {
+                            try {
+                                val children=reader.list(volume.number,folder)
+                                out.append("  /").append(folder.name).append(":\n")
+                                for(child in children.take(25))
+                                    out.append("    ").append(if(child.directory)"[DIR] " else "[FILE] ")
+                                        .append(child.name).append('\n')
+                            }catch(e:Exception){
+                                out.append("  /").append(folder.name).append(": ")
+                                    .append(e.message ?: "อ่านไม่ได้").append('\n')
+                            }
+                        }
+                    }catch(e:Exception){
+                        out.append("อ่าน Root ไม่สำเร็จ: ")
+                            .append(e.message ?: e.javaClass.simpleName).append('\n')
+                    }
+                }
+            }
+        }catch(e:Exception) {
+            out.append("ตรวจรายการไฟล์ไม่สำเร็จ: ")
+                .append(e.message ?: e.javaClass.simpleName).append('\n')
+        }
+        out.append("ไม่มีการแก้ไขไฟล์หรือเขียนลง USB\n")
+        return out.toString()
     }
 
     private fun copyReport() {

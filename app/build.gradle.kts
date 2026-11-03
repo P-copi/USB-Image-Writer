@@ -11,8 +11,8 @@ android {
         applicationId = "com.pcopi.usbimager"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "0.2.7"
+        versionCode = 24
+        versionName = "0.2.14"
     }
 
 
