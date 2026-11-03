@@ -158,13 +158,13 @@ class BackupActivity : Activity() {
             ToolkitUi.margin(this, 10, 3))
         modeSpinner = Spinner(this)
         modeSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
-            listOf("บีบอัดเต็มลูก (.img.gz) — แนะนำ", "ไม่บีบอัด (.img) — Full Raw"))
+            listOf("Full Raw (.img) — สำรอง USB บูตทั้งลูก", "บีบอัด (.img.gz) — ประหยัดพื้นที่"))
         backupCard.addView(modeSpinner)
         backupCard.addView(ToolkitUi.text(
             this,
-            "โหมดบีบอัดเก็บทุก Sector รวมพาร์ทิชันบูตเหมือนเดิม " +
-            "ไฟล์อาจเล็กลงมากถ้าพื้นที่ว่างเป็นศูนย์ แต่ไม่ได้รับประกันว่าจะใกล้ 2–3 GB " +
-            "เมื่อคืนค่าจะต้องใช้ USB ความจุจริงไม่น้อยกว่าต้นฉบับ",
+            "แนะนำ Full Raw (.img) สำหรับสำรอง Arc Loader 4.2.2 ที่ตั้งค่าแล้ว: เก็บ MBR, " +
+            "พาร์ทิชันและทุก Sector ครบ ไฟล์มีขนาดเท่า USB จริง " +
+            "โหมด .img.gz เก็บข้อมูลเหมือนกันแบบไม่สูญเสีย แต่ไม่ช่วยลดขนาด USB ที่จะเขียนกลับ",
             13f, ToolkitUi.SUB
         ), ToolkitUi.margin(this, 8, 12))
         backupButton = ToolkitUi.button(this, "สร้าง Image จาก Flash Drive", ToolkitUi.GREEN) { confirmBackup() }
@@ -251,7 +251,27 @@ class BackupActivity : Activity() {
     private fun confirmBackup() {
         if (locked()) return
         if (selected == null || capacity <= 0) return toast("กรุณาตรวจสอบ Flash Drive ก่อน")
-        val compressed = modeSpinner.selectedItemPosition == 0
+        val compressed = modeSpinner.selectedItemPosition == 1
+        if (!compressed) {
+            // Full raw needs room for EVERY sector, not merely used filesystem space.
+            @Suppress("DEPRECATION")
+            val free = runCatching {
+                android.os.StatFs(android.os.Environment.getExternalStorageDirectory().absolutePath).availableBytes
+            }.getOrDefault(-1L)
+            val reserve = 512L * 1024L * 1024L
+            if (free >= 0L && (capacity > free || free - capacity < reserve)) {
+                AlertDialog.Builder(this)
+                    .setTitle("พื้นที่ในมือถือไม่พอสำหรับ Full Image")
+                    .setMessage("USB ต้นฉบับ: " + FormatUtils.bytes(capacity) +
+                        "\\nพื้นที่ว่างมือถือ: " + FormatUtils.bytes(free) +
+                        "\\nต้องเผื่อพื้นที่เพิ่ม 512 MiB เพื่อไม่ให้พื้นที่มือถือเต็ม" +
+                        "\\n\\nเลือก .img.gz แทนได้ แต่ยังต้องอ่านและตรวจทุก Sector")
+                    .setNegativeButton("ยกเลิก", null)
+                    .setPositiveButton("เลือกโหมดบีบอัด") { _, _ -> modeSpinner.setSelection(1) }
+                    .show()
+                return
+            }
+        }
         AlertDialog.Builder(this)
             .setTitle(if (compressed) "ยืนยันสร้าง Image แบบบีบอัด" else "ยืนยันสร้าง Full Raw Image")
             .setMessage(
@@ -264,7 +284,7 @@ class BackupActivity : Activity() {
             .setNegativeButton("ยกเลิก", null)
             .setPositiveButton("เลือกตำแหน่งบันทึก") { _, _ ->
                 pendingCompressed = compressed
-                val name = "flash_backup_" +
+                val name = "arc_usb_full_backup_" +
                     SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date()) +
                     (if (compressed) ".img.gz" else ".img")
                 val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
