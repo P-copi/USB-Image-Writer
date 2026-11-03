@@ -98,6 +98,13 @@ object ImageWriter {
         // compete for the interface and recovery may never succeed until replugged.
         // libaums performs BOT reset/clear-halt on the SAME claimed connection;
         // this outer loop simply retries the same block without closing the session.
+        // Persist the reduced window across file chunks rather than immediately
+        // returning to large transfers after every 256 KiB stream read.
+        var writeWindowBytes = 0
+        var verifyWindowBytes = 0
+        var writeGoodSegments = 0
+        var verifyGoodSegments = 0
+
         // Keep one claimed USB session throughout Write and Verify.
         // Every confirmed segment has an aligned size and an exact LBA.
         // On SCSI error retry only the failed range; never skip a sector.
@@ -110,9 +117,10 @@ object ImageWriter {
         ) {
             val deviceBlockSize = ensureRaw().blockSize
             val normalWindow = alignedSize(PREFERRED_TRANSFER_BYTES, deviceBlockSize)
-            var window = normalWindow
+            var window = (if (stage == Stage.WRITE) writeWindowBytes else verifyWindowBytes)
+                .takeIf { it > 0 } ?: normalWindow
             var completed = 0
-            var consecutiveGood = 0
+            var consecutiveGood = if (stage == Stage.WRITE) writeGoodSegments else verifyGoodSegments
 
             while (completed < count) {
                 checkCancelled(isCancelled)
@@ -185,6 +193,13 @@ object ImageWriter {
                             lastError
                         )
                     }
+                }
+                if (stage == Stage.WRITE) {
+                    writeWindowBytes = window
+                    writeGoodSegments = consecutiveGood
+                } else {
+                    verifyWindowBytes = window
+                    verifyGoodSegments = consecutiveGood
                 }
             }
         }
