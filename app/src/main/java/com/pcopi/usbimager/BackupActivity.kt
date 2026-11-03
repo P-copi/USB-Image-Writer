@@ -58,7 +58,10 @@ class BackupActivity : Activity() {
     private lateinit var refreshButton: android.widget.Button
     private lateinit var inspectButton: android.widget.Button
     private lateinit var modeSpinner: Spinner
-    private var pendingCompressed = true
+    private var pendingCompressed = false
+    private var pendingCompact = true
+    private var compactBytes = 0L
+    private var compactNote = "ยังไม่ได้ตรวจ MBR"
     private lateinit var backupButton: android.widget.Button
     private lateinit var cancelButton: android.widget.Button
 
@@ -135,7 +138,7 @@ class BackupActivity : Activity() {
             setOnClickListener { finish() }
         })
         root.addView(ToolkitUi.text(this, "สร้าง Image", 28f, ToolkitUi.INK, true), ToolkitUi.margin(this, 16))
-        root.addView(ToolkitUi.text(this, "สำรอง Flash Drive ทั้งลูกเป็นไฟล์ .img โดยไม่แก้ไข USB ต้นฉบับ", 14f, ToolkitUi.SUB),
+        root.addView(ToolkitUi.text(this, "สำรอง ARC Boot แบบ Compact หรือ Full Raw โดยอ่าน USB ต้นฉบับอย่างเดียว", 14f, ToolkitUi.SUB),
             ToolkitUi.margin(this, 5, 17))
 
         val deviceCard = ToolkitUi.card(this)
@@ -158,13 +161,14 @@ class BackupActivity : Activity() {
             ToolkitUi.margin(this, 10, 3))
         modeSpinner = Spinner(this)
         modeSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
-            listOf("Full Raw (.img) — สำรอง USB บูตทั้งลูก", "บีบอัด (.img.gz) — ประหยัดพื้นที่"))
+            listOf("ARC Boot Compact (.img) — แนะนำ", "Full Raw (.img) — ทั้ง USB", "บีบอัดทั้ง USB (.img.gz)"))
         backupCard.addView(modeSpinner)
         backupCard.addView(ToolkitUi.text(
             this,
-            "แนะนำ Full Raw (.img) สำหรับสำรอง Arc Loader 4.2.2 ที่ตั้งค่าแล้ว: เก็บ MBR, " +
-            "พาร์ทิชันและทุก Sector ครบ ไฟล์มีขนาดเท่า USB จริง " +
-            "โหมด .img.gz เก็บข้อมูลเหมือนกันแบบไม่สูญเสีย แต่ไม่ช่วยลดขนาด USB ที่จะเขียนกลับ",
+            "ARC Boot Compact อ่านตั้งแต่ LBA 0 ถึงท้าย ARC3 โดยตรวจ MBR/FAT32/EXT2/EXT4 ก่อน " +
+            "เก็บข้อมูลบูตและการตั้งค่าทั้งหมดในพาร์ทิชันเดิม แต่ไม่รวมพื้นที่นอกพาร์ทิชัน " +
+            "สำหรับ USB Arc 4.2.2 ที่ตรวจแล้วคาดว่าขนาดประมาณ 3.88 GB " +
+            "และต้อง Verify พร้อมทดสอบบูตจาก USB สำรองจริง",
             13f, ToolkitUi.SUB
         ), ToolkitUi.margin(this, 8, 12))
         backupButton = ToolkitUi.button(this, "สร้าง Image จาก Flash Drive", ToolkitUi.GREEN) { confirmBackup() }
@@ -205,6 +209,8 @@ class BackupActivity : Activity() {
                 selected = devices.getOrNull(position)
                 capacity = 0
                 blockSize = 0
+                compactBytes = 0L
+                compactNote = "ยังไม่ได้ตรวจ MBR"
                 details.text = if (selected == null) "ไม่พบ USB" else "เลือกแล้ว • โปรดกดตรวจสอบ USB"
             }
             override fun onNothingSelected(parent: AdapterView<*>?) = Unit
@@ -225,11 +231,20 @@ class BackupActivity : Activity() {
                         it.init()
                         val size = it.capacityBytes
                         val block = it.blockSize
+                        // The compact gate is read-only and does not scan outside
+                        // the ARC partitions, including any damaged tail sectors.
+                        val plan = runCatching { ArcBootImagePlanner.inspect(it) }
                         runOnUiThread {
                             capacity = size
                             blockSize = block
+                            compactBytes = plan.getOrNull()?.imageBytes ?: 0L
+                            compactNote = plan.exceptionOrNull()?.message ?: ""
                             details.text = "ความจุ " + FormatUtils.bytes(size) + " • Block " + block + " B\n" +
-                                "Full Image จะมีขนาดประมาณ " + FormatUtils.bytes(size)
+                                "Full Raw: " + FormatUtils.bytes(size) + "\n" +
+                                (if (compactBytes > 0L)
+                                    "ARC Boot Compact: " + FormatUtils.bytes(compactBytes) +
+                                    " • สิ้นสุด LBA " + plan.getOrThrow().lastLba
+                                 else "ARC Boot Compact: BLOCKED • " + compactNote)
                             busy = false
                             status.text = "พร้อมสร้าง Image"
                             updateButtons()
@@ -250,41 +265,51 @@ class BackupActivity : Activity() {
 
     private fun confirmBackup() {
         if (locked()) return
-        if (selected == null || capacity <= 0) return toast("กรุณาตรวจสอบ Flash Drive ก่อน")
-        val compressed = modeSpinner.selectedItemPosition == 1
+        if (selected == null || capacity <= 0L) return toast("กรุณาตรวจสอบ Flash Drive ก่อน")
+        val mode = modeSpinner.selectedItemPosition
+        val compact = mode == 0
+        val compressed = mode == 2
+        if (compact && compactBytes <= 0L) {
+            AlertDialog.Builder(this)
+                .setTitle("ARC Boot Compact ยังไม่พร้อม")
+                .setMessage("ต้องตรวจสอบโครงสร้าง ARC ก่อนเริ่มสำรอง\\n" + compactNote)
+                .setPositiveButton("ตกลง", null).show()
+            return
+        }
+        val neededBytes = if (compact) compactBytes else capacity
         if (!compressed) {
-            // Full raw needs room for EVERY sector, not merely used filesystem space.
             @Suppress("DEPRECATION")
             val free = runCatching {
                 android.os.StatFs(android.os.Environment.getExternalStorageDirectory().absolutePath).availableBytes
             }.getOrDefault(-1L)
             val reserve = 512L * 1024L * 1024L
-            if (free >= 0L && (capacity > free || free - capacity < reserve)) {
+            if (free >= 0L && (neededBytes > free || free - neededBytes < reserve)) {
                 AlertDialog.Builder(this)
-                    .setTitle("พื้นที่ในมือถือไม่พอสำหรับ Full Image")
-                    .setMessage("USB ต้นฉบับ: " + FormatUtils.bytes(capacity) +
-                        "\nพื้นที่ว่างมือถือ: " + FormatUtils.bytes(free) +
-                        "\nต้องเผื่อพื้นที่เพิ่ม 512 MiB เพื่อไม่ให้พื้นที่มือถือเต็ม" +
-                        "\n\nเลือก .img.gz แทนได้ แต่ยังต้องอ่านและตรวจทุก Sector")
-                    .setNegativeButton("ยกเลิก", null)
-                    .setPositiveButton("เลือกโหมดบีบอัด") { _, _ -> modeSpinner.setSelection(1) }
-                    .show()
+                    .setTitle("พื้นที่ในมือถือไม่เพียงพอ")
+                    .setMessage("ต้องบันทึก: " + FormatUtils.bytes(neededBytes) +
+                        "\\nพื้นที่ว่างมือถือ: " + FormatUtils.bytes(free) +
+                        "\\nต้องเหลือพื้นที่สำรองอย่างน้อย 512 MiB")
+                    .setPositiveButton("ตกลง", null).show()
                 return
             }
         }
+        val modeInfo = when {
+            compact -> "\\nARC Compact: " + FormatUtils.bytes(neededBytes) +
+                "\\nคัดลอก LBA 0 ถึงท้าย ARC3 เท่านั้น รวม MBR และข้อมูลบูตทั้งหมด" +
+                "\\nไม่ใช่ Full Raw 28.67 GB และยังต้องทดสอบบูตจริง"
+            compressed -> "\\nFull Raw GZIP: ต้องอ่านทุก Sector ของ USB รวมพื้นที่ที่อาจอ่านไม่ได้"
+            else -> "\\nFull Raw IMG: ต้องอ่านทุก Sector ของ USB รวมพื้นที่ที่อาจอ่านไม่ได้"
+        }
         AlertDialog.Builder(this)
-            .setTitle(if (compressed) "ยืนยันสร้าง Image แบบบีบอัด" else "ยืนยันสร้าง Full Raw Image")
-            .setMessage(
-                "USB ต้นฉบับ: " + FormatUtils.bytes(capacity) +
-                    (if (compressed) "\nไฟล์ .img.gz บีบอัดข้อมูลทุก Sector แบบไม่สูญเสีย • ขนาดจริงขึ้นกับข้อมูลบน USB\n\n"
-                        else "\nไฟล์ .img จะมีขนาดเท่าความจุ USB ทั้งลูก\n\n") +
-                    "เลือกหน่วยความจำภายในมือถือที่ว่างเพียงพอ ห้ามเก็บไฟล์ใน USB ต้นฉบับ\n\n" +
-                    "งานนี้อ่านต้นฉบับอย่างเดียว ไม่ฟอร์แมต"
-            )
+            .setTitle(if (compact) "ยืนยัน ARC Boot Compact" else "ยืนยันสำรอง USB ทั้งลูก")
+            .setMessage("USB ต้นฉบับ: " + FormatUtils.bytes(capacity) +
+                modeInfo + "\\n\\nเลือกหน่วยความจำภายในมือถือ ห้ามเลือก USB ต้นฉบับเป็นที่บันทึก" +
+                "\\nUSB ต้นฉบับเป็น Read-only สำหรับงานนี้")
             .setNegativeButton("ยกเลิก", null)
             .setPositiveButton("เลือกตำแหน่งบันทึก") { _, _ ->
+                pendingCompact = compact
                 pendingCompressed = compressed
-                val name = "arc_usb_full_backup_" +
+                val name = (if (compact) "arc_422_boot_compact_" else "arc_usb_full_backup_") +
                     SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date()) +
                     (if (compressed) ".img.gz" else ".img")
                 val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
@@ -314,7 +339,7 @@ class BackupActivity : Activity() {
             )
         }
         val device = selected ?: return
-        withUsbPermission(device) { startBackup(uri, device, pendingCompressed) }
+        withUsbPermission(device) { startBackup(uri, device, pendingCompressed, pendingCompact) }
     }
 
     private fun isRemovableOutput(uri: Uri): Boolean {
@@ -323,7 +348,7 @@ class BackupActivity : Activity() {
         return !(documentId.startsWith("primary:", true) || documentId.startsWith("home:", true))
     }
 
-    private fun startBackup(uri: Uri, device: UsbDevice, compressed: Boolean) {
+    private fun startBackup(uri: Uri, device: UsbDevice, compressed: Boolean, compact: Boolean) {
         if (locked()) return
         startRequested = true
         status.text = "กำลังเริ่มบริการสำรองข้อมูล..."
@@ -334,6 +359,7 @@ class BackupActivity : Activity() {
             putExtra(UsbBackupService.EXTRA_OUTPUT_URI, uri.toString())
             putExtra(UsbBackupService.EXTRA_USB, device)
             putExtra(UsbBackupService.EXTRA_COMPRESSED, compressed)
+            putExtra(UsbBackupService.EXTRA_COMPACT, compact)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         }
         try {
@@ -381,8 +407,9 @@ class BackupActivity : Activity() {
                 progress.progress = 1000
                 progressText.text = "100% • " + FormatUtils.bytes(it.bytes)
                 result.text = "บันทึก Image สำเร็จ" +
-                    (if (it.compressed) " • .img.gz" else " • .img") +
-                    "\nข้อมูลต้นฉบับ: " + FormatUtils.bytes(it.bytes) +
+                    (if (it.compact) " • ARC Boot Compact" else if (it.compressed) " • Full .img.gz" else " • Full .img") +
+                    "\nความจุ Flash Drive ต้นฉบับ: " + FormatUtils.bytes(it.physicalUsbBytes) +
+                    "\nขนาดข้อมูลที่อ่านสำรอง: " + FormatUtils.bytes(it.bytes) +
                     "\nขนาดไฟล์ที่บันทึก: " +
                     (if (it.storedBytes >= 0L) FormatUtils.bytes(it.storedBytes) else "โปรดตรวจใน My Files") +
                     "\n\nSHA-256 (ข้อมูลหลังคลายบีบอัด)\n" + it.sha256 +
