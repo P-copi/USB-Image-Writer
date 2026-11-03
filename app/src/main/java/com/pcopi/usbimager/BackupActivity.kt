@@ -386,7 +386,8 @@ class BackupActivity : Activity() {
                     "\nขนาดไฟล์ที่บันทึก: " +
                     (if (it.storedBytes >= 0L) FormatUtils.bytes(it.storedBytes) else "โปรดตรวจใน My Files") +
                     "\n\nSHA-256 (ข้อมูลหลังคลายบีบอัด)\n" + it.sha256 +
-                    "\n\nเวลาอ่าน USB: " + FormatUtils.duration(it.readMillis) +
+                    "\n\nจำนวนครั้งที่กู้การอ่านสำเร็จ: " + it.recoveredReads +
+                    "\nเวลาอ่าน USB: " + FormatUtils.duration(it.readMillis) +
                     "\nเวลาตรวจสอบไฟล์: " + FormatUtils.duration(it.verifyMillis) +
                     "\n\nVerify ผ่าน: ไฟล์ที่บันทึกตรงกับข้อมูลที่อ่านจาก USB"
             }
