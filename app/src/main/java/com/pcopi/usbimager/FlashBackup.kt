@@ -129,6 +129,14 @@ object FlashBackup {
                         if (col >= 0 && !cursor.isNull(col)) cursor.getLong(col) else -1L
                     } else -1L
                 } ?: -1L
+                // Some Android document providers report a final byte count. For
+                // full raw IMG it must agree with the physical USB capacity.
+                // The full SHA-256 read-back above remains the primary integrity test.
+                if (!compressed && savedBytes >= 0L && savedBytes != total)
+                    throw IOException("Full IMG ขนาดไม่ตรงกับ USB: ไฟล์ " +
+                        FormatUtils.bytes(savedBytes) + " / USB " + FormatUtils.bytes(total))
+                if (compressed && savedBytes == 0L)
+                    throw IOException("ไฟล์ .img.gz ที่บันทึกมีขนาดเป็นศูนย์")
                 Result(total, originalHash, readMillis, nanosMillis(verifyStart),
                     targetUri, savedBytes, compressed)
             }
