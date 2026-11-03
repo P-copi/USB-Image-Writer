@@ -16,7 +16,7 @@ import java.security.MessageDigest
 import kotlin.math.min
 
 /**
- * Full raw USB -> IMG. No writes to source USB, no bad-sector substitution.
+ * Full raw or restricted ARC compact USB -> IMG. No writes to source USB, no bad-sector substitution.
  * If USB read fails, adaptively retry smaller *aligned* read requests on the
  * SAME claimed USB session. A partially read chunk is never written to output.
  */
@@ -37,7 +37,9 @@ object FlashBackup {
         val outputUri: Uri,
         val storedBytes: Long,
         val compressed: Boolean,
-        val recoveredReads: Int
+        val recoveredReads: Int,
+        val compact: Boolean,
+        val physicalUsbBytes: Long
     )
 
     @Throws(Exception::class)
@@ -47,6 +49,7 @@ object FlashBackup {
         manager: UsbManager,
         device: UsbDevice,
         compressed: Boolean,
+        compact: Boolean,
         onProgress: (Progress) -> Unit,
         isCancelled: () -> Boolean
     ): Result {
@@ -54,7 +57,11 @@ object FlashBackup {
         try {
             val result = UsbRawDevice.open(manager, device).use { usb ->
                 usb.init()
-                val total = usb.capacityBytes
+                val physicalBytes = usb.capacityBytes
+                if (compact && compressed) throw IOException("ARC Compact รองรับ .img ไม่บีบอัดเท่านั้น")
+                // Validate all MBR partitions before opening the output file.
+                // Compact mode never reads the unused tail outside ARC3.
+                val total = if (compact) ArcBootImagePlanner.inspect(usb).imageBytes else physicalBytes
                 val blockSize = usb.blockSize
                 if (total <= 0L || blockSize <= 0 || total % blockSize != 0L)
                     throw IOException("ความจุหรือ Block Size ของ USB ไม่ถูกต้อง")
@@ -135,12 +142,13 @@ object FlashBackup {
                 // full raw IMG it must agree with the physical USB capacity.
                 // The full SHA-256 read-back above remains the primary integrity test.
                 if (!compressed && savedBytes >= 0L && savedBytes != total)
-                    throw IOException("Full IMG ขนาดไม่ตรงกับ USB: ไฟล์ " +
+                    throw IOException("IMG ขนาดไม่ตรงกับที่สำรอง: ไฟล์ " +
                         FormatUtils.bytes(savedBytes) + " / USB " + FormatUtils.bytes(total))
                 if (compressed && savedBytes == 0L)
                     throw IOException("ไฟล์ .img.gz ที่บันทึกมีขนาดเป็นศูนย์")
                 Result(total, originalHash, readMillis, nanosMillis(verifyStart),
-                    targetUri, savedBytes, compressed, reader.recoveredReads)
+                    targetUri, savedBytes, compressed, reader.recoveredReads,
+                    compact, physicalBytes)
             }
             completed = true
             return result
