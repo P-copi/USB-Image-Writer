@@ -37,6 +37,7 @@ class UsbBackupService : Service() {
         const val EXTRA_OUTPUT_URI = "backup_output_uri"
         const val EXTRA_USB = "backup_usb"
         const val EXTRA_COMPRESSED = "backup_compressed"
+        const val EXTRA_COMPACT = "backup_arc_compact"
         const val PREFS = "usb_backup_state"
         const val PREF_ACTIVE = "active"
         const val PREF_URI = "uri"
@@ -106,6 +107,11 @@ class UsbBackupService : Service() {
             return START_NOT_STICKY
         }
         val compressed = intent.getBooleanExtra(EXTRA_COMPRESSED, false)
+        val compact = intent.getBooleanExtra(EXTRA_COMPACT, false)
+        if (compact && compressed) {
+            fail("ARC Compact ต้องบันทึกเป็น .img เท่านั้น")
+            return START_NOT_STICKY
+        }
         usbId = device.deviceId
         cancelled.set(false)
         snapshot = Snapshot(running = true, stage = "กำลังอ่าน Flash Drive...")
@@ -120,7 +126,7 @@ class UsbBackupService : Service() {
             runCatching { Process.setThreadPriority(Process.THREAD_PRIORITY_FOREGROUND) }
             try {
                 val result = FlashBackup.createImage(
-                    contentResolver, uri, manager, device, compressed,
+                    contentResolver, uri, manager, device, compressed, compact,
                     onProgress = { updateProgress(it) },
                     isCancelled = { cancelled.get() }
                 )
