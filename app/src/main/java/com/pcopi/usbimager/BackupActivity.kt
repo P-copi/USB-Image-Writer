@@ -265,7 +265,7 @@ class BackupActivity : Activity() {
                     .setMessage("USB ต้นฉบับ: " + FormatUtils.bytes(capacity) +
                         "\nพื้นที่ว่างมือถือ: " + FormatUtils.bytes(free) +
                         "\nต้องเผื่อพื้นที่เพิ่ม 512 MiB เพื่อไม่ให้พื้นที่มือถือเต็ม" +
-                        "\n\\nเลือก .img.gz แทนได้ แต่ยังต้องอ่านและตรวจทุก Sector")
+                        "\n\nเลือก .img.gz แทนได้ แต่ยังต้องอ่านและตรวจทุก Sector")
                     .setNegativeButton("ยกเลิก", null)
                     .setPositiveButton("เลือกโหมดบีบอัด") { _, _ -> modeSpinner.setSelection(1) }
                     .show()
