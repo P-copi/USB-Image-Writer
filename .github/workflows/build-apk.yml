@@ -3,7 +3,7 @@ name: Build APK
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "feature/v028-deep-inspector", "feature/v0215-smart-compact-backup", "feature/v0216-ext4-metadata-audit", "feature/v0217-ext4-shrink-sandbox" ]
+    branches: [ "main", "feature/v028-deep-inspector", "feature/v0215-smart-compact-backup", "feature/v0216-ext4-metadata-audit", "feature/v0217-ext4-shrink-sandbox", "feature/v0218-bundled-e2fsprogs" ]
 
 jobs:
   build:
@@ -56,6 +56,55 @@ jobs:
           ls -lh app/libs/libaums-patched.aar
           rm -rf _libaums
 
+      # e2fsprogs is an open-source EXT filesystem toolchain. Build from source
+      # and package Android ARM64 PIE executables in the extracted native lib dir.
+      # See OFFLINE_SHRINK_V0218.md for license/source and security constraints.
+      - name: Checkout e2fsprogs v1.47.2 source
+        uses: actions/checkout@v5
+        with:
+          repository: tytso/e2fsprogs
+          ref: v1.47.2
+          path: _e2fsprogs
+
+      - name: Cross-compile e2fsprogs with Android NDK (arm64-v8a)
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOOLCHAIN="$ANDROID_HOME/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64"
+          export CC="$TOOLCHAIN/bin/aarch64-linux-android26-clang"
+          export AR="$TOOLCHAIN/bin/llvm-ar"
+          export RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
+          export STRIP="$TOOLCHAIN/bin/llvm-strip"
+          export CFLAGS="-O2 -fPIE"
+          export LDFLAGS="-pie"
+          mkdir -p _e2fsprogs-build
+          cd _e2fsprogs-build
+          ../_e2fsprogs/configure --host=aarch64-linux-android \
+            --disable-nls --disable-uuidd --disable-fuse2fs \
+            --disable-backtrace --disable-debugfs --disable-imager \
+            --disable-defrag --disable-rpath --enable-libuuid --enable-libblkid
+          make -j4
+          cd ..
+          OUT="app/src/main/jniLibs/arm64-v8a"
+          mkdir -p "$OUT"
+          cp _e2fsprogs-build/misc/mke2fs "$OUT/libmke2fs.so"
+          cp _e2fsprogs-build/e2fsck/e2fsck "$OUT/libe2fsck.so"
+          cp _e2fsprogs-build/resize/resize2fs "$OUT/libresize2fs.so"
+          chmod 755 "$OUT/"*.so
+          for f in "$OUT/"*.so; do
+            echo "CHECK NDK executable: $f"
+            file "$f"
+            "$TOOLCHAIN/bin/llvm-readelf" -h "$f" | grep -E "Class:|Machine:|Type:"
+            "$TOOLCHAIN/bin/llvm-readelf" -d "$f" | grep NEEDED || true
+            if ! "$TOOLCHAIN/bin/llvm-readelf" -h "$f" | grep -q "DYN (Position-Independent Executable file)"; then
+              echo "::error::$f is not a PIE ELF"
+              exit 1
+            fi
+          done
+          sha256sum "$OUT/"*.so
+          # Record the exact source commit in workflow logs.
+          git -C _e2fsprogs rev-parse HEAD
+
       - name: Set up JDK 17 for app
         uses: actions/setup-java@v5
         with:
@@ -88,7 +137,7 @@ jobs:
         if: env.USB_SIGNING_PASSPHRASE != ''
         uses: actions/upload-artifact@v4
         with:
-          name: USB-Image-Writer-v0.2.17-PREVIEW-SIGNED
+          name: USB-Image-Writer-v0.2.18-PREVIEW-SIGNED
           path: app/build/outputs/apk/release/app-release.apk
           retention-days: 14
 
@@ -110,6 +159,6 @@ jobs:
         if: env.USB_SIGNING_PASSPHRASE == ''
         uses: actions/upload-artifact@v4
         with:
-          name: USB-Image-Writer-v0.2.17-PREVIEW-DEBUG-UNSIGNED-IDENTITY
+          name: USB-Image-Writer-v0.2.18-PREVIEW-DEBUG-UNSIGNED-IDENTITY
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 3
