@@ -35,6 +35,7 @@ class SmartRebuildActivity : Activity() {
     private lateinit var state:TextView
     private lateinit var result:TextView
     private lateinit var checkButton:Button
+    private lateinit var quickButton:Button
     private lateinit var copyButton:Button
     private var devices:List<UsbDevice> = emptyList()
     private var busy=false
@@ -97,8 +98,12 @@ class SmartRebuildActivity : Activity() {
         root.addView(cards)
         val controls=ToolkitUi.card(this)
         controls.addView(ToolkitUi.button(this,"รีเฟรช Flash Drive",ToolkitUi.BLUE){refresh()})
-        checkButton=ToolkitUi.button(this,"ตรวจทั้งหมดครั้งเดียว (FAT / EXT / Journal / MBR)",
-            ToolkitUi.GREEN){requestInspection()}
+        quickButton=ToolkitUi.button(this,
+            "Smart Compact V1 • ตรวจความเป็นไปได้อย่างรวดเร็ว (อ่านอย่างเดียว)",
+            ToolkitUi.BLUE){requestInspection(false)}
+        controls.addView(quickButton,ToolkitUi.margin(this,8))
+        checkButton=ToolkitUi.button(this,"ตรวจทั้งหมด (รวมไฟล์/โฟลเดอร์ใน USB)",
+            ToolkitUi.GREEN){requestInspection(true)}
         controls.addView(checkButton,ToolkitUi.margin(this,8))
         state=ToolkitUi.text(this,"รอการตรวจสอบ",14f,ToolkitUi.SUB)
         controls.addView(state,ToolkitUi.margin(this,9))
@@ -117,7 +122,8 @@ class SmartRebuildActivity : Activity() {
         val safety=ToolkitUi.card(this)
         safety.addView(ToolkitUi.text(this,"ยังไม่เขียนลง USB",16f,ToolkitUi.INK,true))
         safety.addView(ToolkitUi.text(this,
-            "รุ่นนี้เป็นขั้นวิเคราะห์ ไม่ได้ย่อ EXT4 หรือสร้าง USB 14 GB ทันที\n"+
+            "Smart Compact V1 ตรวจได้เร็วขึ้นโดยไม่เดินสำรวจทุกโฟลเดอร์\n"+
+                "รุ่นนี้เป็นขั้นวิเคราะห์ ไม่ได้ย่อ EXT4 หรือสร้าง USB 8 GB ทันที\n"+
                 "พื้นที่จัดสรรน้อยไม่ได้แปลว่าสามารถตัดส่วนท้ายดิสก์ได้\n"+
                 "ถ้า EXT Journal ไม่ Clean ต้องตรวจและซ่อมบนสำเนา ไม่ใช่ต้นฉบับ",
             13f,ToolkitUi.SUB),ToolkitUi.margin(this,8))
@@ -150,7 +156,7 @@ class SmartRebuildActivity : Activity() {
         usb.requestPermission(device,pending)
     }
 
-    private fun requestInspection(){
+    private fun requestInspection(deep:Boolean){
         if(busy || UsbBackupService.snapshot.running || UsbOperationService.snapshot.running) {
             state.text="มีงาน USB อื่นทำงานอยู่ กรุณารอให้เสร็จก่อน"
             return
@@ -165,14 +171,15 @@ class SmartRebuildActivity : Activity() {
             return
         }
         requestPermission(src) {
-            if(dest!=null)requestPermission(dest){inspect(src,dest)}
-            else inspect(src,null)
+            if(dest!=null)requestPermission(dest){inspect(src,dest,deep)}
+            else inspect(src,null,deep)
         }
     }
 
-    private fun inspect(src:UsbDevice,dest:UsbDevice?) {
+    private fun inspect(src:UsbDevice,dest:UsbDevice?,deep:Boolean) {
         busy=true
         checkButton.isEnabled=false
+        quickButton.isEnabled=false
         source.isEnabled=false
         target.isEnabled=false
         copyButton.isEnabled=false
@@ -191,7 +198,11 @@ class SmartRebuildActivity : Activity() {
                     onProgress={message -> runOnUiThread{if(!isFinishing)state.text=message}},
                     cancelled={Thread.currentThread().isInterrupted}
                 )
-                val text=formatReport(data)+formatRebuildGate(data)+inspectBootFiles(src)
+                val text = formatReport(data) +
+                    LegacyCompactPlanner.format(data) +
+                    (if (deep) formatRebuildGate(data) + inspectBootFiles(src) else
+                        "\n=== ตรวจด่วน ===\n" +
+                        "ไม่ได้สแกนรายการไฟล์เพื่อประหยัดเวลา • ไม่ใช่การยืนยันว่าไฟล์ทั้งหมดอ่านได้\n")
                 runOnUiThread {
                     reportText=text
                     result.text=text
@@ -207,6 +218,7 @@ class SmartRebuildActivity : Activity() {
                 runOnUiThread {
                     busy=false
                     checkButton.isEnabled=true
+                    quickButton.isEnabled=true
                     source.isEnabled=true
                     target.isEnabled=true
                     window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
