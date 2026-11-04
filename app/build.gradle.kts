@@ -11,8 +11,8 @@ android {
         applicationId = "com.pcopi.usbimager"
         minSdk = 26
         targetSdk = 35
-        versionCode = 28
-        versionName = "0.2.18-preview"
+        versionCode = 29
+        versionName = "0.2.19-preview"
     }
 
 
@@ -49,6 +49,7 @@ android {
             keepDebugSymbols.add("**/libmke2fs.so")
             keepDebugSymbols.add("**/libe2fsck.so")
             keepDebugSymbols.add("**/libresize2fs.so")
+            keepDebugSymbols.add("**/libdebugfs.so")
         }
     }
 
