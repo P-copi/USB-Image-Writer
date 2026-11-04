@@ -100,17 +100,21 @@ object Arc3SparseMirror {
                     (u8(data,at+2).toLong() shl 16) or (u8(data,at+3).toLong() shl 24)
                 // No guessed/padded bytes: all read failures abort this copy.
                 fun readAt(offset: Long, size: Int): ByteArray {
-                    if (offset < 0 || size <= 0 || offset > partitionBytes - size ||
-                        offset % 512L != 0L || size % 512 != 0)
+                    if (offset < 0L || size <= 0 || offset > partitionBytes - size)
                         throw IOException("อ่านข้อมูลเกินขอบเขต ARC3")
-                    val output = ByteArray(size)
+                    // EXT4 group descriptors are often 64 bytes: align the
+                    // physical SCSI read to USB 512-byte sectors, then slice.
+                    val firstSector = offset/512L
+                    val within = (offset%512L).toInt()
+                    val paddedSize = ((within+size+511)/512)*512
+                    val raw = ByteArray(paddedSize)
                     var last: Exception? = null
                     for (attempt in 1..2) {
                         if (cancelled()) throw IOException("ยกเลิกการสร้างสำเนา")
                         try {
-                            usb.blockDevice.read(startLba + offset/512L,
-                                ByteBuffer.wrap(output))
-                            return output
+                            usb.blockDevice.read(startLba + firstSector,
+                                ByteBuffer.wrap(raw))
+                            return raw.copyOfRange(within,within+size)
                         } catch (e: Exception) {
                             last = e
                             if (attempt == 1) Thread.sleep(150)
@@ -118,7 +122,7 @@ object Arc3SparseMirror {
                     }
                     // Explicit error for any failed sector, including known bad source cells.
                     throw IOException("USB READ ERROR ที่ ARC3 offset=$offset / LBA="+
-                        (startLba + offset/512L),last)
+                        (startLba + firstSector),last)
                 }
                 val sb = readAt(1024L,1024)
                 if (u16(sb,0x38) != 0xef53) throw IOException("Superblock signature ไม่ถูกต้อง")
