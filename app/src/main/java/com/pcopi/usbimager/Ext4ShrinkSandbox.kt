@@ -3,6 +3,8 @@ package com.pcopi.usbimager
 import android.content.Context
 import android.system.Os
 import java.io.ByteArrayOutputStream
+import java.io.BufferedOutputStream
+import java.security.MessageDigest
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
@@ -10,7 +12,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
 /**
- * v0.2.17: test the real ext4 shrink TOOLCHAIN using a temporary synthetic image
+ * v0.2.19: test real EXT4 shrink with SHA-256 file data before and after
  * stored in app-private storage. Never passes a USB node or user file to a process.
  * Never executes filesystem repair or resize on the original ARC flash drive.
  *
@@ -20,6 +22,7 @@ object Ext4ShrinkSandbox {
     private const val TEST_BYTES = 96L * 1024L * 1024L
     private const val RESIZED_4K_BLOCKS = 8192 // 32 MiB
     private const val LIMIT_OUTPUT = 2600
+    private const val PAYLOAD_BYTES = 4 * 1024 * 1024
     private const val STEP_TIMEOUT_SECONDS = 45L
 
     data class Report(val success: Boolean, val text: String)
@@ -29,7 +32,7 @@ object Ext4ShrinkSandbox {
     /**
      * Android 10+ prohibits executing files from writable app data directories.
      * The signed APK carries NDK-built PIE tools in its extracted native library
-     * directory as libmke2fs.so, libe2fsck.so and libresize2fs.so.
+     * directory as libmke2fs.so, libe2fsck.so, libresize2fs.so, and libdebugfs.so.
      * They are executed as standalone files (not loaded with System.loadLibrary).
      */
     private fun locate(context: Context, name: String): File? {
@@ -90,10 +93,10 @@ object Ext4ShrinkSandbox {
         progress: (String) -> Unit,
         cancelled: () -> Boolean = { false }
     ): Report {
-        val out = StringBuilder("=== EXT4 Offline Shrink Sandbox • v0.2.18 ===\n")
+        val out = StringBuilder("=== EXT4 File Integrity Shrink • v0.2.19 ===\n")
         out.append("ทดสอบกับ EXT4 สร้างใหม่ในพื้นที่ส่วนตัวของแอปเท่านั้น\n")
         out.append("USB ต้นฉบับ / USB ปลายทาง: ไม่ถูกเปิด ไม่ถูกแก้ไข\n")
-        val names = listOf("mke2fs", "e2fsck", "resize2fs")
+        val names = listOf("mke2fs", "e2fsck", "resize2fs", "debugfs")
         val commands = names.map { it to locate(context, it) }.toMap()
         for (name in names) {
             val bin = commands[name]
@@ -109,10 +112,13 @@ object Ext4ShrinkSandbox {
             return Report(false, out.toString())
         }
 
-        val baseDir = File(context.filesDir, "ext4-sandbox-v0217")
+        val baseDir = File(context.filesDir, "ext4-sandbox-v0219")
         if (!baseDir.exists() && !baseDir.mkdirs())
             return Report(false, out.append("ไม่สามารถสร้างพื้นที่ทดสอบของแอป\n").toString())
         val testFile = File(baseDir, "sandbox-test-only.ext4")
+        val payload = File(baseDir, "known-data-only.bin")
+        val before = File(baseDir, "extracted-before.bin")
+        val after = File(baseDir, "extracted-after.bin")
         // A stale sandbox file is never reused for arbitrary external input.
         runCatching { testFile.delete() }
         if (testFile.exists())
@@ -153,27 +159,75 @@ object Ext4ShrinkSandbox {
             }
 
             // All commands below target the app-created disposable image only.
-            step("1/4 สร้าง EXT4 จำลอง", "mke2fs",
+            step("1/8 สร้าง EXT4 จำลอง", "mke2fs",
                 listOf("-q", "-F", "-t", "ext4", "-b", "4096",
                     "-O", "64bit,metadata_csum,flex_bg", testFile.absolutePath))
-            step("2/4 ตรวจ e2fsck แบบไม่แก้ไข", "e2fsck",
+
+            // A known 4 MiB file is written INTO the simulated EXT4 image.
+            // Testing empty filesystems alone does not establish file integrity.
+            BufferedOutputStream(payload.outputStream(), 65536).use { output ->
+                val data = ByteArray(65536)
+                repeat(PAYLOAD_BYTES / data.size) { block ->
+                    if (cancelled()) throw IOException("ยกเลิกการตรวจ")
+                    for (i in data.indices)
+                        data[i] = ((i * 31 + block * 17 + (i ushr 8)) and 255).toByte()
+                    output.write(data)
+                }
+            }
+            fun sha(file: File): String {
+                val digest=MessageDigest.getInstance("SHA-256")
+                file.inputStream().buffered().use { input ->
+                    val buffer=ByteArray(65536)
+                    while (true) {
+                        val read=input.read(buffer)
+                        if (read < 0) break
+                        if (cancelled()) throw IOException("ยกเลิกการตรวจ")
+                        digest.update(buffer,0,read)
+                    }
+                }
+                return digest.digest().joinToString("") { "%02x".format(it) }
+            }
+            val expectedHash=sha(payload)
+            out.append("ไฟล์ทดสอบข้อมูลจริง: 4.00 MiB • SHA-256 ")
+                .append(expectedHash).append('\n')
+            step("2/8 ใส่ไฟล์ทดสอบใน EXT4", "debugfs",
+                listOf("-w", "-R", "write " + payload.absolutePath + " /integrity.bin",
+                    testFile.absolutePath))
+            step("3/8 ดึงไฟล์ออกมาก่อนย่อ", "debugfs",
+                listOf("-R", "dump /integrity.bin " + before.absolutePath,
+                    testFile.absolutePath))
+            if (!before.isFile || before.length() != PAYLOAD_BYTES.toLong() ||
+                sha(before) != expectedHash) throw IOException("ข้อมูลก่อนย่อไม่ตรง SHA-256")
+            out.append("SHA-256 ก่อนย่อ: MATCH\n")
+            step("4/8 ตรวจ e2fsck ก่อนย่อ", "e2fsck",
                 listOf("-f", "-n", testFile.absolutePath))
-            step("3/4 ย่อจริงบนไฟล์จำลองเป็น 32 MiB", "resize2fs",
+            step("5/8 ประเมินขนาดขั้นต่ำด้วย resize2fs -P", "resize2fs",
+                listOf("-P", testFile.absolutePath))
+            step("6/8 ย่อจริงบนไฟล์จำลองเป็น 32 MiB", "resize2fs",
                 listOf(testFile.absolutePath, RESIZED_4K_BLOCKS.toString()))
-            step("4/4 ตรวจ e2fsck หลังย่อ", "e2fsck",
+            step("7/8 ตรวจ e2fsck หลังย่อ", "e2fsck",
                 listOf("-f", "-n", testFile.absolutePath))
-            out.append("SUCCESS: โทรศัพท์เรียกเครื่องมือย่อ EXT4 บนไฟล์จำลองได้\n")
+            step("8/8 ดึงไฟล์เดิมจาก EXT4 หลังย่อ", "debugfs",
+                listOf("-R", "dump /integrity.bin " + after.absolutePath,
+                    testFile.absolutePath))
+            if (!after.isFile || after.length() != PAYLOAD_BYTES.toLong() ||
+                sha(after) != expectedHash) throw IOException("ไฟล์หลังย่อไม่ตรง SHA-256")
+            out.append("SHA-256 หลังย่อ: MATCH • ไฟล์ข้อมูลเดิมครบ 4 MiB\n")
+            out.append("SUCCESS: ย่อ EXT4 จำลองและตรวจข้อมูลไฟล์ SHA-256 ก่อน/หลังผ่าน\n")
             out.append("หมายเหตุ: ไม่ได้ทดสอบ ARC3 28.57 GB และยังไม่ได้สร้าง Compact Image\n")
             out.append("ถัดไปต้องพิสูจน์การสร้างสำเนา ARC3 แบบ Sparse และ Verify บนสำเนาจริง\n")
             return Report(true, out.toString())
         } catch (error: Exception) {
             out.append("BLOCKED: ")
                 .append(error.message ?: error.javaClass.simpleName).append('\n')
-            out.append("หากแอปไม่ได้รับสิทธิ์เรียกเครื่องมือระบบ ต้องใช้ e2fsprogs ที่แพ็กมาเอง\n")
+            out.append("รายงานนี้ใช้ตรวจเครื่องมือใน APK และไฟล์จำลองเท่านั้น\n")
             out.append("ยังไม่อนุญาตให้ย่อ ARC3 หรือสร้าง Compact Image รุ่นเก่า\n")
             return Report(false, out.toString())
         } finally {
             // Remove all sandbox bytes even on cancellation and failure.
+            runCatching { after.delete() }
+            runCatching { before.delete() }
+            runCatching { payload.delete() }
             runCatching { testFile.delete() }
             runCatching { baseDir.delete() }
         }
