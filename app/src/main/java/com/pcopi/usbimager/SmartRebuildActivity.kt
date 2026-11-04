@@ -38,6 +38,9 @@ class SmartRebuildActivity : Activity() {
     private lateinit var quickButton:Button
     private lateinit var crcButton:Button
     private lateinit var sandboxButton:Button
+    private lateinit var sparseButton:Button
+    private lateinit var sparseCancelButton:Button
+    private var sparseTask:java.util.concurrent.Future<*>?=null
     private lateinit var copyButton:Button
     private var devices:List<UsbDevice> = emptyList()
     private var busy=false
@@ -112,6 +115,18 @@ class SmartRebuildActivity : Activity() {
             "v0.2.19 • ทดสอบย่อ EXT4 และตรวจ SHA-256 ของไฟล์ (ไม่แตะ USB)",
             ToolkitUi.AMBER){requestSandbox()}
         controls.addView(sandboxButton,ToolkitUi.margin(this,8))
+        sparseButton=ToolkitUi.button(this,
+            "v0.2.20 • ทำสำเนา ARC3 แบบ Sparse บนมือถือ (ทดลอง)",
+            ToolkitUi.VIOLET){requestSparseMirror()}
+        controls.addView(sparseButton,ToolkitUi.margin(this,8))
+        sparseCancelButton=ToolkitUi.button(this,
+            "ยกเลิกการคัดลอก ARC3 (ลบไฟล์บางส่วน)",
+            ToolkitUi.AMBER){
+                sparseTask?.cancel(true)
+                state.text="ร้องขอยกเลิก ARC3 Sparse Copy แล้ว"
+            }
+        sparseCancelButton.isEnabled=false
+        controls.addView(sparseCancelButton,ToolkitUi.margin(this,8))
         checkButton=ToolkitUi.button(this,"ตรวจทั้งหมด (รวมไฟล์/โฟลเดอร์ใน USB)",
             ToolkitUi.GREEN){requestInspection(true)}
         controls.addView(checkButton,ToolkitUi.margin(this,8))
@@ -135,6 +150,8 @@ class SmartRebuildActivity : Activity() {
             "Smart Compact V1 ตรวจได้เร็วขึ้นโดยไม่เดินสำรวจทุกโฟลเดอร์\n"+
                 "EXT4 CRC32C ตรวจเฉพาะ Metadata ส่วนที่รองรับ ยังไม่ใช่ e2fsck\n"+
                 "v0.2.19 ตรวจข้อมูลไฟล์ SHA-256 ก่อนและหลังย่อในพื้นที่ของแอป\n"+
+                "v0.2.20 สำเนา Sparse แบบทดลอง อ่าน USB ต้นฉบับอย่างเดียว\n"+
+                "สำเนา 28.57 GB แบบ Sparse ใช้พื้นที่จริงน้อยกว่า แต่ไม่ได้ย่อ ARC3\n"+
                 "ยังไม่มีการย่อ ARC3 จริงหรือสร้าง USB 8 GB\n"+
                 "พื้นที่จัดสรรน้อยไม่ได้แปลว่าสามารถตัดส่วนท้ายดิสก์ได้\n"+
                 "ถ้า EXT Journal ไม่ Clean ต้องตรวจและซ่อมบนสำเนา ไม่ใช่ต้นฉบับ",
@@ -166,6 +183,82 @@ class SmartRebuildActivity : Activity() {
             Intent(action).setPackage(packageName),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
         usb.requestPermission(device,pending)
+    }
+
+    private fun requestSparseMirror() {
+        if(busy || UsbBackupService.snapshot.running || UsbOperationService.snapshot.running) {
+            state.text="มีงาน USB อื่นทำงานอยู่ กรุณาลองใหม่"
+            return
+        }
+        val src=devices.getOrNull(source.selectedItemPosition)
+        if(src==null) {
+            state.text="กรุณาต่อ USB Arc Loader 23.11.4a ผ่าน OTG และเลือกต้นฉบับ"
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("v0.2.20 • สำเนา ARC3 แบบ Sparse")
+            .setMessage(
+                "งานทดลองนี้จะอ่านข้อมูล ARC3 จาก USB รุ่นเก่าประมาณ 1–3 GB " +
+                "หรือมากกว่าตาม Metadata จริง และสร้างไฟล์ Sparse ที่มีขนาดเชิงตรรกะ 28.57 GB " +
+                "แต่ใช้พื้นที่จริงน้อยกว่าในโทรศัพท์\n\n"+
+                "ไม่แก้ไข USB ต้นฉบับ ไม่เขียน USB ปลายทาง ไม่ใช่ไฟล์บูตได้ทันที\n\n"+
+                "หากอ่าน USB ไม่ได้ หรือ e2fsck ไม่ผ่าน จะลบไฟล์ partial " +
+                "ควรเสียบผ่าน OTG ที่มั่นคงและคงหน้าจอแอปไว้ระหว่างทำงาน")
+            .setNegativeButton("ยกเลิก", null)
+            .setPositiveButton("เริ่มทำสำเนา") { _, _ ->
+                requestPermission(src) {
+                    busy=true
+                    checkButton.isEnabled=false
+                    quickButton.isEnabled=false
+                    crcButton.isEnabled=false
+                    sandboxButton.isEnabled=false
+                    sparseButton.isEnabled=false
+                    sparseCancelButton.isEnabled=true
+                    source.isEnabled=false
+                    target.isEnabled=false
+                    copyButton.isEnabled=false
+                    reportText=""
+                    state.text="กำลังตรวจและทำสำเนา ARC3 (ต้นฉบับ Read-only)…"
+                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    sparseTask=worker.submit {
+                        try {
+                            val mirror=Arc3SparseMirror.create(
+                                applicationContext,usb,src,
+                                progress={msg -> runOnUiThread {if(!isFinishing)state.text=msg}},
+                                cancelled={Thread.currentThread().isInterrupted}
+                            )
+                            runOnUiThread {
+                                if(!isFinishing){
+                                    reportText=mirror.report
+                                    result.text=mirror.report
+                                    copyButton.isEnabled=true
+                                    state.text=if(mirror.success)
+                                        "มีสำเนา Sparse ที่ผ่าน e2fsck • ยังไม่ใช่ Compact IMG"
+                                        else "Sparse Copy ถูกหยุด/ไม่ผ่าน • ดูสาเหตุในรายงาน"
+                                }
+                            }
+                        }catch(e:Exception){
+                            runOnUiThread{
+                                if(!isFinishing)state.text=
+                                    "Sparse Copy ไม่สำเร็จ: "+(e.message?:e.javaClass.simpleName)
+                            }
+                        }finally {
+                            runOnUiThread{
+                                busy=false
+                                checkButton.isEnabled=true
+                                quickButton.isEnabled=true
+                                crcButton.isEnabled=true
+                                sandboxButton.isEnabled=true
+                                sparseButton.isEnabled=true
+                                sparseCancelButton.isEnabled=false
+                                source.isEnabled=true
+                                target.isEnabled=true
+                                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                            }
+                        }
+                    }
+                }
+            }.show()
     }
 
     private fun requestSandbox() {
