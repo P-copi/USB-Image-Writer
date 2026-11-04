@@ -11,8 +11,8 @@ android {
         applicationId = "com.pcopi.usbimager"
         minSdk = 26
         targetSdk = 35
-        versionCode = 27
-        versionName = "0.2.17-preview"
+        versionCode = 28
+        versionName = "0.2.18-preview"
     }
 
 
@@ -41,7 +41,7 @@ android {
         }
     }
 
-    compileOptions {
+    // Preserve Android NDK PIE executables packaged as lib*.so.\n    // These files are intentionally run as processes, not JNI libraries.\n    packaging {\n        jniLibs {\n            useLegacyPackaging = true\n            keepDebugSymbols.add("**/libmke2fs.so")\n            keepDebugSymbols.add("**/libe2fsck.so")\n            keepDebugSymbols.add("**/libresize2fs.so")\n        }\n    }\n\n    compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
