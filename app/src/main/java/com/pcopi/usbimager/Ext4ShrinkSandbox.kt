@@ -90,7 +90,7 @@ object Ext4ShrinkSandbox {
         progress: (String) -> Unit,
         cancelled: () -> Boolean = { false }
     ): Report {
-        val out = StringBuilder("=== EXT4 Offline Shrink Sandbox • v0.2.17 ===\n")
+        val out = StringBuilder("=== EXT4 Offline Shrink Sandbox • v0.2.18 ===\n")
         out.append("ทดสอบกับ EXT4 สร้างใหม่ในพื้นที่ส่วนตัวของแอปเท่านั้น\n")
         out.append("USB ต้นฉบับ / USB ปลายทาง: ไม่ถูกเปิด ไม่ถูกแก้ไข\n")
         val names = listOf("mke2fs", "e2fsck", "resize2fs")
