@@ -96,8 +96,14 @@ jobs:
             file "$f"
             "$TOOLCHAIN/bin/llvm-readelf" -h "$f" | grep -E "Class:|Machine:|Type:"
             "$TOOLCHAIN/bin/llvm-readelf" -d "$f" | grep NEEDED || true
-            if ! "$TOOLCHAIN/bin/llvm-readelf" -h "$f" | grep -q "DYN (Position-Independent Executable file)"; then
-              echo "::error::$f is not a PIE ELF"
+            # LLVM readelf labels a PIE ET_DYN as "Shared object file".
+            # Check ET_DYN + PT_INTERP instead of matching its display label.
+            if ! "$TOOLCHAIN/bin/llvm-readelf" -h "$f" | grep -qE "Type:.*DYN"; then
+              echo "::error::$f is not ELF ET_DYN"
+              exit 1
+            fi
+            if ! "$TOOLCHAIN/bin/llvm-readelf" -l "$f" | grep -q INTERP; then
+              echo "::error::$f has no executable interpreter (PT_INTERP)"
               exit 1
             fi
           done
