@@ -67,6 +67,7 @@ object Arc3SparseMirror {
             val p3 = r.partitions[2]
             if (p1.filesystem != "FAT32" || p2.filesystem != "EXT2" ||
                 p3.filesystem != "EXT4" || p3.startLba != 206848L ||
+                p3.endLba != 60125183L ||
                 p3.startLba != p2.endLba + 1L ||
                 p2.cleanState != true || p3.cleanState != true ||
                 p3.journalRecoveryRequired != false || p2.journalRecoveryRequired != false)
@@ -342,8 +343,8 @@ object Arc3SparseMirror {
             if(min.first!=0)throw IOException("resize2fs -P ไม่สามารถอ่านสำเนาได้")
             if(!partial.renameTo(finished))
                 throw IOException("ย้ายสำเนาที่ผ่านการตรวจไปชื่อถาวรไม่ได้")
-            success=true
             val st=Os.stat(finished.absolutePath)
+            success=true
             b.append("Sparse physical blocks: ")
                 .append(FormatUtils.bytes(st.st_blocks*512L)).append("\n")
             b.append("APP-PRIVATE MIRROR READY (EXPERIMENTAL): ")
