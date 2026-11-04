@@ -109,7 +109,7 @@ class SmartRebuildActivity : Activity() {
             ToolkitUi.VIOLET){requestCrcAudit()}
         controls.addView(crcButton,ToolkitUi.margin(this,8))
         sandboxButton=ToolkitUi.button(this,
-            "v0.2.17 • ทดสอบย่อ EXT4 จำลองในมือถือ (ไม่แตะ USB)",
+            "v0.2.18 • ทดสอบย่อ EXT4 ด้วยเครื่องมือใน APK (ไม่แตะ USB)",
             ToolkitUi.AMBER){requestSandbox()}
         controls.addView(sandboxButton,ToolkitUi.margin(this,8))
         checkButton=ToolkitUi.button(this,"ตรวจทั้งหมด (รวมไฟล์/โฟลเดอร์ใน USB)",
@@ -134,7 +134,7 @@ class SmartRebuildActivity : Activity() {
         safety.addView(ToolkitUi.text(this,
             "Smart Compact V1 ตรวจได้เร็วขึ้นโดยไม่เดินสำรวจทุกโฟลเดอร์\n"+
                 "EXT4 CRC32C ตรวจเฉพาะ Metadata ส่วนที่รองรับ ยังไม่ใช่ e2fsck\n"+
-                "v0.2.17 ทดลองย่อเฉพาะไฟล์จำลองในพื้นที่ส่วนตัวของแอป\n"+
+                "v0.2.18 ทดลองย่อเฉพาะไฟล์จำลองในพื้นที่ส่วนตัวของแอป\n"+
                 "ยังไม่มีการย่อ ARC3 จริงหรือสร้าง USB 8 GB\n"+
                 "พื้นที่จัดสรรน้อยไม่ได้แปลว่าสามารถตัดส่วนท้ายดิสก์ได้\n"+
                 "ถ้า EXT Journal ไม่ Clean ต้องตรวจและซ่อมบนสำเนา ไม่ใช่ต้นฉบับ",
