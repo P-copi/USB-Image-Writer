@@ -109,7 +109,7 @@ class SmartRebuildActivity : Activity() {
             ToolkitUi.VIOLET){requestCrcAudit()}
         controls.addView(crcButton,ToolkitUi.margin(this,8))
         sandboxButton=ToolkitUi.button(this,
-            "v0.2.18 • ทดสอบย่อ EXT4 ด้วยเครื่องมือใน APK (ไม่แตะ USB)",
+            "v0.2.19 • ทดสอบย่อ EXT4 และตรวจ SHA-256 ของไฟล์ (ไม่แตะ USB)",
             ToolkitUi.AMBER){requestSandbox()}
         controls.addView(sandboxButton,ToolkitUi.margin(this,8))
         checkButton=ToolkitUi.button(this,"ตรวจทั้งหมด (รวมไฟล์/โฟลเดอร์ใน USB)",
@@ -134,7 +134,7 @@ class SmartRebuildActivity : Activity() {
         safety.addView(ToolkitUi.text(this,
             "Smart Compact V1 ตรวจได้เร็วขึ้นโดยไม่เดินสำรวจทุกโฟลเดอร์\n"+
                 "EXT4 CRC32C ตรวจเฉพาะ Metadata ส่วนที่รองรับ ยังไม่ใช่ e2fsck\n"+
-                "v0.2.18 ทดลองย่อเฉพาะไฟล์จำลองในพื้นที่ส่วนตัวของแอป\n"+
+                "v0.2.19 ตรวจข้อมูลไฟล์ SHA-256 ก่อนและหลังย่อในพื้นที่ของแอป\n"+
                 "ยังไม่มีการย่อ ARC3 จริงหรือสร้าง USB 8 GB\n"+
                 "พื้นที่จัดสรรน้อยไม่ได้แปลว่าสามารถตัดส่วนท้ายดิสก์ได้\n"+
                 "ถ้า EXT Journal ไม่ Clean ต้องตรวจและซ่อมบนสำเนา ไม่ใช่ต้นฉบับ",
@@ -176,9 +176,9 @@ class SmartRebuildActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("ทดสอบ EXT4 Resize แบบปลอดภัย")
             .setMessage(
-                "ทดสอบสร้างและย่อ EXT4 ขนาด 96 MiB ภายในพื้นที่ส่วนตัวของแอป " +
-                "เป็น 32 MiB ด้วยเครื่องมือระบบ Android เท่านั้น " +
-                "ลบไฟล์จำลองหลังทดสอบ ไม่เปิดหรือเขียน Flash Drive")
+                "ทดสอบสร้าง EXT4 จำลอง 96 MiB ใส่ไฟล์ข้อมูลทดสอบ 4 MiB " +
+                "ตรวจ SHA-256 ก่อนและหลังย่อเหลือ 32 MiB ด้วยเครื่องมือที่อยู่ใน APK " +
+                "ลบไฟล์ทดสอบเมื่อเสร็จ ไม่เปิดหรือเขียน Flash Drive")
             .setNegativeButton("ยกเลิก", null)
             .setPositiveButton("เริ่มทดสอบ") { _, _ ->
                 busy=true
@@ -205,7 +205,7 @@ class SmartRebuildActivity : Activity() {
                                 result.text=report.text
                                 copyButton.isEnabled=true
                                 state.text=if(report.success)
-                                    "ผ่านการทดสอบย่อ EXT4 จำลอง • USB ยังไม่ถูกแก้ไข"
+                                    "ผ่านการย่อจำลองและ Verify SHA-256 • USB ยังไม่ถูกแก้ไข"
                                     else "ไม่ผ่าน/เครื่องมือไม่พร้อม • ดูรายงานเพื่อวางแผนต่อ"
                             }
                         }
