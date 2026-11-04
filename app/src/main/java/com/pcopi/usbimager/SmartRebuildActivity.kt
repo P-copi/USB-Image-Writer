@@ -37,6 +37,7 @@ class SmartRebuildActivity : Activity() {
     private lateinit var checkButton:Button
     private lateinit var quickButton:Button
     private lateinit var crcButton:Button
+    private lateinit var sandboxButton:Button
     private lateinit var copyButton:Button
     private var devices:List<UsbDevice> = emptyList()
     private var busy=false
@@ -107,6 +108,10 @@ class SmartRebuildActivity : Activity() {
             "EXT4 CRC32C • ตรวจ Superblock / Groups / Bitmaps (อ่านอย่างเดียว)",
             ToolkitUi.VIOLET){requestCrcAudit()}
         controls.addView(crcButton,ToolkitUi.margin(this,8))
+        sandboxButton=ToolkitUi.button(this,
+            "v0.2.17 • ทดสอบย่อ EXT4 จำลองในมือถือ (ไม่แตะ USB)",
+            ToolkitUi.AMBER){requestSandbox()}
+        controls.addView(sandboxButton,ToolkitUi.margin(this,8))
         checkButton=ToolkitUi.button(this,"ตรวจทั้งหมด (รวมไฟล์/โฟลเดอร์ใน USB)",
             ToolkitUi.GREEN){requestInspection(true)}
         controls.addView(checkButton,ToolkitUi.margin(this,8))
@@ -129,7 +134,8 @@ class SmartRebuildActivity : Activity() {
         safety.addView(ToolkitUi.text(this,
             "Smart Compact V1 ตรวจได้เร็วขึ้นโดยไม่เดินสำรวจทุกโฟลเดอร์\n"+
                 "EXT4 CRC32C ตรวจเฉพาะ Metadata ส่วนที่รองรับ ยังไม่ใช่ e2fsck\n"+
-                "รุ่นนี้เป็นขั้นวิเคราะห์ ไม่ได้ย่อ EXT4 หรือสร้าง USB 8 GB ทันที\n"+
+                "v0.2.17 ทดลองย่อเฉพาะไฟล์จำลองในพื้นที่ส่วนตัวของแอป\n"+
+                "ยังไม่มีการย่อ ARC3 จริงหรือสร้าง USB 8 GB\n"+
                 "พื้นที่จัดสรรน้อยไม่ได้แปลว่าสามารถตัดส่วนท้ายดิสก์ได้\n"+
                 "ถ้า EXT Journal ไม่ Clean ต้องตรวจและซ่อมบนสำเนา ไม่ใช่ต้นฉบับ",
             13f,ToolkitUi.SUB),ToolkitUi.margin(this,8))
@@ -162,6 +168,68 @@ class SmartRebuildActivity : Activity() {
         usb.requestPermission(device,pending)
     }
 
+    private fun requestSandbox() {
+        if(busy || UsbBackupService.snapshot.running || UsbOperationService.snapshot.running) {
+            state.text="มีงาน USB อื่นกำลังทำงาน กรุณาลองใหม่"
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("ทดสอบ EXT4 Resize แบบปลอดภัย")
+            .setMessage(
+                "ทดสอบสร้างและย่อ EXT4 ขนาด 96 MiB ภายในพื้นที่ส่วนตัวของแอป " +
+                "เป็น 32 MiB ด้วยเครื่องมือระบบ Android เท่านั้น " +
+                "ลบไฟล์จำลองหลังทดสอบ ไม่เปิดหรือเขียน Flash Drive")
+            .setNegativeButton("ยกเลิก", null)
+            .setPositiveButton("เริ่มทดสอบ") { _, _ ->
+                busy=true
+                checkButton.isEnabled=false
+                quickButton.isEnabled=false
+                crcButton.isEnabled=false
+                sandboxButton.isEnabled=false
+                source.isEnabled=false
+                target.isEnabled=false
+                copyButton.isEnabled=false
+                reportText=""
+                state.text="กำลังทดสอบ EXT4 บนไฟล์จำลองในแอป…"
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                worker.execute {
+                    try {
+                        val report=Ext4ShrinkSandbox.run(
+                            applicationContext,
+                            progress={msg -> runOnUiThread{if(!isFinishing) state.text=msg}},
+                            cancelled={Thread.currentThread().isInterrupted}
+                        )
+                        runOnUiThread {
+                            if(!isFinishing) {
+                                reportText=report.text
+                                result.text=report.text
+                                copyButton.isEnabled=true
+                                state.text=if(report.success)
+                                    "ผ่านการทดสอบย่อ EXT4 จำลอง • USB ยังไม่ถูกแก้ไข"
+                                    else "ไม่ผ่าน/เครื่องมือไม่พร้อม • ดูรายงานเพื่อวางแผนต่อ"
+                            }
+                        }
+                    } catch(e:Exception) {
+                        runOnUiThread {
+                            if(!isFinishing)
+                                state.text="ไม่สามารถทดสอบได้: "+(e.message ?: e.javaClass.simpleName)
+                        }
+                    } finally {
+                        runOnUiThread {
+                            busy=false
+                            checkButton.isEnabled=true
+                            quickButton.isEnabled=true
+                            crcButton.isEnabled=true
+                            sandboxButton.isEnabled=true
+                            source.isEnabled=true
+                            target.isEnabled=true
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        }
+                    }
+                }
+            }.show()
+    }
+
     private fun requestCrcAudit() {
         if(busy || UsbBackupService.snapshot.running || UsbOperationService.snapshot.running) {
             state.text="มีงาน USB อื่นกำลังทำงาน กรุณาลองใหม่"
@@ -174,6 +242,7 @@ class SmartRebuildActivity : Activity() {
             checkButton.isEnabled=false
             quickButton.isEnabled=false
             crcButton.isEnabled=false
+            sandboxButton.isEnabled=false
             source.isEnabled=false
             target.isEnabled=false
             copyButton.isEnabled=false
@@ -214,6 +283,7 @@ class SmartRebuildActivity : Activity() {
                         checkButton.isEnabled=true
                         quickButton.isEnabled=true
                         crcButton.isEnabled=true
+                        sandboxButton.isEnabled=true
                         source.isEnabled=true
                         target.isEnabled=true
                         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -248,6 +318,7 @@ class SmartRebuildActivity : Activity() {
         checkButton.isEnabled=false
         quickButton.isEnabled=false
         crcButton.isEnabled=false
+        sandboxButton.isEnabled=false
         source.isEnabled=false
         target.isEnabled=false
         copyButton.isEnabled=false
@@ -288,6 +359,7 @@ class SmartRebuildActivity : Activity() {
                     checkButton.isEnabled=true
                     quickButton.isEnabled=true
                     crcButton.isEnabled=true
+                    sandboxButton.isEnabled=true
                     source.isEnabled=true
                     target.isEnabled=true
                     window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
