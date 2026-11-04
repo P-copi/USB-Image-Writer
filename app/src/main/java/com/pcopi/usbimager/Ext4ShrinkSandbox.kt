@@ -26,9 +26,18 @@ object Ext4ShrinkSandbox {
 
     private data class Run(val code: Int, val output: String)
 
-    private fun locate(name: String): File? =
-        listOf("/system/bin/", "/vendor/bin/", "/product/bin/", "/system/xbin/")
-            .map { File(it + name) }.firstOrNull { it.isFile }
+    /**
+     * Android 10+ prohibits executing files from writable app data directories.
+     * The signed APK carries NDK-built PIE tools in its extracted native library
+     * directory as libmke2fs.so, libe2fsck.so and libresize2fs.so.
+     * They are executed as standalone files (not loaded with System.loadLibrary).
+     */
+    private fun locate(context: Context, name: String): File? {
+        val bundled = File(context.applicationInfo.nativeLibraryDir, "lib" + name + ".so")
+        if (bundled.isFile && bundled.canExecute()) return bundled
+        return listOf("/system/bin/", "/vendor/bin/", "/product/bin/", "/system/xbin/")
+            .map { File(it + name) }.firstOrNull { it.isFile && it.canExecute() }
+    }
 
     /** Execute an allowlisted SYSTEM binary against an app-owned test image only. */
     private fun execute(
@@ -85,7 +94,7 @@ object Ext4ShrinkSandbox {
         out.append("ทดสอบกับ EXT4 สร้างใหม่ในพื้นที่ส่วนตัวของแอปเท่านั้น\n")
         out.append("USB ต้นฉบับ / USB ปลายทาง: ไม่ถูกเปิด ไม่ถูกแก้ไข\n")
         val names = listOf("mke2fs", "e2fsck", "resize2fs")
-        val commands = names.map { it to locate(it) }.toMap()
+        val commands = names.map { it to locate(context, it) }.toMap()
         for (name in names) {
             val bin = commands[name]
             out.append(name).append(": ")
@@ -96,7 +105,7 @@ object Ext4ShrinkSandbox {
         if (missing.isNotEmpty()) {
             out.append("BLOCKED: เครื่องมือที่ต้องใช้ไม่ครบ: ")
                 .append(missing.joinToString(", ")).append('\n')
-            out.append("แนวทางต่อ: ต้องแพ็กเครื่องมือ e2fsprogs สำหรับ Android ให้แอปเอง\n")
+            out.append("แนวทางต่อ: ตรวจสอบการแตกไฟล์ native libs ของ APK และสิทธิ์ SELinux\n")
             return Report(false, out.toString())
         }
 
