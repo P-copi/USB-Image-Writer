@@ -41,7 +41,18 @@ android {
         }
     }
 
-    // Preserve Android NDK PIE executables packaged as lib*.so.\n    // These files are intentionally run as processes, not JNI libraries.\n    packaging {\n        jniLibs {\n            useLegacyPackaging = true\n            keepDebugSymbols.add("**/libmke2fs.so")\n            keepDebugSymbols.add("**/libe2fsck.so")\n            keepDebugSymbols.add("**/libresize2fs.so")\n        }\n    }\n\n    compileOptions {
+    // Preserve Android NDK PIE executables packaged as lib*.so.
+    // These files are intentionally run as processes, not JNI libraries.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols.add("**/libmke2fs.so")
+            keepDebugSymbols.add("**/libe2fsck.so")
+            keepDebugSymbols.add("**/libresize2fs.so")
+        }
+    }
+
+    compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
