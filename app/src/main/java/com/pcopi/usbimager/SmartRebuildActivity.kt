@@ -36,6 +36,7 @@ class SmartRebuildActivity : Activity() {
     private lateinit var result:TextView
     private lateinit var checkButton:Button
     private lateinit var quickButton:Button
+    private lateinit var crcButton:Button
     private lateinit var copyButton:Button
     private var devices:List<UsbDevice> = emptyList()
     private var busy=false
@@ -102,6 +103,10 @@ class SmartRebuildActivity : Activity() {
             "Smart Compact V1 • ตรวจความเป็นไปได้อย่างรวดเร็ว (อ่านอย่างเดียว)",
             ToolkitUi.BLUE){requestInspection(false)}
         controls.addView(quickButton,ToolkitUi.margin(this,8))
+        crcButton=ToolkitUi.button(this,
+            "EXT4 CRC32C • ตรวจ Superblock / Groups / Bitmaps (อ่านอย่างเดียว)",
+            ToolkitUi.VIOLET){requestCrcAudit()}
+        controls.addView(crcButton,ToolkitUi.margin(this,8))
         checkButton=ToolkitUi.button(this,"ตรวจทั้งหมด (รวมไฟล์/โฟลเดอร์ใน USB)",
             ToolkitUi.GREEN){requestInspection(true)}
         controls.addView(checkButton,ToolkitUi.margin(this,8))
@@ -123,6 +128,7 @@ class SmartRebuildActivity : Activity() {
         safety.addView(ToolkitUi.text(this,"ยังไม่เขียนลง USB",16f,ToolkitUi.INK,true))
         safety.addView(ToolkitUi.text(this,
             "Smart Compact V1 ตรวจได้เร็วขึ้นโดยไม่เดินสำรวจทุกโฟลเดอร์\n"+
+                "EXT4 CRC32C ตรวจเฉพาะ Metadata ส่วนที่รองรับ ยังไม่ใช่ e2fsck\n"+
                 "รุ่นนี้เป็นขั้นวิเคราะห์ ไม่ได้ย่อ EXT4 หรือสร้าง USB 8 GB ทันที\n"+
                 "พื้นที่จัดสรรน้อยไม่ได้แปลว่าสามารถตัดส่วนท้ายดิสก์ได้\n"+
                 "ถ้า EXT Journal ไม่ Clean ต้องตรวจและซ่อมบนสำเนา ไม่ใช่ต้นฉบับ",
@@ -156,6 +162,67 @@ class SmartRebuildActivity : Activity() {
         usb.requestPermission(device,pending)
     }
 
+    private fun requestCrcAudit() {
+        if(busy || UsbBackupService.snapshot.running || UsbOperationService.snapshot.running) {
+            state.text="มีงาน USB อื่นกำลังทำงาน กรุณาลองใหม่"
+            return
+        }
+        val src=devices.getOrNull(source.selectedItemPosition)
+        if(src==null){state.text="กรุณาเลือก USB ต้นฉบับ";return}
+        requestPermission(src) {
+            busy=true
+            checkButton.isEnabled=false
+            quickButton.isEnabled=false
+            crcButton.isEnabled=false
+            source.isEnabled=false
+            target.isEnabled=false
+            copyButton.isEnabled=false
+            reportText=""
+            state.text="กำลังตรวจ CRC32C ของ EXT4 (Read-only)…"
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            worker.execute {
+                try {
+                    val data=ExtRebuildInspector.inspect(
+                        usb,src,null,
+                        onProgress={message -> runOnUiThread{if(!isFinishing)state.text=message}},
+                        cancelled={Thread.currentThread().isInterrupted}
+                    )
+                    val p3=data.partitions.firstOrNull{it.number==3 && it.filesystem=="EXT4"}
+                        ?: throw java.io.IOException("ไม่พบ ARC3 EXT4 ที่รองรับ")
+                    val audit=Ext4MetadataAudit.inspect(
+                        usb,src,p3,
+                        progress={message -> runOnUiThread{if(!isFinishing)state.text=message}},
+                        cancelled={Thread.currentThread().isInterrupted}
+                    )
+                    val text=formatReport(data)+audit.format()
+                    runOnUiThread {
+                        reportText=text
+                        result.text=text
+                        copyButton.isEnabled=true
+                        state.text=if(audit.errors.isEmpty() && audit.descriptors==audit.groups)
+                            "ตรวจ CRC ส่วนที่รองรับแล้ว • ยังไม่อนุญาตให้ย่อ" else
+                            "พบปัญหา CRC / ตรวจไม่ครบ • ห้ามย่อหรือเขียน"
+                    }
+                } catch(e:Exception) {
+                    runOnUiThread {
+                        state.text="ตรวจ CRC ไม่สำเร็จ: "+(e.message ?: e.javaClass.simpleName)
+                        result.text="CRC: FAILED/INCOMPLETE • ไม่แก้ไข USB ต้นฉบับ"
+                    }
+                } finally {
+                    runOnUiThread {
+                        busy=false
+                        checkButton.isEnabled=true
+                        quickButton.isEnabled=true
+                        crcButton.isEnabled=true
+                        source.isEnabled=true
+                        target.isEnabled=true
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    }
+                }
+            }
+        }
+    }
+
     private fun requestInspection(deep:Boolean){
         if(busy || UsbBackupService.snapshot.running || UsbOperationService.snapshot.running) {
             state.text="มีงาน USB อื่นทำงานอยู่ กรุณารอให้เสร็จก่อน"
@@ -180,6 +247,7 @@ class SmartRebuildActivity : Activity() {
         busy=true
         checkButton.isEnabled=false
         quickButton.isEnabled=false
+        crcButton.isEnabled=false
         source.isEnabled=false
         target.isEnabled=false
         copyButton.isEnabled=false
@@ -219,6 +287,7 @@ class SmartRebuildActivity : Activity() {
                     busy=false
                     checkButton.isEnabled=true
                     quickButton.isEnabled=true
+                    crcButton.isEnabled=true
                     source.isEnabled=true
                     target.isEnabled=true
                     window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
