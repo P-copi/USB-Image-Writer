@@ -3,7 +3,7 @@ name: Build APK
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "feature/v028-deep-inspector", "feature/v0215-smart-compact-backup", "feature/v0216-ext4-metadata-audit", "feature/v0217-ext4-shrink-sandbox", "feature/v0218-bundled-e2fsprogs" ]
+    branches: [ "main", "feature/v028-deep-inspector", "feature/v0215-smart-compact-backup", "feature/v0216-ext4-metadata-audit", "feature/v0217-ext4-shrink-sandbox", "feature/v0218-bundled-e2fsprogs", "feature/v0219-file-integrity-shrink" ]
 
 jobs:
   build:
@@ -81,7 +81,7 @@ jobs:
           cd _e2fsprogs-build
           ../_e2fsprogs/configure --host=aarch64-linux-android \
             --disable-nls --disable-uuidd --disable-fuse2fs \
-            --disable-backtrace --disable-debugfs --disable-imager \
+            --disable-backtrace --disable-imager \
             --disable-defrag --disable-rpath --enable-libuuid --enable-libblkid
           make -j4
           cd ..
@@ -90,6 +90,7 @@ jobs:
           cp _e2fsprogs-build/misc/mke2fs "$OUT/libmke2fs.so"
           cp _e2fsprogs-build/e2fsck/e2fsck "$OUT/libe2fsck.so"
           cp _e2fsprogs-build/resize/resize2fs "$OUT/libresize2fs.so"
+          cp _e2fsprogs-build/debugfs/debugfs "$OUT/libdebugfs.so"
           chmod 755 "$OUT/"*.so
           for f in "$OUT/"*.so; do
             echo "CHECK NDK executable: $f"
@@ -143,7 +144,7 @@ jobs:
         if: env.USB_SIGNING_PASSPHRASE != ''
         uses: actions/upload-artifact@v4
         with:
-          name: USB-Image-Writer-v0.2.18-PREVIEW-SIGNED
+          name: USB-Image-Writer-v0.2.19-PREVIEW-SIGNED
           path: app/build/outputs/apk/release/app-release.apk
           retention-days: 14
 
@@ -165,6 +166,6 @@ jobs:
         if: env.USB_SIGNING_PASSPHRASE == ''
         uses: actions/upload-artifact@v4
         with:
-          name: USB-Image-Writer-v0.2.18-PREVIEW-DEBUG-UNSIGNED-IDENTITY
+          name: USB-Image-Writer-v0.2.19-PREVIEW-DEBUG-UNSIGNED-IDENTITY
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 3
