@@ -3,7 +3,7 @@ name: Build APK
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "feature/v028-deep-inspector", "feature/v0215-smart-compact-backup", "feature/v0216-ext4-metadata-audit", "feature/v0217-ext4-shrink-sandbox", "feature/v0218-bundled-e2fsprogs", "feature/v0219-file-integrity-shrink" ]
+    branches: [ "main", "feature/v028-deep-inspector", "feature/v0215-smart-compact-backup", "feature/v0216-ext4-metadata-audit", "feature/v0217-ext4-shrink-sandbox", "feature/v0218-bundled-e2fsprogs", "feature/v0219-file-integrity-shrink", "feature/v0220-arc3-sparse-mirror" ]
 
 jobs:
   build:
@@ -144,7 +144,7 @@ jobs:
         if: env.USB_SIGNING_PASSPHRASE != ''
         uses: actions/upload-artifact@v4
         with:
-          name: USB-Image-Writer-v0.2.19-PREVIEW-SIGNED
+          name: USB-Image-Writer-v0.2.20-PREVIEW-SIGNED
           path: app/build/outputs/apk/release/app-release.apk
           retention-days: 14
 
@@ -166,6 +166,6 @@ jobs:
         if: env.USB_SIGNING_PASSPHRASE == ''
         uses: actions/upload-artifact@v4
         with:
-          name: USB-Image-Writer-v0.2.19-PREVIEW-DEBUG-UNSIGNED-IDENTITY
+          name: USB-Image-Writer-v0.2.20-PREVIEW-DEBUG-UNSIGNED-IDENTITY
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 3
