@@ -77,10 +77,40 @@ internal object Arc3PostShrinkAudit {
             val targetRoot=run(debug,listOf("-R","ls -p /",workspace.absolutePath),dir)
             if(sourceRoot.exit!=0 || targetRoot.exit!=0)
                 return Report(false,out.append("BLOCKED: root listing failed").toString())
-            fun normalized(s:String)=s.lines().filter { it.startsWith("/") }
-                .map { it.trim() }.sorted()
-            if(normalized(sourceRoot.body)!=normalized(targetRoot.body))
-                return Report(false,out.append("BLOCKED: root directory listing mismatch").toString())
+            // debugfs ls -p records: /inode/mode/uid/gid/name/size/
+            // Inode IDs, UID/GID, file sizes and physical allocation are not
+            // appropriate to compare as a raw line after filesystem resize.
+            // Compare only the exact filename and file-type bits here.
+            fun entries(body: String): Map<String,String> {
+                val parsed=linkedMapOf<String,String>()
+                for(line in body.lineSequence()) {
+                    if(!line.startsWith("/")) continue
+                    val parts=line.split('/')
+                    if(parts.size<6) throw IOException("Malformed debugfs ls -p record")
+                    val mode=parts[2].toIntOrNull(8)
+                        ?: throw IOException("Invalid mode in debugfs listing")
+                    val name=parts[5]
+                    if(name.isBlank()) throw IOException("Blank filename in listing")
+                    if(parsed.put(name,(mode and 61440).toString())!=null)
+                        throw IOException("Duplicate root entry: " + name)
+                }
+                if(parsed.isEmpty()) throw IOException("No parsed root entries")
+                return parsed
+            }
+            val sourceEntries=entries(sourceRoot.body)
+            val targetEntries=entries(targetRoot.body)
+            val missing=sourceEntries.keys-targetEntries.keys
+            val extra=targetEntries.keys-sourceEntries.keys
+            val changed=sourceEntries.keys.intersect(targetEntries.keys)
+                .filter { sourceEntries[it]!=targetEntries[it] }
+            out.append("Root entries: source=").append(sourceEntries.size)
+                .append(" workspace=").append(targetEntries.size).append('\n')
+            if(missing.isNotEmpty() || extra.isNotEmpty() || changed.isNotEmpty()) {
+                out.append("Missing names: ").append(missing.take(15)).append('\n')
+                out.append("Extra names: ").append(extra.take(15)).append('\n')
+                out.append("Changed types: ").append(changed.take(15)).append('\n')
+                return Report(false,out.append("BLOCKED: root names/types mismatch").toString())
+            }
             out.append("PASS: fsck, selected EXT4 metadata and root entries match.\n")
             out.append("LIMITATION: file contents and nested directory SHA-256 NOT verified.\n")
             return Report(true,out.toString())
