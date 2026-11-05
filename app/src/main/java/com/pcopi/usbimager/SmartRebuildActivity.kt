@@ -41,6 +41,7 @@ class SmartRebuildActivity : Activity() {
     private lateinit var sparseButton:Button
     private lateinit var workspaceButton:Button
     private lateinit var preflightButton:Button
+    private lateinit var shrinkButton:Button
     private lateinit var sparseCancelButton:Button
     private var sparseTask:java.util.concurrent.Future<*>?=null
     private lateinit var copyButton:Button
@@ -129,6 +130,10 @@ class SmartRebuildActivity : Activity() {
             "v0.2.22 • ตรวจ EXT4 Workspace ด้วย e2fsck / resize2fs -P (อ่านอย่างเดียว)",
             ToolkitUi.VIOLET){requestArc3Preflight()}
         controls.addView(preflightButton,ToolkitUi.margin(this,8))
+        shrinkButton=ToolkitUi.button(this,
+            "v0.2.23 • ทดลองย่อ ARC3 Workspace เหลือ 2 GiB (ไม่แตะ USB)",
+            ToolkitUi.AMBER){requestArc3Shrink()}
+        controls.addView(shrinkButton,ToolkitUi.margin(this,8))
         sparseCancelButton=ToolkitUi.button(this,
             "ยกเลิกการคัดลอก ARC3 (ลบไฟล์บางส่วน)",
             ToolkitUi.AMBER){
@@ -193,6 +198,45 @@ class SmartRebuildActivity : Activity() {
             Intent(action).setPackage(packageName),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
         usb.requestPermission(device,pending)
+    }
+
+    private fun requestArc3Shrink() {
+        if (busy || UsbBackupService.snapshot.running || UsbOperationService.snapshot.running) {
+            state.text="มีงานอื่นทำงานอยู่ กรุณารอให้เสร็จก่อน"
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("v0.2.23 • ทดลองย่อ Workspace เป็น 2 GiB")
+            .setMessage("ขั้นตอนนี้แก้ไขไฟล์ ARC3 Workspace v0.2.21 จริงและไม่สามารถย้อนกลับในไฟล์เดิม " +
+                "แต่จะรักษา ARC3 Mirror v0.2.20 ต้นฉบับไว้ ไม่เปิด USB และไม่สร้าง IMG " +
+                "ต้องเปิดแอปค้างไว้จนตรวจ e2fsck หลังย่อเสร็จ ห้ามปิดแอปหรือรีสตาร์ทระหว่างทำงาน")
+            .setNegativeButton("ยกเลิก",null)
+            .setPositiveButton("ยืนยันย่อ Workspace"){_,_->
+                busy=true
+                shrinkButton.isEnabled=false
+                preflightButton.isEnabled=false
+                workspaceButton.isEnabled=false
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                state.text="กำลังย่อ Workspace และตรวจ EXT4 • ห้ามปิดแอป"
+                worker.execute {
+                    val report=Arc3ShrinkExperiment.run(this)
+                    runOnUiThread {
+                        if(!isFinishing) {
+                            reportText=report.text
+                            result.text=report.text
+                            copyButton.isEnabled=true
+                            state.text=if(report.passed)
+                                "PASS: ย่อ Workspace เป็น 2 GiB • ยังไม่ตรวจไฟล์/บูต"
+                            else "BLOCKED: ย่อ Workspace ไม่สำเร็จ • เก็บ ARC3 Mirror เดิมไว้"
+                        }
+                        busy=false
+                        shrinkButton.isEnabled=true
+                        preflightButton.isEnabled=true
+                        workspaceButton.isEnabled=true
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    }
+                }
+            }.show()
     }
 
     private fun requestArc3Preflight() {
