@@ -43,6 +43,7 @@ class SmartRebuildActivity : Activity() {
     private lateinit var preflightButton:Button
     private lateinit var shrinkButton:Button
     private lateinit var auditButton:Button
+    private lateinit var fileAuditButton:Button
     private lateinit var sparseCancelButton:Button
     private var sparseTask:java.util.concurrent.Future<*>?=null
     private lateinit var copyButton:Button
@@ -139,6 +140,10 @@ class SmartRebuildActivity : Activity() {
             "v0.2.25 • ตรวจ Metadata ARC3 หลังย่อ เทียบ Mirror (อ่านอย่างเดียว)",
             ToolkitUi.VIOLET){requestPostShrinkAudit()}
         controls.addView(auditButton,ToolkitUi.margin(this,8))
+        fileAuditButton=ToolkitUi.button(this,
+            "v0.2.27 • ตรวจ SHA-256 ไฟล์ ARC3 ทุกโฟลเดอร์ (อ่านอย่างเดียว)",
+            ToolkitUi.BLUE){requestFileAudit()}
+        controls.addView(fileAuditButton,ToolkitUi.margin(this,8))
         sparseCancelButton=ToolkitUi.button(this,
             "ยกเลิกการคัดลอก ARC3 (ลบไฟล์บางส่วน)",
             ToolkitUi.AMBER){
@@ -203,6 +208,42 @@ class SmartRebuildActivity : Activity() {
             Intent(action).setPackage(packageName),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
         usb.requestPermission(device,pending)
+    }
+
+    private fun requestFileAudit() {
+        if (busy || UsbBackupService.snapshot.running || UsbOperationService.snapshot.running) {
+            state.text="มีงานอื่นทำงานอยู่ กรุณารอให้เสร็จก่อน"
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("v0.2.27 • ตรวจ SHA-256 รายไฟล์")
+            .setMessage("อ่านไฟล์ทั้งหมดใน ARC3 Mirror และ Workspace แบบไม่แก้ไข " +
+                "เทียบรายชื่อ ชนิด ขนาด และ SHA-256 ของไฟล์ปกติทุกโฟลเดอร์ " +
+                "หากพบ Symlink หรือไฟล์ชนิดพิเศษจะหยุดแบบ BLOCKED " +
+                "ต้องมีพื้นที่ว่างสำหรับดึงไฟล์ทีละไฟล์ เปิดแอปค้างไว้จนเสร็จ")
+            .setNegativeButton("ยกเลิก",null)
+            .setPositiveButton("เริ่มตรวจ"){_,_->
+                busy=true
+                fileAuditButton.isEnabled=false
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                state.text="กำลังตรวจ SHA-256 ของไฟล์ ARC3 ทั้งสองชุด"
+                worker.execute {
+                    val audit=Arc3FileIntegrityAudit.run(this)
+                    runOnUiThread {
+                        if(!isFinishing) {
+                            reportText=audit.text
+                            result.text=audit.text
+                            copyButton.isEnabled=true
+                            state.text=if(audit.passed)
+                                "PASS: SHA-256 ไฟล์ปกติทั้งหมดตรงกัน"
+                            else "BLOCKED: ตรวจ SHA-256 ไม่ผ่าน • เก็บไฟล์เดิมไว้"
+                        }
+                        busy=false
+                        fileAuditButton.isEnabled=true
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    }
+                }
+            }.show()
     }
 
     private fun requestPostShrinkAudit() {
