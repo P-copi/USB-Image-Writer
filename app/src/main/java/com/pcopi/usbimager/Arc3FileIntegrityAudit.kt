@@ -39,7 +39,7 @@ internal object Arc3FileIntegrityAudit {
         while(queue.isNotEmpty()) {
             val (folder,depth)=queue.removeFirst()
             if(depth>32) throw IOException("Directory depth limit")
-            val output=debugfs(bin,img,"ls -p "+folder,dir)
+            val output=debugfs(bin,img,"ls -p \\""+folder+"\\"",dir)
             for(line in output.lineSequence()) {
                 if(!line.startsWith("/")) continue
                 val fields=line.split('/')
@@ -47,8 +47,8 @@ internal object Arc3FileIntegrityAudit {
                 val mode=fields[2].toIntOrNull(8) ?: throw IOException("Bad file mode")
                 val name=fields[5]
                 if(name=="." || name=="..") continue
-                if(name.isBlank() || name.any { it=='/' || it=='\n' || it=='\r' || it=='"' || it=='\\' || it==' ' })
-                    throw IOException("Unsupported filename")
+                if(name.isBlank() || name.any { it=='/' || it=='\n' || it=='\r' || it=='"' || it=='\\' })
+                    throw IOException("Unsupported filename in "+folder+": "+name.take(100))
                 val type=mode and 61440
                 if(type!=32768 && type!=16384)
                     throw IOException("Unsupported special file or symlink")
@@ -106,7 +106,7 @@ internal object Arc3FileIntegrityAudit {
                     if(temp.exists()) throw IOException("Temp file exists")
                     if(dir.usableSpace<entry.size+268435456L)
                         throw IOException("Insufficient space for file extraction")
-                    debugfs(bin,img,"dump "+path+" "+temp.absolutePath,dir)
+                    debugfs(bin,img,"dump \\""+path+"\\" "+temp.absolutePath,dir)
                     if(!temp.isFile || temp.length()!=entry.size)
                         throw IOException("File extraction failed")
                     val sha=digest(temp)
