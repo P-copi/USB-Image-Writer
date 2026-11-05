@@ -47,6 +47,7 @@ class SmartRebuildActivity : Activity() {
     private lateinit var compactPlanButton:Button
     private lateinit var mbrAuditButton:Button
     private lateinit var bootAuditButton:Button
+    private lateinit var compactAssembleButton:Button
     private lateinit var prefixCaptureButton:Button
     private lateinit var sparseCancelButton:Button
     private var sparseTask:java.util.concurrent.Future<*>?=null
@@ -156,6 +157,8 @@ class SmartRebuildActivity : Activity() {
         controls.addView(bootAuditButton,ToolkitUi.margin(this,8))
         prefixCaptureButton=ToolkitUi.button(this,"v0.2.34 • สำรอง MBR/P1/P2 (USB อ่านอย่างเดียว)",ToolkitUi.BLUE){requestBootPrefixCapture()}
         controls.addView(prefixCaptureButton,ToolkitUi.margin(this,8))
+        compactAssembleButton=ToolkitUi.button(this,"v0.2.37 • ประกอบ Compact IMG ในมือถือ (ไม่ใช้ USB)",ToolkitUi.GREEN){requestCompactAssembly()}
+        controls.addView(compactAssembleButton,ToolkitUi.margin(this,8))
         sparseCancelButton=ToolkitUi.button(this,
             "ยกเลิกการคัดลอก ARC3 (ลบไฟล์บางส่วน)",
             ToolkitUi.AMBER){
@@ -220,6 +223,41 @@ class SmartRebuildActivity : Activity() {
             Intent(action).setPackage(packageName),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
         usb.requestPermission(device,pending)
+    }
+
+    private fun requestCompactAssembly() {
+        if(busy || UsbBackupService.snapshot.running || UsbOperationService.snapshot.running) return
+        AlertDialog.Builder(this)
+            .setTitle("สร้าง Compact IMG ภายในมือถือ")
+            .setMessage("ใช้สำเนา MBR/P1/P2 และ ARC3 Workspace ที่มีอยู่เท่านั้น ไม่อ่านหรือเขียน USB ไม่เปลี่ยน Mirror/Workspace ต้องมีพื้นที่ว่างอย่างน้อย 2.36 GiB")
+            .setNegativeButton("ยกเลิก",null)
+            .setPositiveButton("เริ่มสร้าง"){_,_->
+                busy=true
+                compactAssembleButton.isEnabled=false
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                state.text="กำลังสร้าง Compact IMG • กรุณาเปิดแอปค้างไว้"
+                worker.execute {
+                    val report=try {
+                        CompactImgAssembler.run(applicationContext,
+                            {Thread.currentThread().isInterrupted},
+                            {msg->runOnUiThread{if(!isFinishing)state.text=msg}})
+                    } catch(t:Throwable) {
+                        android.util.Log.e("CompactImgAssembler","Assembly failed",t)
+                        CompactImgAssembler.Report(false,"BLOCKED: "+t.javaClass.name+": "+(t.message?:"unknown"))
+                    }
+                    runOnUiThread {
+                        if(!isFinishing) {
+                            reportText=report.text
+                            result.text=report.text
+                            copyButton.isEnabled=true
+                            state.text=if(report.passed)"PASS: สร้าง IMG แล้ว (ยังไม่ทดสอบบูต)" else "BLOCKED: สร้าง IMG ไม่สำเร็จ"
+                            compactAssembleButton.isEnabled=true
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        }
+                        busy=false
+                    }
+                }
+            }.show()
     }
 
     private fun requestBootPrefixCapture() {
