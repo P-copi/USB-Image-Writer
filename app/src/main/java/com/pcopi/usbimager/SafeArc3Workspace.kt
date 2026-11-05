@@ -46,7 +46,6 @@ internal object SafeArc3Workspace {
             "Insufficient verified free space; sparse allocation preflight required"
         }
         val sourceHash = MessageDigest.getInstance("SHA-256")
-        val copyHash = MessageDigest.getInstance("SHA-256")
         val bytes = ByteArray(BLOCK)
         var nonZero = 0L
         var complete = false
@@ -61,7 +60,6 @@ internal object SafeArc3Workspace {
                         val size = minOf(BLOCK.toLong(), logical - offset).toInt()
                         input.readFully(bytes, 0, size)
                         sourceHash.update(bytes, 0, size)
-                        copyHash.update(bytes, 0, size)
                         if ((0 until size).any { bytes[it].toInt() != 0 }) {
                             output.seek(offset)
                             output.write(bytes, 0, size)
@@ -73,7 +71,19 @@ internal object SafeArc3Workspace {
                 }
             }
             val a = sourceHash.digest().joinToString("") { "%02x".format(it) }
-            val b = copyHash.digest().joinToString("") { "%02x".format(it) }
+            val verifyHash = MessageDigest.getInstance("SHA-256")
+            RandomAccessFile(destination, "r").use { verify ->
+                var remaining = logical
+                while (remaining > 0L) {
+                    if (cancelled() || Thread.currentThread().isInterrupted)
+                        throw InterruptedException("ARC3 verification cancelled")
+                    val n = minOf(BLOCK.toLong(), remaining).toInt()
+                    verify.readFully(bytes, 0, n)
+                    verifyHash.update(bytes, 0, n)
+                    remaining -= n
+                }
+            }
+            val b = verifyHash.digest().joinToString("") { "%02x".format(it) }
             check(a == b) { "Logical copy digest mismatch" }
             complete = true
             return Result(destination, logical, nonZero, a, b)
