@@ -46,9 +46,14 @@ internal object Arc3FileIntegrityAudit {
                 if(fields.size<7) throw IOException("Malformed listing")
                 val mode=fields[2].toIntOrNull(8) ?: throw IOException("Bad file mode")
                 val name=fields[5]
+                // ext directory slack may contain an unused slot (inode 0).
+                // Ignore ONLY a proven unused slot, not an unnamed live inode.
+                val inode=fields[1].toLongOrNull()
+                    ?: throw IOException("Bad inode at "+folder+": "+line.take(180))
+                if(name.isEmpty() && inode==0L) continue
                 if(name=="." || name=="..") continue
                 if(name.isBlank() || name.any { it=='/' || it=='\n' || it=='\r' || it=='"' || it=='\\' })
-                    throw IOException("Unsupported filename in "+folder+": "+name.take(100))
+                    throw IOException("Unsupported filename in "+folder+": "+name.take(100)+" raw="+line.take(180))
                 val type=mode and 61440
                 if(type!=32768 && type!=16384)
                     throw IOException("Unsupported special file or symlink")
