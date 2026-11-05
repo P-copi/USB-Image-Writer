@@ -42,6 +42,7 @@ class SmartRebuildActivity : Activity() {
     private lateinit var workspaceButton:Button
     private lateinit var preflightButton:Button
     private lateinit var shrinkButton:Button
+    private lateinit var auditButton:Button
     private lateinit var sparseCancelButton:Button
     private var sparseTask:java.util.concurrent.Future<*>?=null
     private lateinit var copyButton:Button
@@ -134,6 +135,10 @@ class SmartRebuildActivity : Activity() {
             "v0.2.23 • ทดลองย่อ ARC3 Workspace เหลือ 2 GiB (ไม่แตะ USB)",
             ToolkitUi.AMBER){requestArc3Shrink()}
         controls.addView(shrinkButton,ToolkitUi.margin(this,8))
+        auditButton=ToolkitUi.button(this,
+            "v0.2.25 • ตรวจ Metadata ARC3 หลังย่อ เทียบ Mirror (อ่านอย่างเดียว)",
+            ToolkitUi.VIOLET){requestPostShrinkAudit()}
+        controls.addView(auditButton,ToolkitUi.margin(this,8))
         sparseCancelButton=ToolkitUi.button(this,
             "ยกเลิกการคัดลอก ARC3 (ลบไฟล์บางส่วน)",
             ToolkitUi.AMBER){
@@ -198,6 +203,41 @@ class SmartRebuildActivity : Activity() {
             Intent(action).setPackage(packageName),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
         usb.requestPermission(device,pending)
+    }
+
+    private fun requestPostShrinkAudit() {
+        if (busy || UsbBackupService.snapshot.running || UsbOperationService.snapshot.running) {
+            state.text="มีงานอื่นทำงานอยู่ กรุณารอให้เสร็จก่อน"
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("v0.2.25 • ตรวจ ARC3 หลังย่อ")
+            .setMessage("ตรวจ e2fsck, UUID, features และรายการรากของ EXT4 " +
+                "เทียบกับ ARC3 Mirror เดิม โดยอ่านอย่างเดียว " +
+                "ยังไม่ใช่การตรวจ SHA-256 ของไฟล์ทั้งหมด")
+            .setNegativeButton("ยกเลิก",null)
+            .setPositiveButton("เริ่มตรวจ"){_,_->
+                busy=true
+                auditButton.isEnabled=false
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                state.text="กำลังตรวจ ARC3 Workspace และ Mirror (อ่านอย่างเดียว)"
+                worker.execute {
+                    val audit=Arc3PostShrinkAudit.run(this)
+                    runOnUiThread {
+                        if(!isFinishing) {
+                            reportText=audit.text
+                            result.text=audit.text
+                            copyButton.isEnabled=true
+                            state.text=if(audit.passed)
+                                "PASS: Metadata ผ่าน • ยังไม่ตรวจ SHA-256 ไฟล์ทั้งหมด"
+                            else "BLOCKED: ตรวจ Metadata ไม่ผ่าน"
+                        }
+                        busy=false
+                        auditButton.isEnabled=true
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    }
+                }
+            }.show()
     }
 
     private fun requestArc3Shrink() {
