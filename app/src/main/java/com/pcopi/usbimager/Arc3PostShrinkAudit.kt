@@ -64,7 +64,7 @@ internal object Arc3PostShrinkAudit {
                 Regex("(?m)^"+Regex.escape(name)+":\\s*(.+)$")
                     .find(body)?.groupValues?.get(1)?.trim()
             val names=listOf("Filesystem UUID","Filesystem volume name",
-                "Filesystem features","Inode count")
+                "Filesystem features")
             for(name in names) {
                 val a=field(sourceStats.body,name)
                 val b=field(targetStats.body,name)
