@@ -46,6 +46,7 @@ class SmartRebuildActivity : Activity() {
     private lateinit var fileAuditButton:Button
     private lateinit var compactPlanButton:Button
     private lateinit var mbrAuditButton:Button
+    private lateinit var bootAuditButton:Button
     private lateinit var sparseCancelButton:Button
     private var sparseTask:java.util.concurrent.Future<*>?=null
     private lateinit var copyButton:Button
@@ -150,6 +151,8 @@ class SmartRebuildActivity : Activity() {
         controls.addView(compactPlanButton,ToolkitUi.margin(this,8))
         mbrAuditButton=ToolkitUi.button(this,"v0.2.32 • ตรวจ MBR ต้นฉบับ (อ่าน USB อย่างเดียว)",ToolkitUi.BLUE){requestSourceMbrAudit()}
         controls.addView(mbrAuditButton,ToolkitUi.margin(this,8))
+        bootAuditButton=ToolkitUi.button(this,"v0.2.33 • ตรวจ Boot Headers P1/P2/P3 (อ่านอย่างเดียว)",ToolkitUi.VIOLET){requestBootHeadersAudit()}
+        controls.addView(bootAuditButton,ToolkitUi.margin(this,8))
         sparseCancelButton=ToolkitUi.button(this,
             "ยกเลิกการคัดลอก ARC3 (ลบไฟล์บางส่วน)",
             ToolkitUi.AMBER){
@@ -214,6 +217,37 @@ class SmartRebuildActivity : Activity() {
             Intent(action).setPackage(packageName),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
         usb.requestPermission(device,pending)
+    }
+
+    private fun requestBootHeadersAudit() {
+        if(busy || UsbBackupService.snapshot.running || UsbOperationService.snapshot.running) return
+        val src=devices.getOrNull(source.selectedItemPosition)
+        if(src==null) { state.text="กรุณาเลือก USB ต้นฉบับ"; return }
+        AlertDialog.Builder(this)
+            .setTitle("ตรวจ Boot Headers จาก USB ต้นฉบับ")
+            .setMessage("อ่าน 4 sectors เพื่อตรวจ FAT/EXT เท่านั้น ไม่มีการเขียน USB")
+            .setNegativeButton("ยกเลิก",null)
+            .setPositiveButton("เริ่มตรวจ"){_,_->
+                requestPermission(src) {
+                    busy=true
+                    bootAuditButton.isEnabled=false
+                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    worker.execute {
+                        val report=CompactBootHeadersAudit.run(usb,src)
+                        runOnUiThread {
+                            if(!isFinishing) {
+                                reportText=report.text
+                                result.text=report.text
+                                copyButton.isEnabled=true
+                                state.text=if(report.passed) "PASS: Boot headers" else "BLOCKED: Boot headers"
+                            }
+                            busy=false
+                            bootAuditButton.isEnabled=true
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        }
+                    }
+                }
+            }.show()
     }
 
     private fun requestSourceMbrAudit() {
