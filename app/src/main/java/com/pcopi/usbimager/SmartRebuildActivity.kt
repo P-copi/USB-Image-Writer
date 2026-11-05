@@ -40,6 +40,7 @@ class SmartRebuildActivity : Activity() {
     private lateinit var sandboxButton:Button
     private lateinit var sparseButton:Button
     private lateinit var workspaceButton:Button
+    private lateinit var preflightButton:Button
     private lateinit var sparseCancelButton:Button
     private var sparseTask:java.util.concurrent.Future<*>?=null
     private lateinit var copyButton:Button
@@ -124,6 +125,10 @@ class SmartRebuildActivity : Activity() {
             "v0.2.21 • ตรวจและสำรอง ARC3 Sparse ในมือถือ (ไม่แตะ USB)",
             ToolkitUi.BLUE){requestSafeWorkspace()}
         controls.addView(workspaceButton,ToolkitUi.margin(this,8))
+        preflightButton=ToolkitUi.button(this,
+            "v0.2.22 • ตรวจ EXT4 Workspace ด้วย e2fsck / resize2fs -P (อ่านอย่างเดียว)",
+            ToolkitUi.VIOLET){requestArc3Preflight()}
+        controls.addView(preflightButton,ToolkitUi.margin(this,8))
         sparseCancelButton=ToolkitUi.button(this,
             "ยกเลิกการคัดลอก ARC3 (ลบไฟล์บางส่วน)",
             ToolkitUi.AMBER){
@@ -188,6 +193,45 @@ class SmartRebuildActivity : Activity() {
             Intent(action).setPackage(packageName),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
         usb.requestPermission(device,pending)
+    }
+
+    private fun requestArc3Preflight() {
+        if (busy || UsbBackupService.snapshot.running || UsbOperationService.snapshot.running) {
+            state.text="มีงานอื่นทำงานอยู่ กรุณารอให้เสร็จก่อน"
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("v0.2.22 • ตรวจ ARC3 แบบอ่านอย่างเดียว")
+            .setMessage("ตรวจ e2fsck -fn และประมาณขนาดต่ำสุดด้วย resize2fs -P " +
+                "เฉพาะ Workspace ที่สร้างจาก v0.2.21 เท่านั้น " +
+                "ไม่มีการย่อไฟล์ ไม่ซ่อม EXT4 และไม่เปิด USB")
+            .setNegativeButton("ยกเลิก",null)
+            .setPositiveButton("เริ่มตรวจ"){_,_->
+                busy=true
+                preflightButton.isEnabled=false
+                workspaceButton.isEnabled=false
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                state.text="กำลังตรวจ e2fsck และ resize2fs -P (อ่านอย่างเดียว)"
+                worker.execute {
+                    val report=Arc3ReadOnlyPreflight.run(this) {
+                        Thread.currentThread().isInterrupted
+                    }
+                    runOnUiThread {
+                        if (!isFinishing) {
+                            reportText=report.text
+                            result.text=report.text
+                            copyButton.isEnabled=true
+                            state.text=if(report.passed)
+                                "PASS: EXT4 preflight ผ่าน • ยังไม่ย่อ ARC3"
+                            else "BLOCKED: ตรวจ EXT4 ไม่ผ่าน • ไม่ย่อ ARC3"
+                        }
+                        busy=false
+                        preflightButton.isEnabled=true
+                        workspaceButton.isEnabled=true
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    }
+                }
+            }.show()
     }
 
     private fun requestSafeWorkspace() {
