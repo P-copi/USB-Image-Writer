@@ -237,8 +237,15 @@ class SmartRebuildActivity : Activity() {
                     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                     state.text="กำลังสำรอง MBR/P1/P2 • คงหน้าจอแอปไว้"
                     worker.execute {
-                        val report=CompactBootPrefixCapture.run(applicationContext,usb,src) {
-                            Thread.currentThread().isInterrupted
+                        val report=try {
+                            CompactBootPrefixCapture.run(applicationContext,usb,src) {
+                                Thread.currentThread().isInterrupted
+                            }
+                        } catch(t:Throwable) {
+                            android.util.Log.e("BootPrefixCapture","Capture failure",t)
+                            CompactBootPrefixCapture.Report(false,
+                                "BLOCKED: "+t.javaClass.name+": "+(t.message?:"no message")+
+                                "\\n"+t.stackTrace.take(8).joinToString("\\n"))
                         }
                         runOnUiThread {
                             if(!isFinishing) {
