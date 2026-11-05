@@ -31,19 +31,19 @@ internal object CompactBootPrefixCapture {
                 if(usb.blockSize!=BLOCK || usb.capacityBytes<BYTES)
                     throw java.io.IOException("Unsupported source sector size/capacity")
                 // libaums driver supports heap ByteBuffer; direct buffers can crash on array access.
-                val bytes=ByteArray(128*BLOCK)
+                val bytes=ByteArray(8*BLOCK)
                 val buf=ByteBuffer.wrap(bytes)
                 val hash=digest()
                 FileOutputStream(temp).use { out ->
                     var lba=0L
                     while(lba<SECTORS) {
                         if(cancelled()) throw java.io.InterruptedIOException("Cancelled")
-                        val count=minOf(128L,SECTORS-lba).toInt()
+                        val count=minOf(8L,SECTORS-lba).toInt()
                         buf.clear()
                         buf.limit(count*BLOCK)
                         usb.blockDevice.read(lba,buf)
-                        buf.flip()
-                        if(buf.remaining()!=count*BLOCK) throw java.io.IOException("USB short read at LBA $lba")
+                        // libaums may not advance ByteBuffer.position after a successful read.
+                        // Do not flip: the byte array is the actual read destination.
                         out.write(bytes,0,count*BLOCK)
                         hash.update(bytes,0,count*BLOCK)
                         lba+=count
