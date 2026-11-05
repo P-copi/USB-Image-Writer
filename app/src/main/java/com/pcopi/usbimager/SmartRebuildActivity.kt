@@ -45,6 +45,7 @@ class SmartRebuildActivity : Activity() {
     private lateinit var auditButton:Button
     private lateinit var fileAuditButton:Button
     private lateinit var compactPlanButton:Button
+    private lateinit var mbrAuditButton:Button
     private lateinit var sparseCancelButton:Button
     private var sparseTask:java.util.concurrent.Future<*>?=null
     private lateinit var copyButton:Button
@@ -147,6 +148,8 @@ class SmartRebuildActivity : Activity() {
         controls.addView(fileAuditButton,ToolkitUi.margin(this,8))
         compactPlanButton=ToolkitUi.button(this,"v0.2.31 • คำนวณ Compact IMG (ไม่เขียนไฟล์)",ToolkitUi.VIOLET){requestCompactPlan()}
         controls.addView(compactPlanButton,ToolkitUi.margin(this,8))
+        mbrAuditButton=ToolkitUi.button(this,"v0.2.32 • ตรวจ MBR ต้นฉบับ (อ่าน USB อย่างเดียว)",ToolkitUi.BLUE){requestSourceMbrAudit()}
+        controls.addView(mbrAuditButton,ToolkitUi.margin(this,8))
         sparseCancelButton=ToolkitUi.button(this,
             "ยกเลิกการคัดลอก ARC3 (ลบไฟล์บางส่วน)",
             ToolkitUi.AMBER){
@@ -211,6 +214,40 @@ class SmartRebuildActivity : Activity() {
             Intent(action).setPackage(packageName),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
         usb.requestPermission(device,pending)
+    }
+
+    private fun requestSourceMbrAudit() {
+        if(busy || UsbBackupService.snapshot.running || UsbOperationService.snapshot.running) return
+        val src=devices.getOrNull(source.selectedItemPosition)
+        if(src==null) {
+            state.text="กรุณาเสียบ USB ต้นฉบับและเลือกในรายการ"
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("ตรวจ MBR จาก USB ต้นฉบับ")
+            .setMessage("อ่านเฉพาะ Sector 0 ของ USB ต้นฉบับ ไม่เขียนข้อมูลใด ๆ")
+            .setNegativeButton("ยกเลิก",null)
+            .setPositiveButton("เริ่มตรวจ"){_,_->
+                requestPermission(src) {
+                    busy=true
+                    mbrAuditButton.isEnabled=false
+                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    worker.execute {
+                        val report=CompactSourceMbrAudit.run(usb,src)
+                        runOnUiThread {
+                            if(!isFinishing) {
+                                reportText=report.text
+                                result.text=report.text
+                                copyButton.isEnabled=true
+                                state.text=if(report.passed) "MBR ตรงกับแผน • ยังไม่สร้าง IMG" else "BLOCKED: ตรวจ MBR ไม่ผ่าน"
+                            }
+                            busy=false
+                            mbrAuditButton.isEnabled=true
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        }
+                    }
+                }
+            }.show()
     }
 
     private fun requestCompactPlan() {
