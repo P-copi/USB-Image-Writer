@@ -47,6 +47,8 @@ class SmartRebuildActivity : Activity() {
     private lateinit var compactPlanButton:Button
     private lateinit var mbrAuditButton:Button
     private lateinit var bootAuditButton:Button
+    private lateinit var compactVerifyButton:Button
+    private lateinit var compactExportButton:Button
     private lateinit var compactAssembleButton:Button
     private lateinit var prefixCaptureButton:Button
     private lateinit var sparseCancelButton:Button
@@ -159,6 +161,10 @@ class SmartRebuildActivity : Activity() {
         controls.addView(prefixCaptureButton,ToolkitUi.margin(this,8))
         compactAssembleButton=ToolkitUi.button(this,"v0.2.37 • ประกอบ Compact IMG ในมือถือ (ไม่ใช้ USB)",ToolkitUi.GREEN){requestCompactAssembly()}
         controls.addView(compactAssembleButton,ToolkitUi.margin(this,8))
+        compactVerifyButton=ToolkitUi.button(this,"v0.2.38 • ตรวจ Compact IMG",ToolkitUi.BLUE){requestCompactVerify()}
+        controls.addView(compactVerifyButton,ToolkitUi.margin(this,8))
+        compactExportButton=ToolkitUi.button(this,"v0.2.38 • ส่งออก Compact IMG",ToolkitUi.GREEN){requestCompactExport()}
+        controls.addView(compactExportButton,ToolkitUi.margin(this,8))
         sparseCancelButton=ToolkitUi.button(this,
             "ยกเลิกการคัดลอก ARC3 (ลบไฟล์บางส่วน)",
             ToolkitUi.AMBER){
