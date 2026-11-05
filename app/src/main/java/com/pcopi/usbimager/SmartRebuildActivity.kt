@@ -47,6 +47,7 @@ class SmartRebuildActivity : Activity() {
     private lateinit var compactPlanButton:Button
     private lateinit var mbrAuditButton:Button
     private lateinit var bootAuditButton:Button
+    private lateinit var prefixCaptureButton:Button
     private lateinit var sparseCancelButton:Button
     private var sparseTask:java.util.concurrent.Future<*>?=null
     private lateinit var copyButton:Button
@@ -153,6 +154,8 @@ class SmartRebuildActivity : Activity() {
         controls.addView(mbrAuditButton,ToolkitUi.margin(this,8))
         bootAuditButton=ToolkitUi.button(this,"v0.2.33 • ตรวจ Boot Headers P1/P2/P3 (อ่านอย่างเดียว)",ToolkitUi.VIOLET){requestBootHeadersAudit()}
         controls.addView(bootAuditButton,ToolkitUi.margin(this,8))
+        prefixCaptureButton=ToolkitUi.button(this,"v0.2.34 • สำรอง MBR/P1/P2 (USB อ่านอย่างเดียว)",ToolkitUi.BLUE){requestBootPrefixCapture()}
+        controls.addView(prefixCaptureButton,ToolkitUi.margin(this,8))
         sparseCancelButton=ToolkitUi.button(this,
             "ยกเลิกการคัดลอก ARC3 (ลบไฟล์บางส่วน)",
             ToolkitUi.AMBER){
@@ -217,6 +220,40 @@ class SmartRebuildActivity : Activity() {
             Intent(action).setPackage(packageName),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
         usb.requestPermission(device,pending)
+    }
+
+    private fun requestBootPrefixCapture() {
+        if(busy || UsbBackupService.snapshot.running || UsbOperationService.snapshot.running) return
+        val src=devices.getOrNull(source.selectedItemPosition)
+        if(src==null) {state.text="กรุณาเลือก USB ต้นฉบับ";return}
+        AlertDialog.Builder(this)
+            .setTitle("สำรองส่วนบูตลงมือถือ")
+            .setMessage("อ่านข้อมูลจาก USB ต้นฉบับ 105,906,176 ไบต์ และตรวจ SHA-256 ของไฟล์ที่บันทึก ไม่เขียน USB ไม่แก้ไข ARC3")
+            .setNegativeButton("ยกเลิก",null)
+            .setPositiveButton("เริ่มสำรอง"){_,_->
+                requestPermission(src) {
+                    busy=true
+                    prefixCaptureButton.isEnabled=false
+                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    state.text="กำลังสำรอง MBR/P1/P2 • คงหน้าจอแอปไว้"
+                    worker.execute {
+                        val report=CompactBootPrefixCapture.run(applicationContext,usb,src) {
+                            Thread.currentThread().isInterrupted
+                        }
+                        runOnUiThread {
+                            if(!isFinishing) {
+                                reportText=report.text
+                                result.text=report.text
+                                copyButton.isEnabled=true
+                                state.text=if(report.passed) "PASS: สำรองส่วนบูตพร้อม SHA-256" else "BLOCKED: สำรองส่วนบูตไม่สำเร็จ"
+                            }
+                            busy=false
+                            prefixCaptureButton.isEnabled=true
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        }
+                    }
+                }
+            }.show()
     }
 
     private fun requestBootHeadersAudit() {
