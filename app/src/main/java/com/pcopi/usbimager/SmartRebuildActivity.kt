@@ -44,6 +44,7 @@ class SmartRebuildActivity : Activity() {
     private lateinit var shrinkButton:Button
     private lateinit var auditButton:Button
     private lateinit var fileAuditButton:Button
+    private lateinit var compactPlanButton:Button
     private lateinit var sparseCancelButton:Button
     private var sparseTask:java.util.concurrent.Future<*>?=null
     private lateinit var copyButton:Button
@@ -144,6 +145,8 @@ class SmartRebuildActivity : Activity() {
             "v0.2.27 • ตรวจ SHA-256 ไฟล์ ARC3 ทุกโฟลเดอร์ (อ่านอย่างเดียว)",
             ToolkitUi.BLUE){requestFileAudit()}
         controls.addView(fileAuditButton,ToolkitUi.margin(this,8))
+        compactPlanButton=ToolkitUi.button(this,"v0.2.31 • คำนวณ Compact IMG (ไม่เขียนไฟล์)",ToolkitUi.VIOLET){requestCompactPlan()}
+        controls.addView(compactPlanButton,ToolkitUi.margin(this,8))
         sparseCancelButton=ToolkitUi.button(this,
             "ยกเลิกการคัดลอก ARC3 (ลบไฟล์บางส่วน)",
             ToolkitUi.AMBER){
@@ -208,6 +211,15 @@ class SmartRebuildActivity : Activity() {
             Intent(action).setPackage(packageName),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
         usb.requestPermission(device,pending)
+    }
+
+    private fun requestCompactPlan() {
+        if(busy) return
+        val report=CompactImgPlan.run(this)
+        reportText=report.text
+        result.text=report.text
+        copyButton.isEnabled=true
+        state.text=if(report.passed) "คำนวณสำเร็จ • ยังไม่สร้าง IMG" else "BLOCKED: geometry check"
     }
 
     private fun requestFileAudit() {
