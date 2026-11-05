@@ -39,7 +39,7 @@ internal object Arc3FileIntegrityAudit {
         while(queue.isNotEmpty()) {
             val (folder,depth)=queue.removeFirst()
             if(depth>32) throw IOException("Directory depth limit")
-            val output=debugfs(bin,img,"ls -p \\""+folder+"\\"",dir)
+            val output=debugfs(bin,img,"ls -p "+34.toChar()+folder+34.toChar(),dir)
             for(line in output.lineSequence()) {
                 if(!line.startsWith("/")) continue
                 val fields=line.split('/')
@@ -106,7 +106,7 @@ internal object Arc3FileIntegrityAudit {
                     if(temp.exists()) throw IOException("Temp file exists")
                     if(dir.usableSpace<entry.size+268435456L)
                         throw IOException("Insufficient space for file extraction")
-                    debugfs(bin,img,"dump \\""+path+"\\" "+temp.absolutePath,dir)
+                    debugfs(bin,img,"dump "+34.toChar()+path+34.toChar()+" "+temp.absolutePath,dir)
                     if(!temp.isFile || temp.length()!=entry.size)
                         throw IOException("File extraction failed")
                     val sha=digest(temp)
