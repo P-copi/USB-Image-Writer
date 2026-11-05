@@ -39,6 +39,7 @@ class SmartRebuildActivity : Activity() {
     private lateinit var crcButton:Button
     private lateinit var sandboxButton:Button
     private lateinit var sparseButton:Button
+    private lateinit var workspaceButton:Button
     private lateinit var sparseCancelButton:Button
     private var sparseTask:java.util.concurrent.Future<*>?=null
     private lateinit var copyButton:Button
@@ -119,6 +120,10 @@ class SmartRebuildActivity : Activity() {
             "v0.2.20 • ทำสำเนา ARC3 แบบ Sparse บนมือถือ (ทดลอง)",
             ToolkitUi.VIOLET){requestSparseMirror()}
         controls.addView(sparseButton,ToolkitUi.margin(this,8))
+        workspaceButton=ToolkitUi.button(this,
+            "v0.2.21 • ตรวจและสำรอง ARC3 Sparse ในมือถือ (ไม่แตะ USB)",
+            ToolkitUi.BLUE){requestSafeWorkspace()}
+        controls.addView(workspaceButton,ToolkitUi.margin(this,8))
         sparseCancelButton=ToolkitUi.button(this,
             "ยกเลิกการคัดลอก ARC3 (ลบไฟล์บางส่วน)",
             ToolkitUi.AMBER){
@@ -183,6 +188,80 @@ class SmartRebuildActivity : Activity() {
             Intent(action).setPackage(packageName),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
         usb.requestPermission(device,pending)
+    }
+
+    private fun requestSafeWorkspace() {
+        if (busy || UsbBackupService.snapshot.running || UsbOperationService.snapshot.running) {
+            state.text="มีงานอื่นทำงานอยู่ กรุณารอให้เสร็จก่อน"
+            return
+        }
+        val sourceFile=java.io.File(filesDir,
+            "legacy-arc3-mirror-v0220/arc3-mirror.ext4")
+        if (!sourceFile.isFile) {
+            state.text="ยังไม่มี ARC3 Sparse Mirror v0.2.20 ที่ผ่านการตรวจในมือถือ"
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("v0.2.21 • Safe ARC3 Workspace")
+            .setMessage("สร้างสำเนา Sparse แยกจาก ARC3 ต้นฉบับในพื้นที่ส่วนตัวของแอป " +
+                "แล้วอ่านกลับเพื่อตรวจ SHA-256 ทุกไบต์ ไม่ต้องเสียบ USB และไม่ย่อระบบไฟล์ในขั้นนี้\\n\\n" +
+                "อาจใช้เวลานานเนื่องจาก ARC3 มีขนาดเชิงตรรกะประมาณ 28.57 GB " +
+                "กรุณาเสียบชาร์จและคงหน้าจอไว้")
+            .setNegativeButton("ยกเลิก",null)
+            .setPositiveButton("เริ่มตรวจสำเนา"){_,_->
+                busy=true
+                workspaceButton.isEnabled=false
+                sparseButton.isEnabled=false
+                checkButton.isEnabled=false
+                quickButton.isEnabled=false
+                crcButton.isEnabled=false
+                sandboxButton.isEnabled=false
+                copyButton.isEnabled=false
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                state.text="กำลังสร้างและตรวจสำเนา ARC3 • ไม่เปิด USB"
+                worker.execute {
+                    try {
+                        val folder=java.io.File(filesDir,"arc3-workspace-v0221")
+                        if(!folder.exists() && !folder.mkdirs())
+                            throw java.io.IOException("สร้างโฟลเดอร์ Workspace ไม่ได้")
+                        val targetFile=java.io.File(folder,"arc3-working.ext4")
+                        val report=SafeArc3Workspace.copyReadOnly(sourceFile,targetFile) {
+                            Thread.currentThread().isInterrupted
+                        }
+                        val message="=== ARC3 Workspace v0.2.21 ===\\n" +
+                            "ต้นฉบับไม่ถูกแก้ไข / ไม่เปิด USB\\n" +
+                            "ขนาดเชิงตรรกะ: "+report.logicalBytes+" bytes\\n" +
+                            "ข้อมูลบล็อกไม่เป็นศูนย์ที่เขียน: "+report.nonZeroBytesWritten+" bytes\\n" +
+                            "SHA-256 source: "+report.sourceDigest+"\\n" +
+                            "SHA-256 working: "+report.workingDigest+"\\n" +
+                            "PASS: สำเนาตรงกัน • ยังไม่ได้ย่อ EXT4"
+                        runOnUiThread {
+                            if(!isFinishing) {
+                                reportText=message
+                                result.text=message
+                                copyButton.isEnabled=true
+                                state.text="ตรวจสำเนา SHA-256 ผ่าน • ยังไม่ใช่ Compact IMG"
+                            }
+                        }
+                    }catch(e:Exception) {
+                        runOnUiThread {
+                            if(!isFinishing)state.text=
+                                "BLOCKED: "+(e.message?:e.javaClass.simpleName)
+                        }
+                    }finally {
+                        runOnUiThread {
+                            busy=false
+                            workspaceButton.isEnabled=true
+                            sparseButton.isEnabled=true
+                            checkButton.isEnabled=true
+                            quickButton.isEnabled=true
+                            crcButton.isEnabled=true
+                            sandboxButton.isEnabled=true
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        }
+                    }
+                }
+            }.show()
     }
 
     private fun requestSparseMirror() {
