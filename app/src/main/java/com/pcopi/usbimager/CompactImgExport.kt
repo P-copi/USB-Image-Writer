@@ -33,4 +33,20 @@ internal object CompactImgExport {
    return Report(true,b.toString())
   }catch(e:Exception){return Report(false,b.append("BLOCKED: ").append(e.message).toString())}
  }
+
+ fun export(c:Context,uri:android.net.Uri):Report{
+  val b=StringBuilder("=== Compact IMG Export v0.2.38 ===\\n")
+  try{
+   val checked=verify(c)
+   if(!checked.passed)throw java.io.IOException("Source verification failed: "+checked.text)
+   val dest=c.contentResolver.openOutputStream(uri,"w")?:throw java.io.IOException("Cannot open destination")
+   dest.use{out->file(c).inputStream().buffered().use{input->input.copyTo(out,65536);out.flush()}}
+   val read=c.contentResolver.openInputStream(uri)?:throw java.io.IOException("Cannot verify saved destination")
+   val (bytes,digest)=hash(read)
+   if(bytes!=SIZE||digest!=EXPECTED)throw java.io.IOException("Destination size or SHA-256 mismatch")
+   b.append("Exported bytes: ").append(bytes).append("\\nSHA-256: ").append(digest)
+   b.append("\\nPASS: exported IMG re-read and verified. NOT BOOT TESTED.")
+   return Report(true,b.toString())
+  }catch(e:Exception){return Report(false,b.append("BLOCKED: ").append(e.message).append("\\nDo not use incomplete export.").toString())}
+ }
 }
