@@ -1,6 +1,7 @@
 package com.pcopi.usbimager
 
 import java.io.File
+import android.system.Os
 import java.io.RandomAccessFile
 import java.security.MessageDigest
 
@@ -30,10 +31,9 @@ internal object SafeArc3Workspace {
      * private app storage. Destination must not exist. No USB writes occur.
      * SHA-256 is computed over every logical byte, including holes.
      *
-     * The storage check is conservative and deliberately assumes a fully
-     * allocated destination: an underestimated free-space check is unsafe.
-     * This means large ARC3 mirrors may be rejected until an allocated-block
-     * preflight is available. Never fall back to an unsafe full copy.
+     * Estimate physical source allocation using stat.st_blocks (512-byte units).
+     * Require a 2x allocation budget plus a 512 MiB reserve and continuously
+     * enforce the reserve while copying. Abort and delete on any failure.
      */
     fun copyReadOnly(source: File, destination: File, cancelled: () -> Boolean = { false }): Result {
         require(source.isFile && source.canRead()) { "ARC3 mirror missing or unreadable" }
@@ -42,8 +42,11 @@ internal object SafeArc3Workspace {
         require(destination.parentFile?.isDirectory == true) { "Working directory missing" }
         val logical = source.length()
         require(logical in 1..MAX_LOGICAL_BYTES) { "Invalid ARC3 mirror size" }
-        require(destination.parentFile!!.usableSpace > logical + RESERVE_BYTES) {
-            "Insufficient verified free space; sparse allocation preflight required"
+        val physical = Math.multiplyExact(Os.stat(source.absolutePath).st_blocks, 512L)
+        require(physical > 0L && physical <= logical) { "Invalid source allocation" }
+        val budget = Math.addExact(Math.multiplyExact(physical, 2L), RESERVE_BYTES)
+        require(destination.parentFile!!.usableSpace > budget) {
+            "Insufficient space for safe sparse copy and reserve"
         }
         val sourceHash = MessageDigest.getInstance("SHA-256")
         val bytes = ByteArray(BLOCK)
@@ -60,6 +63,8 @@ internal object SafeArc3Workspace {
                         val size = minOf(BLOCK.toLong(), logical - offset).toInt()
                         input.readFully(bytes, 0, size)
                         sourceHash.update(bytes, 0, size)
+                        if (destination.parentFile!!.usableSpace <= RESERVE_BYTES)
+                            throw IllegalStateException("Storage reserve exhausted")
                         if ((0 until size).any { bytes[it].toInt() != 0 }) {
                             output.seek(offset)
                             output.write(bytes, 0, size)
