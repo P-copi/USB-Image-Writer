@@ -54,7 +54,7 @@ internal object Arc3FileIntegrityAudit {
                     throw IOException("Unsupported special file or symlink")
                 val path=if(folder=="/") "/"+name else folder+"/"+name
                 val size=fields[6].toLongOrNull() ?: throw IOException("Bad file size")
-                if(result.put(path,Entry(type,size))!=null) throw IOException("Duplicate path")
+                if(result.put(path,Entry(type,if(type==16384) 0L else size))!=null) throw IOException("Duplicate path")
                 if(result.size>20000) throw IOException("Too many files")
                 if(type==16384) queue.add(path to (depth+1))
             }
