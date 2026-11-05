@@ -53,8 +53,14 @@ internal object Arc3FileIntegrityAudit {
                 if(type!=32768 && type!=16384)
                     throw IOException("Unsupported special file or symlink")
                 val path=if(folder=="/") "/"+name else folder+"/"+name
-                val size=fields[6].toLongOrNull() ?: throw IOException("Bad file size")
-                if(result.put(path,Entry(type,if(type==16384) 0L else size))!=null) throw IOException("Duplicate path")
+                // debugfs ls -p may omit the size field for directories.
+                // Only regular files require a numeric size; fail closed otherwise.
+                val size=if(type==16384) 0L else
+                    fields.getOrNull(6)?.trim()?.toLongOrNull()
+                        ?: throw IOException("Bad file size at "+path+
+                            " (field="+fields.getOrNull(6)?.take(32)+")")
+                if(size<0L) throw IOException("Negative file size at "+path)
+                if(result.put(path,Entry(type,size))!=null) throw IOException("Duplicate path")
                 if(result.size>20000) throw IOException("Too many files")
                 if(type==16384) queue.add(path to (depth+1))
             }
