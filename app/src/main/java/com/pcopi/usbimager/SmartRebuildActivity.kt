@@ -231,6 +231,68 @@ class SmartRebuildActivity : Activity() {
         usb.requestPermission(device,pending)
     }
 
+    private fun requestCompactVerify() {
+        if(busy)return
+        busy=true
+        compactVerifyButton.isEnabled=false
+        state.text="กำลังตรวจ IMG"
+        worker.execute {
+            val report=try{CompactImgExport.verify(applicationContext)}
+                catch(t:Throwable){CompactImgExport.Report(false,"BLOCKED: "+t.message)}
+            runOnUiThread {
+                if(!isFinishing){
+                    reportText=report.text
+                    result.text=report.text
+                    copyButton.isEnabled=true
+                    state.text=if(report.passed)"PASS: IMG verified" else "BLOCKED: IMG verification failed"
+                    compactVerifyButton.isEnabled=true
+                }
+                busy=false
+            }
+        }
+    }
+
+    private fun requestCompactExport() {
+        if(busy)return
+        AlertDialog.Builder(this)
+            .setTitle("ส่งออก Compact IMG")
+            .setMessage("เลือกตำแหน่งบันทึก IMG ขนาด 2.10 GiB จะตรวจ SHA-256 ก่อนและหลังส่งออก ไม่ลบไฟล์ต้นฉบับ")
+            .setNegativeButton("ยกเลิก",null)
+            .setPositiveButton("เลือกที่บันทึก"){_,_->
+                val intent=Intent(Intent.ACTION_CREATE_DOCUMENT).apply{
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type="application/octet-stream"
+                    putExtra(Intent.EXTRA_TITLE,"arc-compact-v0238.img")
+                }
+                startActivityForResult(intent,238)
+            }.show()
+    }
+
+    override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) {
+        super.onActivityResult(requestCode,resultCode,data)
+        if(requestCode!=238||resultCode!=Activity.RESULT_OK||data?.data==null||busy)return
+        val destination=data.data!!
+        busy=true
+        compactExportButton.isEnabled=false
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        state.text="กำลังส่งออกและตรวจ IMG"
+        worker.execute {
+            val report=try{CompactImgExport.export(applicationContext,destination)}
+                catch(t:Throwable){CompactImgExport.Report(false,"BLOCKED: "+t.message)}
+            runOnUiThread {
+                if(!isFinishing){
+                    reportText=report.text
+                    result.text=report.text
+                    copyButton.isEnabled=true
+                    state.text=if(report.passed)"PASS: IMG exported" else "BLOCKED: export failed"
+                    compactExportButton.isEnabled=true
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+                busy=false
+            }
+        }
+    }
+
     private fun requestCompactAssembly() {
         if(busy || UsbBackupService.snapshot.running || UsbOperationService.snapshot.running) return
         AlertDialog.Builder(this)
