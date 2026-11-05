@@ -30,7 +30,9 @@ internal object CompactBootPrefixCapture {
                 usb.init()
                 if(usb.blockSize!=BLOCK || usb.capacityBytes<BYTES)
                     throw java.io.IOException("Unsupported source sector size/capacity")
-                val buf=ByteBuffer.allocateDirect(128*BLOCK)
+                // libaums driver supports heap ByteBuffer; direct buffers can crash on array access.
+                val bytes=ByteArray(128*BLOCK)
+                val buf=ByteBuffer.wrap(bytes)
                 val hash=digest()
                 FileOutputStream(temp).use { out ->
                     var lba=0L
@@ -41,10 +43,9 @@ internal object CompactBootPrefixCapture {
                         buf.limit(count*BLOCK)
                         usb.blockDevice.read(lba,buf)
                         buf.flip()
-                        val bytes=ByteArray(count*BLOCK)
-                        buf.get(bytes)
-                        out.write(bytes)
-                        hash.update(bytes)
+                        if(buf.remaining()!=count*BLOCK) throw java.io.IOException("USB short read at LBA $lba")
+                        out.write(bytes,0,count*BLOCK)
+                        hash.update(bytes,0,count*BLOCK)
                         lba+=count
                     }
                     out.fd.sync()
@@ -63,7 +64,7 @@ internal object CompactBootPrefixCapture {
                 }
                 val savedHash=hex(verify.digest())
                 if(sourceHash!=savedHash) throw java.io.IOException("Saved prefix SHA-256 mismatch")
-                if(output.exists() && !output.delete()) throw java.io.IOException("Cannot replace previous staging file")
+                if(output.exists()) throw java.io.IOException("Previous verified boot prefix exists; refusing overwrite")
                 if(!temp.renameTo(output)) throw java.io.IOException("Cannot finalize staging file")
                 report.append("Captured bytes: ").append(BYTES).append('\n')
                 report.append("Source stream SHA-256: ").append(sourceHash).append('\n')
