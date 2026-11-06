@@ -129,7 +129,7 @@ class BootExplorerActivity : Activity() {
         root.addView(browser,ToolkitUi.margin(this,14))
 
         val diagnostics=ToolkitUi.card(this)
-        diagnostics.addView(ToolkitUi.text(this,"ARC Deep Inspector • v0.2.44",18f,ToolkitUi.INK,true))
+        diagnostics.addView(ToolkitUi.text(this,"ARC Deep Inspector • v0.2.45",18f,ToolkitUi.INK,true))
         diagnostics.addView(ToolkitUi.text(this,"ตรวจโฟลเดอร์หลักแบบอ่านอย่างเดียว ไม่คัดลอกเนื้อหาไฟล์หรือข้อมูลลับ",13f,ToolkitUi.SUB))
         diagnostics.addView(ToolkitUi.button(this,"ตรวจทั้งหมด",ToolkitUi.GREEN){runDeepAudit()},ToolkitUi.margin(this,9))
         diagnostics.addView(ToolkitUi.button(this,"คัดลอกรายงาน",ToolkitUi.BLUE){copyDeepReport()},ToolkitUi.margin(this,8))
@@ -275,12 +275,12 @@ class BootExplorerActivity : Activity() {
         if(active==null || scan==null){status.text="กดสำรวจ Boot ก่อน";return}
         busy=true;updateButtons();status.text="กำลังตรวจโฟลเดอร์แบบอ่านอย่างเดียว..."
         executor.execute{
-            val output=StringBuilder("=== ARC Deep Inspector v0.2.44 ===\n")
+            val output=StringBuilder("=== ARC Deep Inspector v0.2.45 ===\n")
             output.append("READ ONLY / FILE CONTENTS NOT EXPORTED\n")
             output.append("Bootloader: ").append(scan.identity.title).append('\n')
             output.append("Version evidence: ").append(scan.identity.version ?: "UNKNOWN").append('\n')
             output.append("Disk: ").append(scan.style).append(" bytes=").append(scan.totalBytes).append('\n')
-            output.append("AUDIT: directory consistency, DS920+ template, raw LBA, bounded regions and four EXT module files; no boot test\n")
+            output.append("AUDIT: directory consistency, DS920+ template, raw LBA, bounded regions and all listed EXT module archives; no boot test\n")
             val rawCheck=runCatching{active.auditRawLba(237632L,3)}
             output.append(if(rawCheck.getOrNull()==true)"PASS" else "FAIL")
                 .append(" raw LBA 237632 SHA-256 consistency 3 uncached reads")
@@ -351,16 +351,29 @@ class BootExplorerActivity : Activity() {
                                     }
                                 }
                                 if(v.number==3 && target=="modules"){
-                                    children.filter{!it.directory && it.name.endsWith(".tgz",true)}
-                                        .take(4).forEach{item->
-                                            val result=runCatching{active.auditExtFile(v.number,item)}
-                                            output.append(if(result.getOrNull()==true)"PASS" else "FAIL")
-                                                .append(" EXT file repeated SHA-256 consistency bytes=")
-                                                .append(item.size)
-                                                .append(" (digest withheld)")
-                                                .append(if(result.isFailure)" error="+result.exceptionOrNull()?.javaClass?.simpleName else "")
-                                                .append('\n')
+                                    val archives=children.filter{!it.directory && it.name.endsWith(".tgz",true)}
+                                    var passed=0
+                                    var failed=0
+                                    var checkedBytes=0L
+                                    archives.forEachIndexed{index,item->
+                                        runOnUiThread{
+                                            status.text="ตรวจไฟล์ EXT "+(index+1)+"/"+archives.size+" • อ่านอย่างเดียว"
                                         }
+                                        val result=runCatching{active.auditExtFile(v.number,item)}
+                                        if(result.getOrNull()==true)passed++ else failed++
+                                        if(result.getOrNull()==true)checkedBytes+=item.size
+                                        output.append(if(result.getOrNull()==true)"PASS" else "FAIL")
+                                            .append(" EXT archive=").append(item.name.take(90))
+                                            .append(" repeated SHA-256 bytes=").append(item.size)
+                                            .append(" (digest withheld)")
+                                            .append(if(result.isFailure)" error="+result.exceptionOrNull()?.javaClass?.simpleName else "")
+                                            .append('\n')
+                                    }
+                                    output.append("SUMMARY EXT archives total=").append(archives.size)
+                                        .append(" pass=").append(passed)
+                                        .append(" fail=").append(failed)
+                                        .append(" passedBytes=").append(checkedBytes)
+                                        .append(" readsPerFile=2 (not IMG comparison)\n")
                                 }
                                 children.take(80).forEach{item->
                                     output.append("  ").append(if(item.directory)"DIR " else "FILE ")
@@ -377,7 +390,7 @@ class BootExplorerActivity : Activity() {
                     }
                 }
             }
-            output.append("NOTE: raw LBA 237632 and three 64-sector regions checked uncached; DS920+ template compared in memory; selected EXT files checked twice; all-file integrity and IMG comparison NOT checked\n")
+            output.append("NOTE: raw LBA 237632 and three 64-sector regions checked uncached; DS920+ template compared in memory; listed EXT module archives checked twice; other files and IMG comparison NOT checked\n")
             output.append("END REPORT • no SN/MAC/key/token values collected\n")
             val value=output.toString()
             runOnUiThread{
