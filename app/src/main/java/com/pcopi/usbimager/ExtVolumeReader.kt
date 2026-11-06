@@ -135,6 +135,28 @@ class ExtVolumeReader(
         return String(data,Charsets.UTF_8)
     }
 
+    fun auditRegularFile(inodeNumber:Long, maxBytes:Long=32L*1024*1024):Boolean {
+        val inode=readInode(inodeNumber)
+        if((inode.mode and 0xf000)!=0x8000 || (inode.flags and 0x800L)!=0L)
+            throw IOException("Unsupported file type")
+        if(inode.size>maxBytes)throw IOException("File exceeds audit limit")
+        fun digest():ByteArray {
+            val hash=java.security.MessageDigest.getInstance("SHA-256")
+            var remaining=inode.size
+            var logical=0L
+            while(remaining>0) {
+                val count=minOf(remaining,bs.toLong()).toInt()
+                val physical=physicalBlock(inode,logical)
+                if(physical==0L)hash.update(ByteArray(count))
+                else hash.update(readFsBlock(physical),0,count)
+                remaining-=count
+                logical++
+            }
+            return hash.digest()
+        }
+        return java.security.MessageDigest.isEqual(digest(),digest())
+    }
+
     private fun readInode(id:Long):Inode {
         val totalInodes=u32(sb,0)
         if(id<2 || id>totalInodes)throw IOException("EXT inode อยู่นอกช่วง: "+id)
