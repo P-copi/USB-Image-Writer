@@ -275,50 +275,50 @@ class BootExplorerActivity : Activity() {
         if(active==null || scan==null){status.text="กดสำรวจ Boot ก่อน";return}
         busy=true;updateButtons();status.text="กำลังตรวจโฟลเดอร์แบบอ่านอย่างเดียว..."
         executor.execute{
-            val output=StringBuilder("=== ARC Deep Inspector v0.2.39 ===\\n")
-            output.append("READ ONLY / FILE CONTENTS NOT EXPORTED\\n")
-            output.append("Bootloader: ").append(scan.identity.title).append('\\n')
-            output.append("Version evidence: ").append(scan.identity.version ?: "UNKNOWN").append('\\n')
-            output.append("Disk: ").append(scan.style).append(" bytes=").append(scan.totalBytes).append('\\n')
+            val output=StringBuilder("=== ARC Deep Inspector v0.2.39 ===\n")
+            output.append("READ ONLY / FILE CONTENTS NOT EXPORTED\n")
+            output.append("Bootloader: ").append(scan.identity.title).append('\n')
+            output.append("Version evidence: ").append(scan.identity.version ?: "UNKNOWN").append('\n')
+            output.append("Disk: ").append(scan.style).append(" bytes=").append(scan.totalBytes).append('\n')
             scan.volumes.forEach{v->
                 output.append("P").append(v.number).append(" ").append(v.fileSystem)
                     .append(" LBA=").append(v.startLba).append("-").append(v.endLba)
-                    .append(" readable=").append(v.isReadable).append('\\n')
-                if(v.warning.isNotBlank())output.append("WARN P").append(v.number).append(": ").append(v.warning.take(180)).append('\\n')
+                    .append(" readable=").append(v.isReadable).append('\n')
+                if(v.warning.isNotBlank())output.append("WARN P").append(v.number).append(": ").append(v.warning.take(180)).append('\n')
                 if(!v.isReadable)return@forEach
                 val roots=runCatching{active.list(v.number,null)}
                 roots.onFailure{e->
                     output.append("FAIL P").append(v.number).append(" root: ")
-                        .append(e.javaClass.simpleName).append(": ").append(e.message?.take(180)).append('\\n')
+                        .append(e.javaClass.simpleName).append(": ").append(e.message?.take(180)).append('\n')
                 }
                 roots.onSuccess{entries->
-                    output.append("PASS P").append(v.number).append(" root entries=").append(entries.size).append('\\n')
+                    output.append("PASS P").append(v.number).append(" root entries=").append(entries.size).append('\n')
                     val targets=if(v.number==3)listOf("configs","addons","extensions","modules","patches")
                         else if(v.number==1)listOf("EFI") else emptyList()
                     targets.forEach{target->
                         val folder=entries.firstOrNull{it.directory && it.name.equals(target,true)}
-                        if(folder==null){output.append("NOT FOUND P").append(v.number).append("/").append(target).append('\\n')}
+                        if(folder==null){output.append("NOT FOUND P").append(v.number).append("/").append(target).append('\n')}
                         else {
                             val result=runCatching{active.list(v.number,folder)}
                             result.onSuccess{children->
                                 output.append("PASS P").append(v.number).append("/").append(target)
-                                    .append(" entries=").append(children.size).append('\\n')
+                                    .append(" entries=").append(children.size).append('\n')
                                 children.take(80).forEach{item->
                                     output.append("  ").append(if(item.directory)"DIR " else "FILE ")
-                                        .append(item.name.take(100)).append(if(item.directory)"" else " bytes="+item.size).append('\\n')
+                                        .append(item.name.take(100)).append(if(item.directory)"" else " bytes="+item.size).append('\n')
                                 }
-                                if(children.size>80)output.append("  TRUNCATED entry list\\n")
+                                if(children.size>80)output.append("  TRUNCATED entry list\n")
                             }
                             result.onFailure{e->
                                 output.append("FAIL P").append(v.number).append("/").append(target)
                                     .append(": ").append(e.javaClass.simpleName).append(": ")
-                                    .append(e.message?.take(180)).append('\\n')
+                                    .append(e.message?.take(180)).append('\n')
                             }
                         }
                     }
                 }
             }
-            output.append("END REPORT • no SN/MAC/key/token values collected\\n")
+            output.append("END REPORT • no SN/MAC/key/token values collected\n")
             val value=output.toString()
             runOnUiThread{
                 deepReportValue=value;deepReport.text=value
