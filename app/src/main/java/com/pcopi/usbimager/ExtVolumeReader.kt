@@ -154,7 +154,13 @@ class ExtVolumeReader(
             }
             return hash.digest()
         }
-        return java.security.MessageDigest.isEqual(digest(),digest())
+        // Evict filesystem-sector cache between passes to force fresh USB reads.
+        diskCache.clear()
+        val first=digest()
+        diskCache.clear()
+        val second=digest()
+        diskCache.clear()
+        return java.security.MessageDigest.isEqual(first,second)
     }
 
     private fun readInode(id:Long):Inode {
