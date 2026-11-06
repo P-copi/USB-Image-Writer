@@ -41,6 +41,7 @@ class BootExplorerActivity : Activity() {
     private var currentVolume=0
     private val stack=mutableListOf<BootDiskReader.Entry>()
     private var busy=false
+    private val imgCompareRequest=4812
     private var waiting:(()->Unit)?=null
     private val permissionAction="com.pcopi.usbimager.BOOT_EXPLORER_PERMISSION"
     private val receiver=object:BroadcastReceiver(){
@@ -129,13 +130,17 @@ class BootExplorerActivity : Activity() {
         root.addView(browser,ToolkitUi.margin(this,14))
 
         val diagnostics=ToolkitUi.card(this)
-        diagnostics.addView(ToolkitUi.text(this,"ARC Deep Inspector • v0.2.47",18f,ToolkitUi.INK,true))
+        diagnostics.addView(ToolkitUi.text(this,"ARC Deep Inspector • v0.2.48",18f,ToolkitUi.INK,true))
         diagnostics.addView(ToolkitUi.text(this,"ตรวจโฟลเดอร์หลักแบบอ่านอย่างเดียว ไม่คัดลอกเนื้อหาไฟล์หรือข้อมูลลับ",13f,ToolkitUi.SUB))
         diagnostics.addView(ToolkitUi.button(this,"ตรวจทั้งหมด",ToolkitUi.GREEN){runDeepAudit()},ToolkitUi.margin(this,9))
         diagnostics.addView(ToolkitUi.button(this,"คัดลอกรายงาน",ToolkitUi.BLUE){copyDeepReport()},ToolkitUi.margin(this,8))
         deepReport=ToolkitUi.text(this,"ยังไม่ได้ตรวจ",13f,ToolkitUi.INK)
         deepReport.setTextIsSelectable(true)
         diagnostics.addView(deepReport,ToolkitUi.margin(this,9))
+        diagnostics.addView(ToolkitUi.button(this,"เลือก IMG • เปรียบเทียบ Raw แบบสุ่มจุด",ToolkitUi.BLUE){
+            if(busy || reader==null){status.text="กรุณาสำรวจ Boot และรอให้งานอื่นเสร็จก่อน"}
+            else startImgComparison()
+        },ToolkitUi.margin(this,8))
         root.addView(diagnostics,ToolkitUi.margin(this,14))
 
         val safety=ToolkitUi.card(this)
@@ -266,6 +271,47 @@ class BootExplorerActivity : Activity() {
         status.text="คัดลอกรายงานแล้ว • วางลงในแชทได้เลย"
     }
 
+    private fun startImgComparison(){
+        val intent=Intent(Intent.ACTION_OPEN_DOCUMENT).apply{
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type="*/*"
+        }
+        @Suppress("DEPRECATION")
+        startActivityForResult(intent,imgCompareRequest)
+    }
+
+    @Deprecated("Legacy activity result used for compatibility with existing Activity")
+    override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){
+        super.onActivityResult(requestCode,resultCode,data)
+        if(requestCode!=imgCompareRequest || resultCode!=RESULT_OK)return
+        val uri=data?.data?:return
+        val active=reader?:return
+        if(busy || UsbOperationService.snapshot.running || UsbBackupService.snapshot.running){
+            status.text="มีงาน USB กำลังทำงาน";return
+        }
+        busy=true;updateButtons();status.text="เปรียบเทียบจุดตัวอย่าง USB กับ IMG • READ ONLY"
+        executor.execute{
+            val result=runCatching{
+                val pfd=contentResolver.openFileDescriptor(uri,"r")
+                    ?:throw java.io.IOException("Cannot open IMG")
+                pfd.use{fd->
+                    java.io.FileInputStream(fd.fileDescriptor).use{stream->
+                        val size=stream.channel.size()
+                        active.compareImgSectors(stream,size)
+                    }
+                }
+            }
+            runOnUiThread{
+                busy=false;updateButtons()
+                if(result.isSuccess){
+                    deepReportValue=result.getOrThrow()
+                    deepReport.text=deepReportValue
+                    status.text="เปรียบเทียบจุดตัวอย่างเสร็จ • ไม่ได้ตรวจทั้ง IMG"
+                }else status.text="IMG comparison failed: "+result.exceptionOrNull()?.javaClass?.simpleName
+            }
+        }
+    }
+
     private fun runDeepAudit(){
         if(busy || UsbOperationService.snapshot.running || UsbBackupService.snapshot.running){
             status.text="มีงาน USB กำลังทำงาน";return
@@ -275,7 +321,7 @@ class BootExplorerActivity : Activity() {
         if(active==null || scan==null){status.text="กดสำรวจ Boot ก่อน";return}
         busy=true;updateButtons();status.text="กำลังตรวจโฟลเดอร์แบบอ่านอย่างเดียว..."
         executor.execute{
-            val output=StringBuilder("=== ARC Deep Inspector v0.2.47 ===\n")
+            val output=StringBuilder("=== ARC Deep Inspector v0.2.48 ===\n")
             output.append("READ ONLY / FILE CONTENTS NOT EXPORTED\n")
             output.append("Bootloader: ").append(scan.identity.title).append('\n')
             output.append("Version evidence: ").append(scan.identity.version ?: "UNKNOWN").append('\n')
