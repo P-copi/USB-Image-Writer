@@ -163,6 +163,140 @@ class ExtVolumeReader(
         return java.security.MessageDigest.isEqual(first,second)
     }
 
+
+    /**
+     * Read-only, bounded GZIP+TAR structure audit. GZIPInputStream validates
+     * CRC32 and ISIZE at EOF; TAR header checksums and entry boundaries are
+     * checked without writing extracted content anywhere.
+     */
+    fun auditTgzStructure(inodeNumber:Long, maxCompressed:Long=32L*1024*1024,
+                          maxExpanded:Long=512L*1024*1024):Int {
+        val inode=readInode(inodeNumber)
+        if((inode.mode and 0xf000)!=0x8000 || inode.size<=0 ||
+            inode.size>maxCompressed || (inode.flags and 0x800L)!=0L)
+            throw IOException("Unsupported TGZ size or inode")
+        diskCache.clear()
+        val source=object:java.io.InputStream(){
+            var position=0L
+            var cachedBlock=-1L
+            var bytes=ByteArray(0)
+            override fun read():Int {
+                if(position>=inode.size)return -1
+                val logical=position/bs
+                if(logical!=cachedBlock){
+                    val physical=physicalBlock(inode,logical)
+                    bytes=if(physical==0L)ByteArray(bs) else readFsBlock(physical)
+                    cachedBlock=logical
+                }
+                val value=bytes[(position%bs).toInt()].toInt() and 255
+                position++
+                return value
+            }
+            override fun read(buffer:ByteArray,offset:Int,length:Int):Int {
+                if(offset<0 || length<0 || offset>buffer.size-length)
+                    throw IndexOutOfBoundsException()
+                if(length==0)return 0
+                if(position>=inode.size)return -1
+                var done=0
+                while(done<length && position<inode.size){
+                    val logical=position/bs
+                    if(logical!=cachedBlock){
+                        val physical=physicalBlock(inode,logical)
+                        bytes=if(physical==0L)ByteArray(bs) else readFsBlock(physical)
+                        cachedBlock=logical
+                    }
+                    val n=minOf(length-done,bs-(position%bs).toInt(),
+                        (inode.size-position).toInt())
+                    bytes.copyInto(buffer,offset+done,(position%bs).toInt(),
+                        (position%bs).toInt()+n)
+                    position+=n
+                    done+=n
+                }
+                return done
+            }
+        }
+        var expanded=0L
+        val gzip=java.util.zip.GZIPInputStream(source,8192)
+        fun readExact(buffer:ByteArray,count:Int):Boolean {
+            var at=0
+            while(at<count){
+                val n=gzip.read(buffer,at,count-at)
+                if(n<0){
+                    if(at==0)return false
+                    throw IOException("Truncated TAR data")
+                }
+                if(n==0)continue
+                expanded+=n
+                if(expanded>maxExpanded)throw IOException("TGZ expansion limit exceeded")
+                at+=n
+            }
+            return true
+        }
+        fun octal(bytes:ByteArray,start:Int,length:Int):Long {
+            var value=0L
+            var digits=0
+            for(i in start until start+length){
+                val c=bytes[i].toInt() and 255
+                if(c==0 || c==32){
+                    if(digits>0)break
+                    continue
+                }
+                if(c !in 48..55)throw IOException("Invalid TAR octal field")
+                if(value>(Long.MAX_VALUE-(c-48))/8L)
+                    throw IOException("TAR octal overflow")
+                value=value*8+(c-48)
+                digits++
+            }
+            return value
+        }
+        try {
+            val header=ByteArray(512)
+            val scratch=ByteArray(8192)
+            var entries=0
+            var zeroBlocks=0
+            while(true){
+                if(!readExact(header,512))
+                    throw IOException("Missing TAR end marker")
+                if(header.all{it==0.toByte()}){
+                    zeroBlocks++
+                    if(zeroBlocks>=2)break
+                    continue
+                }
+                if(zeroBlocks>0)throw IOException("Invalid TAR end marker")
+                val stored=octal(header,148,8)
+                var actual=0L
+                for(i in header.indices)
+                    actual+=(if(i in 148..155)32 else (header[i].toInt() and 255))
+                if(stored!=actual)throw IOException("TAR header checksum mismatch")
+                val size=octal(header,124,12)
+                val padded=((size+511L)/512L)*512L
+                if(size<0 || padded<0 || padded>maxExpanded-expanded)
+                    throw IOException("TAR entry exceeds expansion limit")
+                var remaining=padded
+                while(remaining>0){
+                    val n=minOf(remaining,scratch.size.toLong()).toInt()
+                    if(!readExact(scratch,n))throw IOException("Truncated TAR entry")
+                    remaining-=n
+                }
+                entries++
+                if(entries>100000)throw IOException("Too many TAR entries")
+            }
+            // Drain remainder to ensure GZIP CRC32 and ISIZE are validated.
+            while(true){
+                val n=gzip.read(scratch)
+                if(n<0)break
+                expanded+=n
+                if(expanded>maxExpanded)throw IOException("TGZ expansion limit exceeded")
+                if(scratch.copyOfRange(0,n).any{it!=0.toByte()})
+                    throw IOException("Nonzero trailing TAR data")
+            }
+            return entries
+        } finally {
+            gzip.close()
+            diskCache.clear()
+        }
+    }
+
     private fun readInode(id:Long):Inode {
         val totalInodes=u32(sb,0)
         if(id<2 || id>totalInodes)throw IOException("EXT inode อยู่นอกช่วง: "+id)
