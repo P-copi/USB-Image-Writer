@@ -355,6 +355,8 @@ class BootExplorerActivity : Activity() {
                                     var passed=0
                                     var failed=0
                                     var checkedBytes=0L
+                                    var tgzPassed=0
+                                    var tgzFailed=0
                                     archives.forEachIndexed{index,item->
                                         runOnUiThread{
                                             status.text="ตรวจไฟล์ EXT "+(index+1)+"/"+archives.size+" • อ่านอย่างเดียว"
@@ -365,6 +367,7 @@ class BootExplorerActivity : Activity() {
                                         val structure=if(result.getOrNull()==true)
                                             runCatching{active.auditExtTgz(v.number,item)}
                                             else null
+                                        if(structure?.isSuccess==true)tgzPassed++ else tgzFailed++
                                         output.append(if(structure?.isSuccess==true)"PASS" else "FAIL")
                                             .append(" TGZ structure=").append(item.name.take(90))
                                             .append(" tarEntries=").append(structure?.getOrNull() ?: 0)
@@ -383,6 +386,10 @@ class BootExplorerActivity : Activity() {
                                         .append(" fail=").append(failed)
                                         .append(" passedBytes=").append(checkedBytes)
                                         .append(" readsPerFile=2 (not IMG comparison)\n")
+                                    output.append("SUMMARY TGZ structure total=").append(archives.size)
+                                        .append(" pass=").append(tgzPassed)
+                                        .append(" fail=").append(tgzFailed)
+                                        .append(" (gzip CRC and TAR structure; not IMG comparison)\n")
                                 }
                                 children.take(80).forEach{item->
                                     output.append("  ").append(if(item.directory)"DIR " else "FILE ")
@@ -399,7 +406,7 @@ class BootExplorerActivity : Activity() {
                     }
                 }
             }
-            output.append("NOTE: raw LBA 237632 and three 64-sector regions checked uncached; DS920+ template compared in memory; listed EXT module archives checked twice with cache eviction; gzip/tar integrity and other files and IMG comparison NOT checked\n")
+            output.append("NOTE: raw LBA 237632 and three 64-sector regions checked uncached; DS920+ template compared in memory; listed EXT module archives checked twice with cache eviction; other files and IMG comparison NOT checked\n")
             output.append("END REPORT • no SN/MAC/key/token values collected\n")
             val value=output.toString()
             runOnUiThread{
