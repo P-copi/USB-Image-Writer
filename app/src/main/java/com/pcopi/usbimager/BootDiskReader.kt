@@ -436,6 +436,13 @@ class BootDiskReader private constructor(private val raw: UsbRawDevice) : Closea
         return true
     }
 
+    /** Audit one EXT regular file by inode, without exporting its bytes or digest. */
+    fun auditExtFile(volumeNumber:Int,file:Entry):Boolean {
+        if(file.directory)throw IOException("Expected a regular file")
+        val ext=extCache[volumeNumber]?:throw IOException("EXT volume required")
+        return ext.auditRegularFile(file.cluster)
+    }
+
     override fun close(){ raw.close() }
     private fun u8(b:ByteArray,p:Int)=b[p].toInt() and 0xff
     private fun u16(b:ByteArray,p:Int)=u8(b,p) or (u8(b,p+1) shl 8)
