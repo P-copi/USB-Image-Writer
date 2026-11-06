@@ -129,7 +129,7 @@ class BootExplorerActivity : Activity() {
         root.addView(browser,ToolkitUi.margin(this,14))
 
         val diagnostics=ToolkitUi.card(this)
-        diagnostics.addView(ToolkitUi.text(this,"ARC Deep Inspector • v0.2.46",18f,ToolkitUi.INK,true))
+        diagnostics.addView(ToolkitUi.text(this,"ARC Deep Inspector • v0.2.47",18f,ToolkitUi.INK,true))
         diagnostics.addView(ToolkitUi.text(this,"ตรวจโฟลเดอร์หลักแบบอ่านอย่างเดียว ไม่คัดลอกเนื้อหาไฟล์หรือข้อมูลลับ",13f,ToolkitUi.SUB))
         diagnostics.addView(ToolkitUi.button(this,"ตรวจทั้งหมด",ToolkitUi.GREEN){runDeepAudit()},ToolkitUi.margin(this,9))
         diagnostics.addView(ToolkitUi.button(this,"คัดลอกรายงาน",ToolkitUi.BLUE){copyDeepReport()},ToolkitUi.margin(this,8))
@@ -275,7 +275,7 @@ class BootExplorerActivity : Activity() {
         if(active==null || scan==null){status.text="กดสำรวจ Boot ก่อน";return}
         busy=true;updateButtons();status.text="กำลังตรวจโฟลเดอร์แบบอ่านอย่างเดียว..."
         executor.execute{
-            val output=StringBuilder("=== ARC Deep Inspector v0.2.46 ===\n")
+            val output=StringBuilder("=== ARC Deep Inspector v0.2.47 ===\n")
             output.append("READ ONLY / FILE CONTENTS NOT EXPORTED\n")
             output.append("Bootloader: ").append(scan.identity.title).append('\n')
             output.append("Version evidence: ").append(scan.identity.version ?: "UNKNOWN").append('\n')
@@ -362,6 +362,15 @@ class BootExplorerActivity : Activity() {
                                         val result=runCatching{active.auditExtFile(v.number,item)}
                                         if(result.getOrNull()==true)passed++ else failed++
                                         if(result.getOrNull()==true)checkedBytes+=item.size
+                                        val structure=if(result.getOrNull()==true)
+                                            runCatching{active.auditExtTgz(v.number,item)}
+                                            else null
+                                        output.append(if(structure?.isSuccess==true)"PASS" else "FAIL")
+                                            .append(" TGZ structure=").append(item.name.take(90))
+                                            .append(" tarEntries=").append(structure?.getOrNull() ?: 0)
+                                            .append(" gzipCRC+tarHeader+bounds")
+                                            .append(if(structure?.isFailure==true)" error="+structure.exceptionOrNull()?.javaClass?.simpleName else "")
+                                            .append('\n')
                                         output.append(if(result.getOrNull()==true)"PASS" else "FAIL")
                                             .append(" EXT archive=").append(item.name.take(90))
                                             .append(" fresh-read SHA-256 bytes=").append(item.size)
