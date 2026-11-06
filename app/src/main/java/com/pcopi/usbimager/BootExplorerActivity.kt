@@ -129,7 +129,7 @@ class BootExplorerActivity : Activity() {
         root.addView(browser,ToolkitUi.margin(this,14))
 
         val diagnostics=ToolkitUi.card(this)
-        diagnostics.addView(ToolkitUi.text(this,"ARC Deep Inspector • v0.2.41",18f,ToolkitUi.INK,true))
+        diagnostics.addView(ToolkitUi.text(this,"ARC Deep Inspector • v0.2.42",18f,ToolkitUi.INK,true))
         diagnostics.addView(ToolkitUi.text(this,"ตรวจโฟลเดอร์หลักแบบอ่านอย่างเดียว ไม่คัดลอกเนื้อหาไฟล์หรือข้อมูลลับ",13f,ToolkitUi.SUB))
         diagnostics.addView(ToolkitUi.button(this,"ตรวจทั้งหมด",ToolkitUi.GREEN){runDeepAudit()},ToolkitUi.margin(this,9))
         diagnostics.addView(ToolkitUi.button(this,"คัดลอกรายงาน",ToolkitUi.BLUE){copyDeepReport()},ToolkitUi.margin(this,8))
@@ -275,12 +275,17 @@ class BootExplorerActivity : Activity() {
         if(active==null || scan==null){status.text="กดสำรวจ Boot ก่อน";return}
         busy=true;updateButtons();status.text="กำลังตรวจโฟลเดอร์แบบอ่านอย่างเดียว..."
         executor.execute{
-            val output=StringBuilder("=== ARC Deep Inspector v0.2.41 ===\n")
+            val output=StringBuilder("=== ARC Deep Inspector v0.2.42 ===\n")
             output.append("READ ONLY / FILE CONTENTS NOT EXPORTED\n")
             output.append("Bootloader: ").append(scan.identity.title).append('\n')
             output.append("Version evidence: ").append(scan.identity.version ?: "UNKNOWN").append('\n')
             output.append("Disk: ").append(scan.style).append(" bytes=").append(scan.totalBytes).append('\n')
-            output.append("AUDIT: directory read consistency (3 passes); no content hash or boot test\n")
+            output.append("AUDIT: directory consistency, DS920+ template, raw LBA stability; no boot test\n")
+            val rawCheck=runCatching{active.auditRawLba(237632L,3)}
+            output.append(if(rawCheck.getOrNull()==true)"PASS" else "FAIL")
+                .append(" raw LBA 237632 SHA-256 consistency 3 uncached reads")
+                .append(if(rawCheck.isFailure)" error="+rawCheck.exceptionOrNull()?.javaClass?.simpleName else "")
+                .append('\n')
             scan.volumes.forEach{v->
                 output.append("P").append(v.number).append(" ").append(v.fileSystem)
                     .append(" LBA=").append(v.startLba).append("-").append(v.endLba)
@@ -351,7 +356,7 @@ class BootExplorerActivity : Activity() {
                     }
                 }
             }
-            output.append("NOTE: DS920+ template SHA-256 compared in memory only; full-file integrity, raw LBA and IMG comparison NOT checked\n")
+            output.append("NOTE: raw LBA 237632 checked uncached; DS920+ template compared in memory; full-file integrity and IMG comparison NOT checked\n")
             output.append("END REPORT • no SN/MAC/key/token values collected\n")
             val value=output.toString()
             runOnUiThread{
