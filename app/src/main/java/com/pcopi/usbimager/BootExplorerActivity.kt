@@ -129,7 +129,7 @@ class BootExplorerActivity : Activity() {
         root.addView(browser,ToolkitUi.margin(this,14))
 
         val diagnostics=ToolkitUi.card(this)
-        diagnostics.addView(ToolkitUi.text(this,"ARC Deep Inspector • v0.2.40",18f,ToolkitUi.INK,true))
+        diagnostics.addView(ToolkitUi.text(this,"ARC Deep Inspector • v0.2.41",18f,ToolkitUi.INK,true))
         diagnostics.addView(ToolkitUi.text(this,"ตรวจโฟลเดอร์หลักแบบอ่านอย่างเดียว ไม่คัดลอกเนื้อหาไฟล์หรือข้อมูลลับ",13f,ToolkitUi.SUB))
         diagnostics.addView(ToolkitUi.button(this,"ตรวจทั้งหมด",ToolkitUi.GREEN){runDeepAudit()},ToolkitUi.margin(this,9))
         diagnostics.addView(ToolkitUi.button(this,"คัดลอกรายงาน",ToolkitUi.BLUE){copyDeepReport()},ToolkitUi.margin(this,8))
@@ -275,7 +275,7 @@ class BootExplorerActivity : Activity() {
         if(active==null || scan==null){status.text="กดสำรวจ Boot ก่อน";return}
         busy=true;updateButtons();status.text="กำลังตรวจโฟลเดอร์แบบอ่านอย่างเดียว..."
         executor.execute{
-            val output=StringBuilder("=== ARC Deep Inspector v0.2.40 ===\n")
+            val output=StringBuilder("=== ARC Deep Inspector v0.2.41 ===\n")
             output.append("READ ONLY / FILE CONTENTS NOT EXPORTED\n")
             output.append("Bootloader: ").append(scan.identity.title).append('\n')
             output.append("Version evidence: ").append(scan.identity.version ?: "UNKNOWN").append('\n')
@@ -312,6 +312,30 @@ class BootExplorerActivity : Activity() {
                             result.onSuccess{children->
                                 output.append("PASS P").append(v.number).append("/").append(target)
                                     .append(" entries=").append(children.size).append('\n')
+                                if(v.number==3 && target=="configs"){
+                                    val model=children.firstOrNull{!it.directory && it.name=="DS920+.yml"}
+                                    if(model==null)output.append("WARN DS920+ template missing\n")
+                                    else {
+                                        val attempts=(1..3).map{runCatching{
+                                            val value=active.readText(v.number,model,8192)
+                                            java.security.MessageDigest.getInstance("SHA-256")
+                                                .digest(value.toByteArray(Charsets.UTF_8))
+                                                .joinToString(""){"%02x".format(it)}
+                                        }}
+                                        val hashes=attempts.mapNotNull{it.getOrNull()}
+                                        val ok=hashes.size==3 && hashes.distinct().size==1
+                                        output.append(if(ok)"PASS" else "FAIL")
+                                            .append(" DS920+ template content consistency 3 reads")
+                                            .append(" bytes=").append(model.size)
+                                            .append(" (hash withheld; config contents not exported)")
+                                            .append('\n')
+                                        attempts.filter{it.isFailure}.forEach{
+                                            output.append("WARN DS920+ read error: ")
+                                                .append(it.exceptionOrNull()?.javaClass?.simpleName)
+                                                .append('\n')
+                                        }
+                                    }
+                                }
                                 children.take(80).forEach{item->
                                     output.append("  ").append(if(item.directory)"DIR " else "FILE ")
                                         .append(item.name.take(100)).append(if(item.directory)"" else " bytes="+item.size).append('\n')
@@ -327,7 +351,7 @@ class BootExplorerActivity : Activity() {
                     }
                 }
             }
-            output.append("NOTE: listing consistency only; file contents, SHA-256, and IMG comparison NOT checked\n")
+            output.append("NOTE: DS920+ template SHA-256 compared in memory only; full-file integrity, raw LBA and IMG comparison NOT checked\n")
             output.append("END REPORT • no SN/MAC/key/token values collected\n")
             val value=output.toString()
             runOnUiThread{
