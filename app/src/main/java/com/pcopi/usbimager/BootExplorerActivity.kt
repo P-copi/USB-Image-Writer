@@ -129,7 +129,7 @@ class BootExplorerActivity : Activity() {
         root.addView(browser,ToolkitUi.margin(this,14))
 
         val diagnostics=ToolkitUi.card(this)
-        diagnostics.addView(ToolkitUi.text(this,"ARC Deep Inspector • v0.2.39",18f,ToolkitUi.INK,true))
+        diagnostics.addView(ToolkitUi.text(this,"ARC Deep Inspector • v0.2.40",18f,ToolkitUi.INK,true))
         diagnostics.addView(ToolkitUi.text(this,"ตรวจโฟลเดอร์หลักแบบอ่านอย่างเดียว ไม่คัดลอกเนื้อหาไฟล์หรือข้อมูลลับ",13f,ToolkitUi.SUB))
         diagnostics.addView(ToolkitUi.button(this,"ตรวจทั้งหมด",ToolkitUi.GREEN){runDeepAudit()},ToolkitUi.margin(this,9))
         diagnostics.addView(ToolkitUi.button(this,"คัดลอกรายงาน",ToolkitUi.BLUE){copyDeepReport()},ToolkitUi.margin(this,8))
@@ -275,11 +275,12 @@ class BootExplorerActivity : Activity() {
         if(active==null || scan==null){status.text="กดสำรวจ Boot ก่อน";return}
         busy=true;updateButtons();status.text="กำลังตรวจโฟลเดอร์แบบอ่านอย่างเดียว..."
         executor.execute{
-            val output=StringBuilder("=== ARC Deep Inspector v0.2.39 ===\n")
+            val output=StringBuilder("=== ARC Deep Inspector v0.2.40 ===\n")
             output.append("READ ONLY / FILE CONTENTS NOT EXPORTED\n")
             output.append("Bootloader: ").append(scan.identity.title).append('\n')
             output.append("Version evidence: ").append(scan.identity.version ?: "UNKNOWN").append('\n')
             output.append("Disk: ").append(scan.style).append(" bytes=").append(scan.totalBytes).append('\n')
+            output.append("AUDIT: directory read consistency (3 passes); no content hash or boot test\n")
             scan.volumes.forEach{v->
                 output.append("P").append(v.number).append(" ").append(v.fileSystem)
                     .append(" LBA=").append(v.startLba).append("-").append(v.endLba)
@@ -293,6 +294,14 @@ class BootExplorerActivity : Activity() {
                 }
                 roots.onSuccess{entries->
                     output.append("PASS P").append(v.number).append(" root entries=").append(entries.size).append('\n')
+                    val baseline=entries.map{Triple(it.name,it.directory,it.size)}.sortedBy{it.first}
+                    repeat(2){pass->
+                        val check=runCatching{active.list(v.number,null).map{Triple(it.name,it.directory,it.size)}.sortedBy{it.first}}
+                        output.append(if(check.isSuccess && check.getOrNull()==baseline)"PASS" else "FAIL")
+                            .append(" P").append(v.number).append(" root repeat=").append(pass+2)
+                            .append(if(check.isFailure)" error="+check.exceptionOrNull()?.javaClass?.simpleName else "")
+                            .append('\n')
+                    }
                     val targets=if(v.number==3)listOf("configs","addons","extensions","modules","patches")
                         else if(v.number==1)listOf("EFI") else emptyList()
                     targets.forEach{target->
@@ -318,6 +327,7 @@ class BootExplorerActivity : Activity() {
                     }
                 }
             }
+            output.append("NOTE: listing consistency only; file contents, SHA-256, and IMG comparison NOT checked\n")
             output.append("END REPORT • no SN/MAC/key/token values collected\n")
             val value=output.toString()
             runOnUiThread{
