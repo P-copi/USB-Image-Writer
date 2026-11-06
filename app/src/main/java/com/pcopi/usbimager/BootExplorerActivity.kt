@@ -129,7 +129,7 @@ class BootExplorerActivity : Activity() {
         root.addView(browser,ToolkitUi.margin(this,14))
 
         val diagnostics=ToolkitUi.card(this)
-        diagnostics.addView(ToolkitUi.text(this,"ARC Deep Inspector • v0.2.45",18f,ToolkitUi.INK,true))
+        diagnostics.addView(ToolkitUi.text(this,"ARC Deep Inspector • v0.2.46",18f,ToolkitUi.INK,true))
         diagnostics.addView(ToolkitUi.text(this,"ตรวจโฟลเดอร์หลักแบบอ่านอย่างเดียว ไม่คัดลอกเนื้อหาไฟล์หรือข้อมูลลับ",13f,ToolkitUi.SUB))
         diagnostics.addView(ToolkitUi.button(this,"ตรวจทั้งหมด",ToolkitUi.GREEN){runDeepAudit()},ToolkitUi.margin(this,9))
         diagnostics.addView(ToolkitUi.button(this,"คัดลอกรายงาน",ToolkitUi.BLUE){copyDeepReport()},ToolkitUi.margin(this,8))
@@ -275,7 +275,7 @@ class BootExplorerActivity : Activity() {
         if(active==null || scan==null){status.text="กดสำรวจ Boot ก่อน";return}
         busy=true;updateButtons();status.text="กำลังตรวจโฟลเดอร์แบบอ่านอย่างเดียว..."
         executor.execute{
-            val output=StringBuilder("=== ARC Deep Inspector v0.2.45 ===\n")
+            val output=StringBuilder("=== ARC Deep Inspector v0.2.46 ===\n")
             output.append("READ ONLY / FILE CONTENTS NOT EXPORTED\n")
             output.append("Bootloader: ").append(scan.identity.title).append('\n')
             output.append("Version evidence: ").append(scan.identity.version ?: "UNKNOWN").append('\n')
@@ -364,7 +364,7 @@ class BootExplorerActivity : Activity() {
                                         if(result.getOrNull()==true)checkedBytes+=item.size
                                         output.append(if(result.getOrNull()==true)"PASS" else "FAIL")
                                             .append(" EXT archive=").append(item.name.take(90))
-                                            .append(" repeated SHA-256 bytes=").append(item.size)
+                                            .append(" fresh-read SHA-256 bytes=").append(item.size)
                                             .append(" (digest withheld)")
                                             .append(if(result.isFailure)" error="+result.exceptionOrNull()?.javaClass?.simpleName else "")
                                             .append('\n')
@@ -390,7 +390,7 @@ class BootExplorerActivity : Activity() {
                     }
                 }
             }
-            output.append("NOTE: raw LBA 237632 and three 64-sector regions checked uncached; DS920+ template compared in memory; listed EXT module archives checked twice; other files and IMG comparison NOT checked\n")
+            output.append("NOTE: raw LBA 237632 and three 64-sector regions checked uncached; DS920+ template compared in memory; listed EXT module archives checked twice with cache eviction; gzip/tar integrity and other files and IMG comparison NOT checked\n")
             output.append("END REPORT • no SN/MAC/key/token values collected\n")
             val value=output.toString()
             runOnUiThread{
