@@ -450,6 +450,72 @@ class BootDiskReader private constructor(private val raw: UsbRawDevice) : Closea
         return ext.auditTgzStructure(file.cluster)
     }
 
+    /** Compare selected raw sectors against a seekable IMG without writing either source. */
+    fun compareImgSectors(img:java.io.FileInputStream, imgBytes:Long):String {
+        if(blockSize!=512)throw IOException("IMG comparison currently requires 512-byte sectors")
+        if(imgBytes<512 || imgBytes%512L!=0L)throw IOException("IMG size must be sector aligned")
+        val channel=img.channel
+        fun imgSector(lba:Long):ByteArray {
+            if(lba<0 || lba>imgBytes/512L-1)throw IOException("IMG too small for LBA "+lba)
+            val bytes=ByteArray(512)
+            val buf=ByteBuffer.wrap(bytes)
+            var at=lba*512L
+            while(buf.hasRemaining()){
+                val n=channel.read(buf,at)
+                if(n<=0)throw IOException("IMG truncated or provider not seekable")
+                at+=n
+            }
+            return bytes
+        }
+        fun usbSector(lba:Long):ByteArray {
+            if(lba<0 || lba>=totalBlocks)throw IOException("USB LBA out of range")
+            val bytes=ByteArray(512)
+            raw.blockDevice.read(lba,ByteBuffer.wrap(bytes))
+            return bytes
+        }
+        val usbMbr=usbSector(0)
+        val imgMbr=imgSector(0)
+        if(u16(usbMbr,510)!=0xaa55 || u16(imgMbr,510)!=0xaa55)
+            throw IOException("MBR signature invalid")
+        val output=StringBuilder("=== USB vs IMG v0.2.48 / RAW SAMPLED ONLY ===\\n")
+        output.append("READ ONLY; no full-disk or file-level equivalence claim\\n")
+        var mismatches=0
+        // Never export the boot code, identifiers, serial numbers, or raw sector bytes.
+        if(!java.security.MessageDigest.isEqual(usbMbr,imgMbr)){
+            output.append("DIFFERENT MBR LBA=0 (may be expected after compact rebuild)\\n")
+            mismatches++
+        }else output.append("MATCH MBR LBA=0\\n")
+        for(i in 0 until 4){
+            val at=446+i*16
+            val usbStart=u32(usbMbr,at+8)
+            val usbCount=u32(usbMbr,at+12)
+            val imgStart=u32(imgMbr,at+8)
+            val imgCount=u32(imgMbr,at+12)
+            if(usbCount==0L && imgCount==0L)continue
+            if(usbStart!=imgStart || usbCount!=imgCount){
+                output.append("SKIP partition ").append(i+1)
+                    .append(" geometry differs; semantic comparison needed\\n")
+                continue
+            }
+            if(usbStart+usbCount>totalBlocks || imgStart+imgCount>imgBytes/512L){
+                output.append("SKIP partition ").append(i+1).append(" out of bounds\\n")
+                continue
+            }
+            val samples=linkedSetOf(usbStart,usbStart+usbCount/2,usbStart+usbCount-1)
+            var matched=0
+            for(lba in samples){
+                if(java.security.MessageDigest.isEqual(usbSector(lba),imgSector(lba)))matched++
+                else mismatches++
+            }
+            output.append(if(matched==samples.size)"MATCH" else "DIFFERENT")
+                .append(" partition ").append(i+1).append(" sampled=")
+                .append(matched).append("/").append(samples.size).append("\\n")
+        }
+        output.append("SUMMARY mismatchedSamples=").append(mismatches)
+            .append(" / only sampled sectors; NOT verified full IMG\\n")
+        return output.toString()
+    }
+
     override fun close(){ raw.close() }
     private fun u8(b:ByteArray,p:Int)=b[p].toInt() and 0xff
     private fun u16(b:ByteArray,p:Int)=u8(b,p) or (u8(b,p+1) shl 8)
