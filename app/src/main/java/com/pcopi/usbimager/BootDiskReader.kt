@@ -416,6 +416,26 @@ class BootDiskReader private constructor(private val raw: UsbRawDevice) : Closea
         return hashes.distinct().size==1
     }
 
+    /** Read-only bounded raw-region audit. SHA-256 digests stay in memory. */
+    fun auditRawRegion(startLba:Long, sectors:Int=64, passes:Int=3):Boolean {
+        if(startLba<0 || sectors !in 1..256 || passes !in 2..5 ||
+            startLba>=totalBlocks || sectors.toLong()>totalBlocks-startLba)
+            throw IOException("Invalid raw region audit request")
+        var baseline:ByteArray?=null
+        repeat(passes){
+            val digest=java.security.MessageDigest.getInstance("SHA-256")
+            repeat(sectors){offset->
+                val bytes=ByteArray(blockSize)
+                raw.blockDevice.read(startLba+offset,ByteBuffer.wrap(bytes))
+                digest.update(bytes)
+            }
+            val result=digest.digest()
+            if(baseline==null)baseline=result
+            else if(!java.security.MessageDigest.isEqual(baseline,result))return false
+        }
+        return true
+    }
+
     override fun close(){ raw.close() }
     private fun u8(b:ByteArray,p:Int)=b[p].toInt() and 0xff
     private fun u16(b:ByteArray,p:Int)=u8(b,p) or (u8(b,p+1) shl 8)
