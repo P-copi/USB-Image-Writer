@@ -404,6 +404,18 @@ class BootDiskReader private constructor(private val raw: UsbRawDevice) : Closea
         throw IOException("อ่าน USB LBA "+lba+" ล้มเหลว",error)
     }
 
+    /** Direct USB reads bypass the explorer's sector cache; never writes to the device. */
+    fun auditRawLba(lba:Long, passes:Int=3):Boolean {
+        if(lba<0 || lba>=totalBlocks || passes !in 2..5)
+            throw IOException("Invalid raw LBA audit request")
+        val hashes=(1..passes).map {
+            val bytes=ByteArray(blockSize)
+            raw.blockDevice.read(lba,ByteBuffer.wrap(bytes))
+            java.security.MessageDigest.getInstance("SHA-256").digest(bytes).toList()
+        }
+        return hashes.distinct().size==1
+    }
+
     override fun close(){ raw.close() }
     private fun u8(b:ByteArray,p:Int)=b[p].toInt() and 0xff
     private fun u16(b:ByteArray,p:Int)=u8(b,p) or (u8(b,p+1) shl 8)
