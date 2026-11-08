@@ -27,6 +27,7 @@ internal object CompactImgExport {
    val sizes=longArrayOf(102400,102400,4194304)
    for(i in 0..2){val p=446+i*16;if((m[p+4].toInt() and 255)!=131||u32(p+8)!=starts[i]||u32(p+12)!=sizes[i])throw java.io.IOException("P${i+1} mismatch")}
    if(m.sliceArray(494..509).any{it.toInt()!=0})throw java.io.IOException("Unexpected P4")
+   b.append(CompactImgStructureGate.validate(f)).append("\\n")
    val (size,digest)=hash(f.inputStream().buffered())
    if(size!=SIZE||digest!=EXPECTED)throw java.io.IOException("IMG checksum mismatch")
    b.append("IMG bytes: ").append(size).append("\nSHA-256: ").append(digest).append("\nPASS: geometry and SHA-256 verified. NOT BOOT TESTED.")
