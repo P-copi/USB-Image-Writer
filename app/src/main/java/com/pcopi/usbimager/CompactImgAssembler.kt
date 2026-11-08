@@ -71,6 +71,8 @@ internal object CompactImgAssembler {
     img.seek(0)
     while(true){if(cancelled())throw java.io.InterruptedIOException("Cancelled");val n=img.read(buf);if(n<0)break;hash.update(buf,0,n)}
    }
+   progress("Checking offline image structure")
+   CompactImgStructureGate.validate(partial)
    if(!partial.renameTo(final))throw java.io.IOException("Could not finalize IMG")
    log.append("IMG bytes: ").append(TOTAL).append("\nSHA-256: ").append(hex(hash.digest())).append("\nPASS: IMG assembled and ARC3 verified. NOT BOOT TESTED.")
    return Report(true,log.toString())
