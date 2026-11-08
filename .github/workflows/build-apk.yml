@@ -50,7 +50,19 @@ jobs:
           printf 'sdk.dir=%s\nlibusb.dir=/tmp/libusb\n' "$ANDROID_HOME" > _libaums/local.properties
           mkdir -p /tmp/libusb
           chmod +x _libaums/gradlew
-          _libaums/gradlew -p _libaums :libaums:assembleRelease --stacktrace
+          # Retry transient Gradle distribution gateway errors (e.g. HTTP 504).
+          # Keep the pinned wrapper version and fail closed if all attempts fail.
+          for attempt in 1 2 3 4; do
+            if _libaums/gradlew -p _libaums :libaums:assembleRelease --stacktrace; then
+              break
+            fi
+            if [ "$attempt" -eq 4 ]; then
+              echo "::error::libaums Gradle build failed after four attempts"
+              exit 1
+            fi
+            echo "::warning::libaums Gradle attempt $attempt failed; retrying in $((attempt * 20)) seconds"
+            sleep $((attempt * 20))
+          done
           mkdir -p app/libs
           cp _libaums/libaums/build/outputs/aar/libaums-release.aar app/libs/libaums-patched.aar
           ls -lh app/libs/libaums-patched.aar
