@@ -140,14 +140,6 @@ jobs:
         if: env.USB_SIGNING_PASSPHRASE != ''
         run: gradle :app:assembleRelease --stacktrace
 
-      - name: Upload stable signed APK
-        if: env.USB_SIGNING_PASSPHRASE != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: USB-Image-Writer-v0.2.48-PREVIEW-SIGNED
-          path: app/build/outputs/apk/release/app-release.apk
-          retention-days: 14
-
       - name: Validate signed release APK
         if: env.USB_SIGNING_PASSPHRASE != ''
         run: |
@@ -155,6 +147,15 @@ jobs:
           APK="app/build/outputs/apk/release/app-release.apk"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           sha256sum "$APK"
+
+      - name: Upload stable signed APK
+        if: env.USB_SIGNING_PASSPHRASE != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: USB-Image-Writer-v0.2.49-PREVIEW-SIGNED
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 3
 
       # Development fallback only. Debug signatures vary across GitHub runners.
       # Do not distribute Debug builds as update-in-place installation packages.
@@ -166,6 +167,7 @@ jobs:
         if: env.USB_SIGNING_PASSPHRASE == ''
         uses: actions/upload-artifact@v4
         with:
-          name: USB-Image-Writer-v0.2.48-PREVIEW-DEBUG-UNSIGNED-IDENTITY
+          name: USB-Image-Writer-v0.2.49-PREVIEW-DEBUG-UNSIGNED-IDENTITY
           path: app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 3
+          if-no-files-found: error
+          retention-days: 1
