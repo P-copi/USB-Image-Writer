@@ -102,6 +102,34 @@ class SmartRebuildActivity : Activity() {
             "เตรียมย้าย Arc Loader 30 GB → USB 14 GB โดยตรวจโครงสร้างจริงก่อน",
             14f,ToolkitUi.SUB),ToolkitUi.margin(this,6,16))
 
+        // v0.2.50: Offline guidance only. No USB permission or write operation.
+        val offlineGuide=ToolkitUi.card(this)
+        offlineGuide.addView(ToolkitUi.text(this,
+            "v0.2.50 • เช็กลิสต์ก่อนทดสอบ ARC / DSM",17f,ToolkitUi.INK,true))
+        offlineGuide.addView(ToolkitUi.text(this,
+            "ขั้นที่ 1: ตรวจว่า APK ติดตั้งและเปิดได้ (ไม่ใช่ผลทดสอบ USB)\\n"+
+                "ขั้นที่ 2: ใช้ USB สำรอง และเก็บ USB ต้นฉบับไว้แบบอ่านอย่างเดียว\\n"+
+                "ขั้นที่ 3: ตรวจ IMG / SHA-256 ก่อนเขียน USB สำรอง\\n"+
+                "ขั้นที่ 4: เขียนและ Verify แบบอ่านกลับจาก USB สำรอง\\n"+
+                "ขั้นที่ 5: ทดลองบูต ARC และล็อกอิน DSM แยกกัน\\n"+
+                "ห้ามถือว่า Build PASS เท่ากับ USB BOOT PASS",
+            13f,ToolkitUi.SUB),ToolkitUi.margin(this,8))
+        offlineGuide.addView(ToolkitUi.button(this,
+            "แสดงรายงานสถานะทดสอบ (ไม่ต้องเสียบ USB)",ToolkitUi.BLUE){
+            reportText="=== ARC Validation Checklist v0.2.50 ===\\n"+
+                "APK INSTALL: ผู้ใช้ต้องยืนยันจากการติดตั้งจริง\\n"+
+                "IMG VERIFIED: NOT TESTED IN THIS SESSION\\n"+
+                "USB WRITE/READBACK: NOT TESTED\\n"+
+                "ARC BOOT: NOT TESTED\\n"+
+                "DSM LOGIN: NOT TESTED\\n"+
+                "SOURCE USB: KEEP READ ONLY\\n"+
+                "This report performs no USB access or writes."
+            result.text=reportText
+            copyButton.isEnabled=true
+            state.text="แสดงเช็กลิสต์แบบออฟไลน์แล้ว"
+        },ToolkitUi.margin(this,10))
+        root.addView(offlineGuide,ToolkitUi.margin(this,12))
+
         val cards=ToolkitUi.card(this)
         cards.addView(ToolkitUi.text(this,"1. เลือก USB ต้นฉบับที่บูตได้",17f,ToolkitUi.INK,true))
         source=Spinner(this)
