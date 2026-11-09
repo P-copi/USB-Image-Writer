@@ -3,7 +3,7 @@ name: Build APK
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "feature/v028-deep-inspector", "feature/v0215-smart-compact-backup", "feature/v0216-ext4-metadata-audit", "feature/v0217-ext4-shrink-sandbox", "feature/v0218-bundled-e2fsprogs", "feature/v0219-file-integrity-shrink", "feature/v0220-arc3-sparse-mirror", "feature/v0221-safe-arc3-shrink", "feature/v0249-smart-rebuild-safe-retention" ]
+    branches: [ "main", "feature/v028-deep-inspector", "feature/v0215-smart-compact-backup", "feature/v0216-ext4-metadata-audit", "feature/v0217-ext4-shrink-sandbox", "feature/v0218-bundled-e2fsprogs", "feature/v0219-file-integrity-shrink", "feature/v0220-arc3-sparse-mirror", "feature/v0221-safe-arc3-shrink", "feature/v0249-smart-rebuild-safe-retention", "feature/v0250-offline-validation-checklist" ]
 
 jobs:
   build:
@@ -171,7 +171,7 @@ jobs:
         if: env.USB_SIGNING_PASSPHRASE != ''
         uses: actions/upload-artifact@v4
         with:
-          name: USB-Image-Writer-v0.2.49-PREVIEW-SIGNED
+          name: USB-Image-Writer-v0.2.50-PREVIEW-SIGNED
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 3
@@ -186,7 +186,7 @@ jobs:
         if: env.USB_SIGNING_PASSPHRASE == ''
         uses: actions/upload-artifact@v4
         with:
-          name: USB-Image-Writer-v0.2.49-PREVIEW-DEBUG-UNSIGNED-IDENTITY
+          name: USB-Image-Writer-v0.2.50-PREVIEW-DEBUG-UNSIGNED-IDENTITY
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 1
