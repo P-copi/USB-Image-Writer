@@ -35,6 +35,8 @@ class BootExplorerActivity : Activity() {
     private lateinit var backButton:Button
     private lateinit var deepReport:TextView
     private var deepReportValue=""
+    private var arcConfigValue=""
+    private lateinit var arcConfigDisplay:TextView
     private var devices=emptyList<UsbDevice>()
     private var reader:BootDiskReader?=null
     private var report:BootDiskReader.Scan?=null
@@ -128,6 +130,23 @@ class BootExplorerActivity : Activity() {
         files=ToolkitUi.column(this)
         browser.addView(files,ToolkitUi.margin(this,8))
         root.addView(browser,ToolkitUi.margin(this,14))
+
+        val configCard=ToolkitUi.card(this)
+        configCard.addView(ToolkitUi.text(this,"ARC Config Inspector • v0.2.51",18f,ToolkitUi.INK,true))
+        configCard.addView(ToolkitUi.text(this,"READ ONLY • ข้อมูล Serial/MAC/Token เป็นความลับ ห้ามแชร์โดยไม่ปิดบัง",13f,ToolkitUi.SUB))
+        configCard.addView(ToolkitUi.button(this,"อ่าน user-config.yml",ToolkitUi.GREEN){readArcConfig()},ToolkitUi.margin(this,9))
+        configCard.addView(ToolkitUi.button(this,"Copy All (ข้อมูลลับ)",ToolkitUi.BLUE){
+            if(arcConfigValue.isBlank())status.text="ยังไม่ได้อ่าน Config"
+            else {
+                (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(
+                    ClipData.newPlainText("ARC user-config.yml",arcConfigValue))
+                status.text="คัดลอกแล้ว • ระวัง Serial/MAC/Token ในคลิปบอร์ด"
+            }
+        },ToolkitUi.margin(this,8))
+        arcConfigDisplay=ToolkitUi.text(this,"ยังไม่ได้อ่าน Config",13f,ToolkitUi.INK)
+        arcConfigDisplay.setTextIsSelectable(true)
+        configCard.addView(arcConfigDisplay,ToolkitUi.margin(this,8))
+        root.addView(configCard,ToolkitUi.margin(this,14))
 
         val diagnostics=ToolkitUi.card(this)
         diagnostics.addView(ToolkitUi.text(this,"ARC Deep Inspector • v0.2.48",18f,ToolkitUi.INK,true))
@@ -264,6 +283,52 @@ class BootExplorerActivity : Activity() {
             }
         }
     }
+    private fun readArcConfig(){
+        val active=reader
+        val scan=report
+        if(active==null || scan==null){status.text="กรุณาสำรวจ Boot ก่อน";return}
+        if(busy || UsbOperationService.snapshot.running || UsbBackupService.snapshot.running){
+            status.text="มีงาน USB กำลังทำงาน";return
+        }
+        busy=true;updateButtons();status.text="กำลังค้นหา user-config.yml • READ ONLY"
+        executor.execute{
+            val result=runCatching{
+                // Bound traversal prevents unexpected USB layouts from causing unbounded reads.
+                var found:String?=null
+                var foundAt=""
+                for(v in scan.volumes.filter{it.isReadable}){
+                    val queue=java.util.ArrayDeque<Pair<BootDiskReader.Entry?,String>>()
+                    queue.add(Pair(null,""))
+                    var visited=0
+                    while(queue.isNotEmpty() && visited<120 && found==null){
+                        val (dir,path)=queue.removeFirst()
+                        visited++
+                        val entries=active.list(v.number,dir)
+                        for(e in entries){
+                            if(!e.directory && e.name.equals("user-config.yml",true)){
+                                if(e.size>262144L)throw java.io.IOException("Config exceeds 256 KiB")
+                                found=active.readText(v.number,e,262144)
+                                foundAt="P"+v.number+"/"+path+e.name
+                                break
+                            }
+                            if(e.directory && path.count{it=='/'}<4 &&
+                                !e.name.startsWith(".") && queue.size<120)
+                                queue.add(Pair(e,path+e.name+"/"))
+                        }
+                    }
+                    if(found!=null)break
+                }
+                if(found==null)throw java.io.FileNotFoundException("user-config.yml not found on readable partitions")
+                "Source: "+foundAt+"\\nREAD ONLY • SENSITIVE CONFIG\\n\\n"+found
+            }
+            runOnUiThread{
+                busy=false;updateButtons()
+                result.onSuccess{arcConfigValue=it;arcConfigDisplay.text=it;status.text="อ่าน Config สำเร็จ • ไม่มีการเขียน USB"}
+                    .onFailure{status.text="อ่าน Config ไม่สำเร็จ: "+(it.message?:it.javaClass.simpleName)}
+            }
+        }
+    }
+
     private fun copyDeepReport(){
         if(deepReportValue.isBlank()){status.text="ยังไม่มีรายงานให้คัดลอก";return}
         val clipboard=getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
