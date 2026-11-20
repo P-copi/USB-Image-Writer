@@ -38,6 +38,8 @@ class BootExplorerActivity : Activity() {
     private var arcConfigValue=""
     private var arcConfigSource=""
     private var arcConfigSha256=""
+    private var currentUsbIdentity=""
+    private lateinit var usbIdentityDisplay:TextView
     private lateinit var configHashDisplay:TextView
     private lateinit var arcConfigDisplay:TextView
     private var devices=emptyList<UsbDevice>()
@@ -144,6 +146,9 @@ class BootExplorerActivity : Activity() {
         configHashDisplay=ToolkitUi.text(this,"SHA-256: รออ่าน Config",12f,ToolkitUi.SUB)
         configHashDisplay.setTextIsSelectable(true)
         configCard.addView(configHashDisplay,ToolkitUi.margin(this,8))
+        usbIdentityDisplay=ToolkitUi.text(this,"USB Identity: รออ่าน Config",12f,ToolkitUi.SUB)
+        configCard.addView(usbIdentityDisplay,ToolkitUi.margin(this,8))
+        configCard.addView(ToolkitUi.button(this,"บันทึก Fingerprint บนโทรศัพท์",ToolkitUi.BLUE){saveUsbFingerprint()},ToolkitUi.margin(this,8))
         configCard.addView(ToolkitUi.button(this,"Copy All (ข้อมูลลับ)",ToolkitUi.BLUE){
             if(arcConfigValue.isBlank())status.text="ยังไม่ได้อ่าน Config"
             else {
@@ -196,6 +201,9 @@ class BootExplorerActivity : Activity() {
         stack.clear()
         files.removeAllViews()
         info.text="ยังไม่ได้ตรวจสอบ"
+        arcConfigValue="";arcConfigSource="";arcConfigSha256="";currentUsbIdentity=""
+        if(::usbIdentityDisplay.isInitialized)usbIdentityDisplay.text="USB Identity: รออ่าน Config"
+        if(::configHashDisplay.isInitialized)configHashDisplay.text="SHA-256: รออ่าน Config"
         if(old!=null)executor.execute{old.close()}
         devices=usb.deviceList.values.filter{UsbRawDevice.isSupportedMassStorage(it)}
             .sortedBy{it.deviceId}
@@ -356,6 +364,36 @@ class BootExplorerActivity : Activity() {
             "\\nNOTE: lists, multiline YAML, aliases and duplicate keys are not fully parsed; review original files before changing NAS.\\n\\n"+details
     }
 
+    private fun saveUsbFingerprint(){
+        if(currentUsbIdentity.isBlank() || arcConfigSha256.isBlank()){
+            status.text="กรุณาอ่าน Config ก่อนบันทึก Fingerprint";return
+        }
+        val prefs=getSharedPreferences("arc_usb_identity_v1",MODE_PRIVATE)
+        val key="sha_"+currentUsbIdentity
+        val old=prefs.getString(key,null)
+        if(old!=null && old!=arcConfigSha256){
+            AlertDialog.Builder(this).setTitle("Config เปลี่ยนแปลง")
+                .setMessage("Fingerprint ที่บันทึกไว้ไม่ตรงกับ Config ปัจจุบัน\\nเพื่อความปลอดภัย จะไม่เขียนทับประวัติเดิม")
+                .setPositiveButton("ตกลง",null).show()
+            return
+        }
+        val saved=prefs.edit().putString(key,arcConfigSha256).commit()
+        status.text=if(saved)"บันทึก Fingerprint ลงโทรศัพท์สำเร็จ • ไม่เขียน USB"
+            else "บันทึก Fingerprint ไม่สำเร็จ"
+        updateUsbIdentity()
+    }
+
+    private fun updateUsbIdentity(){
+        if(currentUsbIdentity.isBlank() || arcConfigSha256.isBlank())return
+        val previous=getSharedPreferences("arc_usb_identity_v1",MODE_PRIVATE)
+            .getString("sha_"+currentUsbIdentity,null)
+        usbIdentityDisplay.text=when{
+            previous==null->"USB Identity: ยังไม่เคยบันทึก Fingerprint บนโทรศัพท์"
+            previous==arcConfigSha256->"USB Identity: MATCH • Config เหมือนค่าที่บันทึกไว้"
+            else->"USB Identity: CHANGED • Config ต่างจากค่าที่บันทึกไว้ (ไม่เขียนทับ)"
+        }
+    }
+
     private fun readArcConfig(){
         val active=reader
         val scan=report
@@ -396,7 +434,7 @@ class BootExplorerActivity : Activity() {
             }
             runOnUiThread{
                 busy=false;updateButtons()
-                result.onSuccess{arcConfigSource=it.first;arcConfigValue=it.second;arcConfigSha256=java.security.MessageDigest.getInstance("SHA-256").digest(it.second.toByteArray(Charsets.UTF_8)).joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) };configHashDisplay.text="Config text SHA-256: "+arcConfigSha256+"\nหมายเหตุ: Hash จากข้อความ UTF-8 ที่อ่านได้ ไม่ใช่ Raw file hash";arcConfigDisplay.text="Source: "+it.first+"\nREAD ONLY • SENSITIVE CONFIG\n\n"+it.second;status.text="อ่าน Config สำเร็จ • ไม่มีการเขียน USB"}
+                result.onSuccess{arcConfigSource=it.first;arcConfigValue=it.second;val d=devices.getOrNull(source.selectedItemPosition);val scanNow=report;currentUsbIdentity=if(d!=null && scanNow!=null) "v1:"+d.vendorId+":"+d.productId+":"+scanNow.totalBytes+":"+scanNow.volumes.joinToString(","){v->v.number.toString()+":"+v.startLba+":"+v.endLba+":"+v.fileSystem} else "";arcConfigSha256=java.security.MessageDigest.getInstance("SHA-256").digest(it.second.toByteArray(Charsets.UTF_8)).joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) };configHashDisplay.text="Config text SHA-256: "+arcConfigSha256+"\nหมายเหตุ: Hash จากข้อความ UTF-8 ที่อ่านได้ ไม่ใช่ Raw file hash";arcConfigDisplay.text="Source: "+it.first+"\nREAD ONLY • SENSITIVE CONFIG\n\n"+it.second;updateUsbIdentity();status.text="อ่าน Config สำเร็จ • ไม่มีการเขียน USB"}
                     .onFailure{status.text="อ่าน Config ไม่สำเร็จ: "+(it.message?:it.javaClass.simpleName)}
             }
         }
