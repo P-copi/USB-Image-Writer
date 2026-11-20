@@ -37,6 +37,8 @@ class BootExplorerActivity : Activity() {
     private var deepReportValue=""
     private var arcConfigValue=""
     private var arcConfigSource=""
+    private var arcConfigSha256=""
+    private lateinit var configHashDisplay:TextView
     private lateinit var arcConfigDisplay:TextView
     private var devices=emptyList<UsbDevice>()
     private var reader:BootDiskReader?=null
@@ -136,9 +138,12 @@ class BootExplorerActivity : Activity() {
         root.addView(browser,ToolkitUi.margin(this,14))
 
         val configCard=ToolkitUi.card(this)
-        configCard.addView(ToolkitUi.text(this,"ARC Config Inspector • v0.2.51",18f,ToolkitUi.INK,true))
+        configCard.addView(ToolkitUi.text(this,"ARC Config Inspector • v0.2.52",18f,ToolkitUi.INK,true))
         configCard.addView(ToolkitUi.text(this,"READ ONLY • ข้อมูล Serial/MAC/Token เป็นความลับ ห้ามแชร์โดยไม่ปิดบัง",13f,ToolkitUi.SUB))
         configCard.addView(ToolkitUi.button(this,"อ่าน user-config.yml",ToolkitUi.GREEN){readArcConfig()},ToolkitUi.margin(this,9))
+        configHashDisplay=ToolkitUi.text(this,"SHA-256: รออ่าน Config",12f,ToolkitUi.SUB)
+        configHashDisplay.setTextIsSelectable(true)
+        configCard.addView(configHashDisplay,ToolkitUi.margin(this,8))
         configCard.addView(ToolkitUi.button(this,"Copy All (ข้อมูลลับ)",ToolkitUi.BLUE){
             if(arcConfigValue.isBlank())status.text="ยังไม่ได้อ่าน Config"
             else {
@@ -391,7 +396,7 @@ class BootExplorerActivity : Activity() {
             }
             runOnUiThread{
                 busy=false;updateButtons()
-                result.onSuccess{arcConfigSource=it.first;arcConfigValue=it.second;arcConfigDisplay.text="Source: "+it.first+"\nREAD ONLY • SENSITIVE CONFIG\n\n"+it.second;status.text="อ่าน Config สำเร็จ • ไม่มีการเขียน USB"}
+                result.onSuccess{arcConfigSource=it.first;arcConfigValue=it.second;arcConfigSha256=java.security.MessageDigest.getInstance("SHA-256").digest(it.second.toByteArray(Charsets.UTF_8)).joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) };configHashDisplay.text="Config text SHA-256: "+arcConfigSha256+"\nหมายเหตุ: Hash จากข้อความ UTF-8 ที่อ่านได้ ไม่ใช่ Raw file hash";arcConfigDisplay.text="Source: "+it.first+"\nREAD ONLY • SENSITIVE CONFIG\n\n"+it.second;status.text="อ่าน Config สำเร็จ • ไม่มีการเขียน USB"}
                     .onFailure{status.text="อ่าน Config ไม่สำเร็จ: "+(it.message?:it.javaClass.simpleName)}
             }
         }
