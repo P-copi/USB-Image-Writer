@@ -58,6 +58,9 @@ class BackupActivity : Activity() {
     private lateinit var refreshButton: android.widget.Button
     private lateinit var inspectButton: android.widget.Button
     private lateinit var modeSpinner: Spinner
+    private var pendingSourceDeviceId: Int? = null
+    private var pendingSourceVendorId: Int? = null
+    private var pendingSourceProductId: Int? = null
     private var pendingCompressed = false
     private var pendingCompact = true
     private var compactBytes = 0L
@@ -309,6 +312,9 @@ class BackupActivity : Activity() {
             .setPositiveButton("เลือกตำแหน่งบันทึก") { _, _ ->
                 pendingCompact = compact
                 pendingCompressed = compressed
+                pendingSourceDeviceId = selected?.deviceId
+                pendingSourceVendorId = selected?.vendorId
+                pendingSourceProductId = selected?.productId
                 val name = (if (compact) "arc_422_boot_compact_" else "arc_usb_full_backup_") +
                     SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date()) +
                     (if (compressed) ".img.gz" else ".img")
@@ -339,6 +345,19 @@ class BackupActivity : Activity() {
             )
         }
         val device = selected ?: return
+        val attached = manager.deviceList.values.any {
+            it.deviceId == device.deviceId &&
+                it.vendorId == device.vendorId && it.productId == device.productId
+        }
+        if (!attached || device.deviceId != pendingSourceDeviceId ||
+            device.vendorId != pendingSourceVendorId ||
+            device.productId != pendingSourceProductId) {
+            status.text = "BLOCKED: USB ต้นทางเปลี่ยนหรือถูกถอด กรุณาตรวจสอบใหม่"
+            capacity = 0L
+            compactBytes = 0L
+            updateButtons()
+            return
+        }
         withUsbPermission(device) { startBackup(uri, device, pendingCompressed, pendingCompact) }
     }
 
