@@ -44,6 +44,9 @@ class BootExplorerActivity : Activity() {
     private val stack=mutableListOf<BootDiskReader.Entry>()
     private var busy=false
     private val imgCompareRequest=4812
+    private val configExportRequest=4813
+    private val configCompareRequest=4814
+    private var pendingConfigExport=""
     private var waiting:(()->Unit)?=null
     private val permissionAction="com.pcopi.usbimager.BOOT_EXPLORER_PERMISSION"
     private val receiver=object:BroadcastReceiver(){
@@ -143,6 +146,9 @@ class BootExplorerActivity : Activity() {
                 status.text="คัดลอกแล้ว • ระวัง Serial/MAC/Token ในคลิปบอร์ด"
             }
         },ToolkitUi.margin(this,8))
+        configCard.addView(ToolkitUi.button(this,"Export TXT",ToolkitUi.BLUE){exportArcConfig("text/plain","arc-config.txt")},ToolkitUi.margin(this,8))
+        configCard.addView(ToolkitUi.button(this,"Export YAML",ToolkitUi.BLUE){exportArcConfig("application/x-yaml","user-config.yml")},ToolkitUi.margin(this,8))
+        configCard.addView(ToolkitUi.button(this,"Compare กับไฟล์ Config ที่บันทึกไว้",ToolkitUi.BLUE){chooseConfigCompare()},ToolkitUi.margin(this,8))
         arcConfigDisplay=ToolkitUi.text(this,"ยังไม่ได้อ่าน Config",13f,ToolkitUi.INK)
         arcConfigDisplay.setTextIsSelectable(true)
         configCard.addView(arcConfigDisplay,ToolkitUi.margin(this,8))
@@ -283,6 +289,67 @@ class BootExplorerActivity : Activity() {
             }
         }
     }
+    private fun exportArcConfig(mime:String,fileName:String){
+        if(arcConfigValue.isBlank()){status.text="กรุณาอ่าน Config ก่อน";return}
+        pendingConfigExport=arcConfigValue
+        val intent=Intent(Intent.ACTION_CREATE_DOCUMENT).apply{
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type=mime
+            putExtra(Intent.EXTRA_TITLE,fileName)
+        }
+        @Suppress("DEPRECATION")
+        startActivityForResult(intent,configExportRequest)
+    }
+
+    private fun chooseConfigCompare(){
+        if(arcConfigValue.isBlank()){status.text="กรุณาอ่าน Config จาก USB ก่อน";return}
+        val intent=Intent(Intent.ACTION_OPEN_DOCUMENT).apply{
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type="*/*"
+        }
+        @Suppress("DEPRECATION")
+        startActivityForResult(intent,configCompareRequest)
+    }
+
+    private fun compareArcConfig(other:String):String{
+        fun entries(raw:String):Map<String,String>{
+            val out=linkedMapOf<String,String>()
+            val parents=mutableListOf<Pair<Int,String>>()
+            raw.lineSequence().forEach{line->
+                if(line.isBlank() || line.trimStart().startsWith("#") ||
+                    line.trimStart().startsWith("- "))return@forEach
+                val colon=line.indexOf(':')
+                if(colon<0)return@forEach
+                val key=line.substring(0,colon).trim()
+                if(!key.matches(Regex("[A-Za-z0-9_.+-]+")))return@forEach
+                val indent=line.length-line.trimStart().length
+                while(parents.isNotEmpty() && parents.last().first>=indent)parents.removeAt(parents.lastIndex)
+                val path=(parents.map{it.second}+key).joinToString(".")
+                val value=line.substring(colon+1).trim()
+                if(value.isBlank())parents.add(indent to key) else out[path]=value
+            }
+            return out
+        }
+        val current=entries(arcConfigValue.substringAfter("SENSITIVE CONFIG\\n\\n",arcConfigValue))
+        val baseline=entries(other)
+        val keys=(current.keys+baseline.keys).toSortedSet()
+        var same=0;var changed=0;var missing=0
+        val details=StringBuilder()
+        keys.forEach{key->
+            val left=current[key];val right=baseline[key]
+            val sensitive=Regex("(?i)(serial|sn$|mac|token|password|secret|key)").containsMatchIn(key)
+            val display=if(sensitive)"[REDACTED]" else ""
+            when{
+                left==null || right==null->{missing++;details.append("MISSING ").append(key).append(" • ").append(if(left==null)"USB" else "baseline").append("\\n")}
+                left==right->{same++;details.append("SAME ").append(key).append("\\n")}
+                else->{changed++;details.append("DIFFERENT ").append(key).append(if(sensitive)" • "+display else " • USB="+left+" / baseline="+right).append("\\n")}
+            }
+        }
+        return "ARC CONFIG COMPARE (simple YAML key/value comparison)\\n"+
+            "SAME="+same+" DIFFERENT="+changed+" MISSING="+missing+
+            "\\nNOTE: lists, multiline YAML, aliases and duplicate keys are not fully parsed; review original files before changing NAS.\\n\\n"+details
+    }
+
     private fun readArcConfig(){
         val active=reader
         val scan=report
@@ -348,6 +415,44 @@ class BootExplorerActivity : Activity() {
     @Deprecated("Legacy activity result used for compatibility with existing Activity")
     override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){
         super.onActivityResult(requestCode,resultCode,data)
+        if(requestCode==configExportRequest){
+            if(resultCode==RESULT_OK && data?.data!=null){
+                val result=runCatching{
+                    contentResolver.openOutputStream(data.data!!,"w")?.use{
+                        it.write(pendingConfigExport.toByteArray(Charsets.UTF_8))
+                    } ?: throw java.io.IOException("Cannot open destination")
+                }
+                status.text=if(result.isSuccess)"ส่งออก Config สำเร็จ • USB ต้นฉบับไม่เปลี่ยนแปลง"
+                    else "ส่งออกไม่สำเร็จ: "+result.exceptionOrNull()?.message
+            }
+            return
+        }
+        if(requestCode==configCompareRequest){
+            if(resultCode!=RESULT_OK || data?.data==null)return
+            val uri=data.data!!
+            busy=true;updateButtons();status.text="กำลังเปรียบเทียบ Config..."
+            executor.execute{
+                val result=runCatching{
+                    val bytes=contentResolver.openInputStream(uri)?.use{it.readNBytes(262145)}
+                        ?:throw java.io.IOException("Cannot open Config")
+                    if(bytes.size>262144)throw java.io.IOException("Config exceeds 256 KiB")
+                    compareArcConfig(String(bytes,Charsets.UTF_8))
+                }
+                runOnUiThread{
+                    busy=false;updateButtons()
+                    result.onSuccess{
+                        AlertDialog.Builder(this).setTitle("ARC Compare • redacted")
+                            .setMessage(it).setPositiveButton("ปิด",null)
+                            .setNeutralButton("Copy report"){_,_->
+                                (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(
+                                    ClipData.newPlainText("ARC Config Compare",it))
+                            }.show()
+                        status.text="เปรียบเทียบเสร็จ • รายงานปิดบังค่าลับ"
+                    }.onFailure{status.text="Compare ไม่สำเร็จ: "+it.message}
+                }
+            }
+            return
+        }
         if(requestCode!=imgCompareRequest || resultCode!=RESULT_OK)return
         val uri=data?.data?:return
         val active=reader?:return
