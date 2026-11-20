@@ -419,8 +419,8 @@ class BootExplorerActivity : Activity() {
         val prefs=getSharedPreferences("arc_usb_identity_v1",MODE_PRIVATE)
         val name=prefs.getString("name_"+currentUsbIdentity,null) ?: "ยังไม่ตั้งชื่อ"
         val first=prefs.getString("first_"+currentUsbIdentity,null) ?: "ไม่ทราบเวลา (ข้อมูลเดิม)"
-        usbHistoryDisplay.text="ชื่อกลุ่ม USB: "+name+"\\nบันทึกครั้งแรก: "+first+
-            "\\nหมายเหตุ: USB โครงสร้างเหมือนกันอาจมี Identity เดียวกัน"
+        usbHistoryDisplay.text="ชื่อกลุ่ม USB: "+name+"\nบันทึกครั้งแรก: "+first+
+            "\nหมายเหตุ: USB โครงสร้างเหมือนกันอาจมี Identity เดียวกัน"
         usbIdentityDisplay.text=when{
             previous==null->"USB Identity: ยังไม่เคยบันทึก Fingerprint บนโทรศัพท์"
             previous==arcConfigSha256->"USB Identity: MATCH • Config เหมือนค่าที่บันทึกไว้"
