@@ -170,7 +170,7 @@ class BackupActivity : Activity() {
             this,
             "ARC Boot Compact อ่านตั้งแต่ LBA 0 ถึงท้าย ARC3 โดยตรวจ MBR/FAT32/EXT2/EXT4 ก่อน " +
             "เก็บข้อมูลบูตและการตั้งค่าทั้งหมดในพาร์ทิชันเดิม แต่ไม่รวมพื้นที่นอกพาร์ทิชัน " +
-            "สำหรับ USB Arc 4.2.2 ที่ตรวจแล้วคาดว่าขนาดประมาณ 3.88 GB " +
+            "ขนาด Image จะคำนวณจากโครงสร้าง USB ที่ตรวจสอบจริง ไม่ใช่ค่าตายตัว " +
             "และต้อง Verify พร้อมทดสอบบูตจาก USB สำรองจริง",
             13f, ToolkitUi.SUB
         ), ToolkitUi.margin(this, 8, 12))
@@ -315,7 +315,7 @@ class BackupActivity : Activity() {
                 pendingSourceDeviceId = selected?.deviceId
                 pendingSourceVendorId = selected?.vendorId
                 pendingSourceProductId = selected?.productId
-                val name = (if (compact) "arc_422_boot_compact_" else "arc_usb_full_backup_") +
+                val name = (if (compact) "arc_boot_compact_" else "arc_usb_full_backup_") +
                     SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date()) +
                     (if (compressed) ".img.gz" else ".img")
                 val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
