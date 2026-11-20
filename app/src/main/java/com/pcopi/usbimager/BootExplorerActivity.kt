@@ -36,6 +36,7 @@ class BootExplorerActivity : Activity() {
     private lateinit var deepReport:TextView
     private var deepReportValue=""
     private var arcConfigValue=""
+    private var arcConfigSource=""
     private lateinit var arcConfigDisplay:TextView
     private var devices=emptyList<UsbDevice>()
     private var reader:BootDiskReader?=null
@@ -291,7 +292,7 @@ class BootExplorerActivity : Activity() {
     }
     private fun exportArcConfig(mime:String,fileName:String){
         if(arcConfigValue.isBlank()){status.text="กรุณาอ่าน Config ก่อน";return}
-        pendingConfigExport=arcConfigValue
+        pendingConfigExport=if(mime=="application/x-yaml")arcConfigValue else "Source: "+arcConfigSource+"\nREAD ONLY • SENSITIVE CONFIG\n\n"+arcConfigValue
         val intent=Intent(Intent.ACTION_CREATE_DOCUMENT).apply{
             addCategory(Intent.CATEGORY_OPENABLE)
             type=mime
@@ -330,7 +331,7 @@ class BootExplorerActivity : Activity() {
             }
             return out
         }
-        val current=entries(arcConfigValue.substringAfter("SENSITIVE CONFIG\\n\\n",arcConfigValue))
+        val current=entries(arcConfigValue)
         val baseline=entries(other)
         val keys=(current.keys+baseline.keys).toSortedSet()
         var same=0;var changed=0;var missing=0
@@ -386,11 +387,11 @@ class BootExplorerActivity : Activity() {
                     if(found!=null)break
                 }
                 if(found==null)throw java.io.FileNotFoundException("user-config.yml not found on readable partitions")
-                "Source: "+foundAt+"\\nREAD ONLY • SENSITIVE CONFIG\\n\\n"+found
+                Pair(foundAt,found)
             }
             runOnUiThread{
                 busy=false;updateButtons()
-                result.onSuccess{arcConfigValue=it;arcConfigDisplay.text=it;status.text="อ่าน Config สำเร็จ • ไม่มีการเขียน USB"}
+                result.onSuccess{arcConfigSource=it.first;arcConfigValue=it.second;arcConfigDisplay.text="Source: "+it.first+"\nREAD ONLY • SENSITIVE CONFIG\n\n"+it.second;status.text="อ่าน Config สำเร็จ • ไม่มีการเขียน USB"}
                     .onFailure{status.text="อ่าน Config ไม่สำเร็จ: "+(it.message?:it.javaClass.simpleName)}
             }
         }
