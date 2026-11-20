@@ -399,13 +399,19 @@ class BootExplorerActivity : Activity() {
             .getOrDefault(org.json.JSONArray())
         val lines=(0 until rows.length()).mapNotNull{i->
             val item=rows.optJSONObject(i) ?: return@mapNotNull null
-            item.optString("time")+" • "+item.optString("state")+"\\n"+
-                item.optString("hash").take(16)+"…"
+            "ครั้งที่ "+(i+1)+"  "+item.optString("time")+"\\n"+
+                "สถานะ: "+item.optString("state")+"\\n"+
+                "SHA-256: "+item.optString("hash").take(16)+"…"
         }
+        val message=if(lines.isEmpty())"ยังไม่มีประวัติ" else
+            lines.joinToString("\\n\\n")+"\\n\\nเก็บเฉพาะเวลา สถานะ และ Hash บนโทรศัพท์ ไม่เก็บ Config"
+        val scroll=ScrollView(this)
+        val content=ToolkitUi.text(this,message,14f,ToolkitUi.INK)
+        content.setPadding(32,16,32,16)
+        content.setTextIsSelectable(true)
+        scroll.addView(content)
         AlertDialog.Builder(this).setTitle("ประวัติการอ่าน Config (ล่าสุด 20 ครั้ง)")
-            .setMessage(if(lines.isEmpty())"ยังไม่มีประวัติ" else lines.joinToString("\\n\\n")+
-                "\\n\\nเก็บเฉพาะเวลา สถานะ และ Hash บนโทรศัพท์ ไม่เก็บ Config")
-            .setPositiveButton("ปิด",null).show()
+            .setView(scroll).setPositiveButton("ปิด",null).show()
     }
 
     private fun recordConfigRead(){
