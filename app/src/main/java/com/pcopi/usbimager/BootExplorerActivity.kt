@@ -19,6 +19,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
+import android.widget.EditText
 import java.util.concurrent.Executors
 
 /** Read-only boot volume browser over raw USB, independent of Android's mount. */
@@ -40,6 +41,7 @@ class BootExplorerActivity : Activity() {
     private var arcConfigSha256=""
     private var currentUsbIdentity=""
     private lateinit var usbIdentityDisplay:TextView
+    private lateinit var usbHistoryDisplay:TextView
     private lateinit var configHashDisplay:TextView
     private lateinit var arcConfigDisplay:TextView
     private var devices=emptyList<UsbDevice>()
@@ -148,6 +150,9 @@ class BootExplorerActivity : Activity() {
         configCard.addView(configHashDisplay,ToolkitUi.margin(this,8))
         usbIdentityDisplay=ToolkitUi.text(this,"USB Identity: รออ่าน Config",12f,ToolkitUi.SUB)
         configCard.addView(usbIdentityDisplay,ToolkitUi.margin(this,8))
+        usbHistoryDisplay=ToolkitUi.text(this,"ชื่อ USB / ประวัติ: รออ่าน Config",12f,ToolkitUi.SUB)
+        configCard.addView(usbHistoryDisplay,ToolkitUi.margin(this,8))
+        configCard.addView(ToolkitUi.button(this,"ตั้งชื่อ USB (เก็บบนโทรศัพท์)",ToolkitUi.BLUE){nameUsb()},ToolkitUi.margin(this,8))
         configCard.addView(ToolkitUi.button(this,"บันทึก Fingerprint บนโทรศัพท์",ToolkitUi.BLUE){saveUsbFingerprint()},ToolkitUi.margin(this,8))
         configCard.addView(ToolkitUi.button(this,"Copy All (ข้อมูลลับ)",ToolkitUi.BLUE){
             if(arcConfigValue.isBlank())status.text="ยังไม่ได้อ่าน Config"
@@ -203,6 +208,8 @@ class BootExplorerActivity : Activity() {
         info.text="ยังไม่ได้ตรวจสอบ"
         arcConfigValue="";arcConfigSource="";arcConfigSha256="";currentUsbIdentity=""
         if(::usbIdentityDisplay.isInitialized)usbIdentityDisplay.text="USB Identity: รออ่าน Config"
+        if(::usbHistoryDisplay.isInitialized)usbHistoryDisplay.text="ชื่อ USB / ประวัติ: รออ่าน Config"
+        if(::arcConfigDisplay.isInitialized)arcConfigDisplay.text="ยังไม่ได้อ่าน Config"
         if(::configHashDisplay.isInitialized)configHashDisplay.text="SHA-256: รออ่าน Config"
         if(old!=null)executor.execute{old.close()}
         devices=usb.deviceList.values.filter{UsbRawDevice.isSupportedMassStorage(it)}
@@ -364,6 +371,26 @@ class BootExplorerActivity : Activity() {
             "\\nNOTE: lists, multiline YAML, aliases and duplicate keys are not fully parsed; review original files before changing NAS.\\n\\n"+details
     }
 
+    private fun nameUsb(){
+        if(currentUsbIdentity.isBlank()){status.text="กรุณาอ่าน Config ก่อนตั้งชื่อ USB";return}
+        val prefs=getSharedPreferences("arc_usb_identity_v1",MODE_PRIVATE)
+        val field=EditText(this).apply{
+            setSingleLine(true)
+            setText(prefs.getString("name_"+currentUsbIdentity,""))
+            hint="เช่น ARC 4.2.3 สำรอง"
+        }
+        AlertDialog.Builder(this).setTitle("ตั้งชื่อกลุ่ม USB (บนโทรศัพท์)")
+            .setMessage("USB ที่มี VID/PID ความจุ และโครงสร้างพาร์ทิชันเหมือนกัน อาจถูกจัดเป็นกลุ่มเดียวกัน ชื่อนี้ไม่ยืนยันตัวอุปกรณ์")
+            .setView(field).setNegativeButton("ยกเลิก",null)
+            .setPositiveButton("บันทึก"){_,_->
+                val label=field.text.toString().trim().take(60)
+                if(label.isBlank()){status.text="กรุณาระบุชื่อ";return@setPositiveButton}
+                val ok=prefs.edit().putString("name_"+currentUsbIdentity,label).commit()
+                status.text=if(ok)"บันทึกชื่อบนโทรศัพท์สำเร็จ" else "บันทึกชื่อไม่สำเร็จ"
+                updateUsbIdentity()
+            }.show()
+    }
+
     private fun saveUsbFingerprint(){
         if(currentUsbIdentity.isBlank() || arcConfigSha256.isBlank()){
             status.text="กรุณาอ่าน Config ก่อนบันทึก Fingerprint";return
@@ -377,7 +404,9 @@ class BootExplorerActivity : Activity() {
                 .setPositiveButton("ตกลง",null).show()
             return
         }
-        val saved=prefs.edit().putString(key,arcConfigSha256).commit()
+        val stamp=java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss",java.util.Locale.getDefault()).format(java.util.Date())
+        val saved=prefs.edit().putString(key,arcConfigSha256)
+            .putString("first_"+currentUsbIdentity,stamp).commit()
         status.text=if(saved)"บันทึก Fingerprint ลงโทรศัพท์สำเร็จ • ไม่เขียน USB"
             else "บันทึก Fingerprint ไม่สำเร็จ"
         updateUsbIdentity()
@@ -387,6 +416,11 @@ class BootExplorerActivity : Activity() {
         if(currentUsbIdentity.isBlank() || arcConfigSha256.isBlank())return
         val previous=getSharedPreferences("arc_usb_identity_v1",MODE_PRIVATE)
             .getString("sha_"+currentUsbIdentity,null)
+        val prefs=getSharedPreferences("arc_usb_identity_v1",MODE_PRIVATE)
+        val name=prefs.getString("name_"+currentUsbIdentity,null) ?: "ยังไม่ตั้งชื่อ"
+        val first=prefs.getString("first_"+currentUsbIdentity,null) ?: "ไม่ทราบเวลา (ข้อมูลเดิม)"
+        usbHistoryDisplay.text="ชื่อกลุ่ม USB: "+name+"\\nบันทึกครั้งแรก: "+first+
+            "\\nหมายเหตุ: USB โครงสร้างเหมือนกันอาจมี Identity เดียวกัน"
         usbIdentityDisplay.text=when{
             previous==null->"USB Identity: ยังไม่เคยบันทึก Fingerprint บนโทรศัพท์"
             previous==arcConfigSha256->"USB Identity: MATCH • Config เหมือนค่าที่บันทึกไว้"
