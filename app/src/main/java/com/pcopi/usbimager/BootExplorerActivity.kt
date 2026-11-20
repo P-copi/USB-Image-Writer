@@ -152,6 +152,7 @@ class BootExplorerActivity : Activity() {
         configCard.addView(usbIdentityDisplay,ToolkitUi.margin(this,8))
         usbHistoryDisplay=ToolkitUi.text(this,"ชื่อ USB / ประวัติ: รออ่าน Config",12f,ToolkitUi.SUB)
         configCard.addView(usbHistoryDisplay,ToolkitUi.margin(this,8))
+        configCard.addView(ToolkitUi.button(this,"ดูประวัติการอ่าน Config (บนโทรศัพท์)",ToolkitUi.BLUE){showConfigHistory()},ToolkitUi.margin(this,8))
         configCard.addView(ToolkitUi.button(this,"ตั้งชื่อ USB (เก็บบนโทรศัพท์)",ToolkitUi.BLUE){nameUsb()},ToolkitUi.margin(this,8))
         configCard.addView(ToolkitUi.button(this,"บันทึก Fingerprint บนโทรศัพท์",ToolkitUi.BLUE){saveUsbFingerprint()},ToolkitUi.margin(this,8))
         configCard.addView(ToolkitUi.button(this,"Copy All (ข้อมูลลับ)",ToolkitUi.BLUE){
@@ -391,6 +392,42 @@ class BootExplorerActivity : Activity() {
             }.show()
     }
 
+    private fun showConfigHistory(){
+        if(currentUsbIdentity.isBlank()){status.text="กรุณาอ่าน Config ก่อนดูประวัติ";return}
+        val prefs=getSharedPreferences("arc_usb_identity_v1",MODE_PRIVATE)
+        val rows=runCatching{org.json.JSONArray(prefs.getString("history_"+currentUsbIdentity,"[]"))}
+            .getOrDefault(org.json.JSONArray())
+        val lines=(0 until rows.length()).mapNotNull{i->
+            val item=rows.optJSONObject(i) ?: return@mapNotNull null
+            item.optString("time")+" • "+item.optString("state")+"\\n"+
+                item.optString("hash").take(16)+"…"
+        }
+        AlertDialog.Builder(this).setTitle("ประวัติการอ่าน Config (ล่าสุด 20 ครั้ง)")
+            .setMessage(if(lines.isEmpty())"ยังไม่มีประวัติ" else lines.joinToString("\\n\\n")+
+                "\\n\\nเก็บเฉพาะเวลา สถานะ และ Hash บนโทรศัพท์ ไม่เก็บ Config")
+            .setPositiveButton("ปิด",null).show()
+    }
+
+    private fun recordConfigRead(){
+        if(currentUsbIdentity.isBlank() || arcConfigSha256.isBlank())return
+        val prefs=getSharedPreferences("arc_usb_identity_v1",MODE_PRIVATE)
+        val baseline=prefs.getString("sha_"+currentUsbIdentity,null)
+        val state=when{
+            baseline==null->"NEW"
+            baseline==arcConfigSha256->"MATCH"
+            else->"CHANGED"
+        }
+        val key="history_"+currentUsbIdentity
+        val old=runCatching{org.json.JSONArray(prefs.getString(key,"[]"))}
+            .getOrDefault(org.json.JSONArray())
+        val next=org.json.JSONArray()
+        val time=java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss",java.util.Locale.getDefault()).format(java.util.Date())
+        next.put(org.json.JSONObject().put("time",time).put("state",state).put("hash",arcConfigSha256))
+        for(i in 0 until minOf(19,old.length()))next.put(old.get(i))
+        val ok=prefs.edit().putString(key,next.toString()).commit()
+        if(!ok)status.text="อ่าน Config สำเร็จ แต่บันทึกประวัติบนโทรศัพท์ไม่สำเร็จ"
+    }
+
     private fun saveUsbFingerprint(){
         if(currentUsbIdentity.isBlank() || arcConfigSha256.isBlank()){
             status.text="กรุณาอ่าน Config ก่อนบันทึก Fingerprint";return
@@ -468,7 +505,7 @@ class BootExplorerActivity : Activity() {
             }
             runOnUiThread{
                 busy=false;updateButtons()
-                result.onSuccess{arcConfigSource=it.first;arcConfigValue=it.second;val d=devices.getOrNull(source.selectedItemPosition);val scanNow=report;currentUsbIdentity=if(d!=null && scanNow!=null) "v1:"+d.vendorId+":"+d.productId+":"+scanNow.totalBytes+":"+scanNow.volumes.joinToString(","){v->v.number.toString()+":"+v.startLba+":"+v.endLba+":"+v.fileSystem} else "";arcConfigSha256=java.security.MessageDigest.getInstance("SHA-256").digest(it.second.toByteArray(Charsets.UTF_8)).joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) };configHashDisplay.text="Config text SHA-256: "+arcConfigSha256+"\nหมายเหตุ: Hash จากข้อความ UTF-8 ที่อ่านได้ ไม่ใช่ Raw file hash";arcConfigDisplay.text="Source: "+it.first+"\nREAD ONLY • SENSITIVE CONFIG\n\n"+it.second;updateUsbIdentity();status.text="อ่าน Config สำเร็จ • ไม่มีการเขียน USB"}
+                result.onSuccess{arcConfigSource=it.first;arcConfigValue=it.second;val d=devices.getOrNull(source.selectedItemPosition);val scanNow=report;currentUsbIdentity=if(d!=null && scanNow!=null) "v1:"+d.vendorId+":"+d.productId+":"+scanNow.totalBytes+":"+scanNow.volumes.joinToString(","){v->v.number.toString()+":"+v.startLba+":"+v.endLba+":"+v.fileSystem} else "";arcConfigSha256=java.security.MessageDigest.getInstance("SHA-256").digest(it.second.toByteArray(Charsets.UTF_8)).joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) };configHashDisplay.text="Config text SHA-256: "+arcConfigSha256+"\nหมายเหตุ: Hash จากข้อความ UTF-8 ที่อ่านได้ ไม่ใช่ Raw file hash";arcConfigDisplay.text="Source: "+it.first+"\nREAD ONLY • SENSITIVE CONFIG\n\n"+it.second;updateUsbIdentity();recordConfigRead();if(!status.text.contains("บันทึกประวัติบนโทรศัพท์ไม่สำเร็จ"))status.text="อ่าน Config สำเร็จ • ไม่มีการเขียน USB"}
                     .onFailure{status.text="อ่าน Config ไม่สำเร็จ: "+(it.message?:it.javaClass.simpleName)}
             }
         }
